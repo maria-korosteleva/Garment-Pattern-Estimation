@@ -6,5 +6,7 @@
 
 ## Dependencies
 * Numpy
-* pandas
 * Pytorch
+* scipy
+* os
+* pathlib
