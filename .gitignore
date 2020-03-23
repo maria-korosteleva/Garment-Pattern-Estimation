@@ -1,4 +1,11 @@
 # Jupyter tmp files
 # 
 .ipynb_checkpoints
+
+# Weights and Biases logs -- no need to save
 wandb
+
+# VSCode settings
+*.code-workspace
+
+
