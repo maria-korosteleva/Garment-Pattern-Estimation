@@ -9,6 +9,8 @@ from datetime import datetime
 import string
 import random
 
+import numpy as np
+
 class PatternWrapper():
     """
     Processing of pattern template in custom JSON format
@@ -22,7 +24,9 @@ class PatternWrapper():
         self.name = self.__get_name(self.template_file.stem, shuffle)
         
         with open(template_file, 'r') as f_json:
-            self.pattern = json.load(f_json)
+            self.template = json.load(f_json)
+        self.pattern = self.template["pattern"]
+        self.parameters = self.template["parameters"]
         
     def save_pattern(self, path, to_subfolder=True):
         # log context
@@ -47,14 +51,38 @@ class PatternWrapper():
     # --------- Main Functionality ----------
 
     # -------- Utils ---------
+    def ___draw_a_panel(self, drawing, panel_name, offset=[0, 0], scaling=1):
+        """
+        Adds a requested panel to the svg drawing with given offset and scaling
+        Returns the lower-right bounding box coordinate for the convenice of future offsetting
+        """
+
+        panel = self.pattern["panels"][panel_name]
+        vertices = np.asarray(panel["vertices"], dtype=int) * scaling + offset
+        for edge in panel["edges"]:
+            start = vertices[edge["endpoints"][0]]
+            end = vertices[edge["endpoints"][1]]
+
+            drawing.add(drawing.line(start.tolist(), end.tolist(), stroke = 'black'))
+        
+        # name the panel
+        panel_center = np.mean(vertices, axis=0)
+        drawing.add(drawing.text(panel_name, insert=panel_center, fill='blue'))   
+
+        return [np.max(vertices[:, 0]), np.max(vertices[:, 1])]
+
     def __save_as_image(self, svg_filename, png_filename):
         """Saves current pattern in svg and png format for visualization"""
         
-        dwg = svgwrite.Drawing(svg_filename.as_posix(), profile='tiny', 
-                                size = ("800px", "600px"))      # might want to re-check sizing \ rescale with the size of the pattern
-        dwg.add(dwg.line((0, 0), (10, 0), stroke=svgwrite.rgb(10, 10, 16, '%')))
-        dwg.add(dwg.text('hello world', insert=(0, 20), fill='red'))    # name the panels drawn
-        dwg.save()
+        dwg = svgwrite.Drawing(svg_filename.as_posix(), profile='tiny')
+        offset = [0, 0]
+        for panel in self.pattern["panels"]:
+            offset = self.___draw_a_panel(dwg, panel, offset=[offset[0], 0], scaling=10)
+
+        # final sizing & save
+        dwg['width'] = str(offset[0] + 20) + 'px'
+        dwg['height'] = str(offset[1] + 20) + 'px'
+        dwg.save(pretty=True)
 
         # to png
         svg_pattern = svglib.svg2rlg(svg_filename.as_posix())
@@ -77,8 +105,8 @@ class PatternWrapper():
 if __name__ == "__main__":
 
     base_path = Path('D:/GK-Pattern-Data-Gen/')
-    pattern = PatternWrapper(base_path / 'Patterns' / 'Flat Skirt base.json', shuffle=True)
-    print (pattern.pattern['parameters'])
+    pattern = PatternWrapper(base_path / 'Patterns' / 'skirt flat_per_panel.json', shuffle=True)
+    # print (pattern.pattern['panels'])
 
     # log to file
     log_folder = 'data_test_' + datetime.now().strftime('%y%m%d-%H-%M')
