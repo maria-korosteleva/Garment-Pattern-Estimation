@@ -7,5 +7,5 @@ wandb
 
 # VSCode settings
 *.code-workspace
-
+.vscode
 
