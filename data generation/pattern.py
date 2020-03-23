@@ -25,8 +25,8 @@ class PatternWrapper():
         
         with open(template_file, 'r') as f_json:
             self.template = json.load(f_json)
-        self.pattern = self.template["pattern"]
-        self.parameters = self.template["parameters"]
+        self.pattern = self.template['pattern']
+        self.parameters = self.template['parameters']
         
     def save_pattern(self, path, to_subfolder=True):
         # log context
@@ -48,23 +48,49 @@ class PatternWrapper():
         self.__save_as_image(svg_file, png_file)
     
     
-    # --------- Main Functionality ----------
+    # --------- Pattern operations ----------
 
-    # -------- Utils ---------
+    def ___calc_control_coord(self, start, end, control_scale):
+        """
+        Derives absolute coordinates of Bezier control point given as an offset 
+        """
+        control_start = control_scale[0] * (start + end)
+
+        edge = end - start
+        edge_perp = np.array([-edge[1], edge[0]])
+        control_point = control_start + control_scale[1] * edge_perp
+
+        return control_point
+
+    # -------- Drawing ---------
+
     def ___draw_a_panel(self, drawing, panel_name, offset=[0, 0], scaling=1):
         """
         Adds a requested panel to the svg drawing with given offset and scaling
-        Returns the lower-right bounding box coordinate for the convenice of future offsetting
+        Returns the lower-right vertex coordinate for the convenice of future offsetting
         """
 
-        panel = self.pattern["panels"][panel_name]
-        vertices = np.asarray(panel["vertices"], dtype=int) * scaling + offset
-        for edge in panel["edges"]:
-            start = vertices[edge["endpoints"][0]]
-            end = vertices[edge["endpoints"][1]]
+        panel = self.pattern['panels'][panel_name]
+        vertices = np.asarray(panel['vertices'], dtype=int) * scaling + offset
 
-            drawing.add(drawing.line(start.tolist(), end.tolist(), stroke = 'black'))
-        
+        start = vertices[panel['edges'][0]['endpoints'][0]]
+        path = drawing.path(['M', start[0], start[1]], stroke='black', fill='rgb(255,217,194)')  
+        for edge in panel['edges']:
+            # assumes that edges are correctly oriented to form a closed loop when summed
+            start = vertices[edge['endpoints'][0]]
+            end = vertices[edge['endpoints'][1]]
+            if ('curvature' in edge):
+                control_scale = edge['curvature']
+                control_point = self.___calc_control_coord(start, end, control_scale)
+                path.push(['Q', control_point[0], control_point[1], end[0], end[1]]) 
+            else:
+                path.push(['L', end[0], end[1]])
+
+            # TODO add darts visualization here!
+            
+        path.push('z')
+        drawing.add(path)
+
         # name the panel
         panel_center = np.mean(vertices, axis=0)
         drawing.add(drawing.text(panel_name, insert=panel_center, fill='blue'))   
@@ -75,19 +101,20 @@ class PatternWrapper():
         """Saves current pattern in svg and png format for visualization"""
         
         dwg = svgwrite.Drawing(svg_filename.as_posix(), profile='tiny')
-        offset = [0, 0]
-        for panel in self.pattern["panels"]:
+        offset = [40, 40]
+        for panel in self.pattern['panels']:
             offset = self.___draw_a_panel(dwg, panel, offset=[offset[0], 0], scaling=10)
 
         # final sizing & save
-        dwg['width'] = str(offset[0] + 20) + 'px'
-        dwg['height'] = str(offset[1] + 20) + 'px'
+        dwg['width'] = str(offset[0] + 40) + 'px'
+        dwg['height'] = str(offset[1] + 40) + 'px'
         dwg.save(pretty=True)
 
         # to png
         svg_pattern = svglib.svg2rlg(svg_filename.as_posix())
         renderPM.drawToFile(svg_pattern, png_filename, fmt='png')
 
+    # -------- Utils ---------
 
     def __id_generator(self, size=10, chars=string.ascii_uppercase + string.digits):
         """Generated a random string of a given size, see 
@@ -105,7 +132,7 @@ class PatternWrapper():
 if __name__ == "__main__":
 
     base_path = Path('D:/GK-Pattern-Data-Gen/')
-    pattern = PatternWrapper(base_path / 'Patterns' / 'skirt flat_per_panel.json', shuffle=True)
+    pattern = PatternWrapper(base_path / 'Patterns' / 'skirt_per_panel.json', shuffle=True)
     # print (pattern.pattern['panels'])
 
     # log to file
