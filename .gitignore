@@ -8,4 +8,4 @@ wandb
 # VSCode settings
 *.code-workspace
 .vscode
-
+__pycache__

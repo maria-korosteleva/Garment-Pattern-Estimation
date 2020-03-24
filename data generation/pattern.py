@@ -69,8 +69,7 @@ class PatternWrapper():
         """
         for parameter in self.parameters:
             param_range = self.parameters[parameter]['range']
-            new_value = param_range[0] + \
-                np.random.rand() * (param_range[1] - param_range[0])
+            new_value = random.uniform(param_range[0], param_range[1])
             self.parameters[parameter]['value'] = new_value
 
     def __extend_edge(self, panel_name, edge, scaling_factor):
@@ -226,7 +225,7 @@ class PatternWrapper():
 if __name__ == "__main__":
 
     timestamp = int(time.time())
-    np.random.seed(timestamp)
+    random.seed(timestamp)
 
     base_path = Path('D:/GK-Pattern-Data-Gen/')
     pattern = PatternWrapper(base_path / 'Patterns' / 'skirt_per_panel.json',

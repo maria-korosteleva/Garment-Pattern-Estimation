@@ -4,7 +4,7 @@ from datetime import datetime
 import time
 import json
 import os
-import numpy as np
+import random
 
 # My module
 import pattern
@@ -62,7 +62,7 @@ def generate(path, templates_path, props):
     os.makedirs(path_with_dataset)
 
     # init random seed
-    np.random.seed(props['random_seed'])
+    random.seed(props['random_seed'])
 
     # generate data
     start_time = time.time()
@@ -80,15 +80,20 @@ def generate(path, templates_path, props):
 
 
 if __name__ == "__main__":
-    props = DatasetProperties(
-        'skirt_per_panel.json', 
-        size=5,
-        data_to_subfolders=False, 
-        name='test')
+    
+    new = False
 
-    props = DatasetProperties.fromfile(
-        'D:/GK-Pattern-Data-Gen/test_skirt_per_panel_200324-17-09/dataset_properties.json')
+    if new:
+        props = DatasetProperties(
+            'skirt_per_panel.json', 
+            size=100,
+            data_to_subfolders=False, 
+            name='N')
+    else:
+        props = DatasetProperties.fromfile(
+            'D:/GK-Pattern-Data-Gen/N_skirt_per_panel_200324-17-22/dataset_properties.json')
 
+    # Generator
     base_path = Path('D:/GK-Pattern-Data-Gen/')
     pattern_path = base_path / 'Patterns'
     generate(base_path, pattern_path, props)
