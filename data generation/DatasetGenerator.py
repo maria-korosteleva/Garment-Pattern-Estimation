@@ -11,9 +11,33 @@ import pattern
 
 
 class DatasetProperties():
-    def __init__(self):
+    def __init__(self, template_names, size, 
+                 data_to_subfolders=True, name="", random_seed=None):
         self.properties = {}
+        # Init mandatory dataset properties
+        self['size'] = size
+        self['templates'] = template_names
+        self['to_subfolders'] = data_to_subfolders
+        self['name'] = name
+        if random_seed is None:
+            self['random_seed'] = int(time.time())  # new random seed
+        else:
+            self['random_seed'] = random_seed
     
+    @classmethod
+    def fromfile(cls, prop_file):
+        with open(prop_file, 'r') as f_json:
+            props = json.load(f_json) 
+        if 'data_folder' in props:
+            # props of the previous dataset
+            props['name'] = props['data_folder'] + '_regen'
+
+        return cls(props['templates'], 
+                   props['size'],
+                   props['to_subfolders'], 
+                   props['name'],
+                   props['random_seed'])
+
     def __getitem__(self, key):
         return self.properties[key]
 
@@ -25,35 +49,28 @@ class DatasetProperties():
             json.dump(self.properties, f_json, indent=2)
 
 
-def generate(path, template_file_path, size, data_to_subfolders=True, name=""):
+def generate(path, templates_path, props):
     path = Path(path)
-    template_file_path = Path(template_file_path)
+    # TODO modify to support multiple templates
+    template_file_path = Path(templates_path) / props['templates']
 
-    # init properties 
-    props = DatasetProperties()
-    props['size'] = size
-    props['template'] = template_file_path.name
-    props['to_subfolders'] = data_to_subfolders
-
-    # create log folders
-    data_folder = name + '_' + template_file_path.stem + '_' \
+    # create data folder
+    data_folder = props['name'] + '_' + template_file_path.stem + '_' \
         + datetime.now().strftime('%y%m%d-%H-%M')
     props['data_folder'] = data_folder
     path_with_dataset = path / data_folder
     os.makedirs(path_with_dataset)
 
     # init random seed
-    timestamp = int(time.time())
-    np.random.seed(timestamp)
-    props['random_seed'] = timestamp
+    np.random.seed(props['random_seed'])
 
     # generate data
     start_time = time.time()
-    for _ in range(size):
+    for _ in range(props['size']):
         new_pattern = pattern.PatternWrapper(template_file_path, 
                                              randomize=True)
         new_pattern.serialize(path_with_dataset, 
-                              to_subfolder=data_to_subfolders)
+                              to_subfolder=props['to_subfolders'])
     elapsed = time.time() - start_time
     props['generation_time'] = f'{elapsed:.3f} s'
 
@@ -63,9 +80,15 @@ def generate(path, template_file_path, size, data_to_subfolders=True, name=""):
 
 
 if __name__ == "__main__":
+    props = DatasetProperties(
+        'skirt_per_panel.json', 
+        size=5,
+        data_to_subfolders=False, 
+        name='test')
+
+    props = DatasetProperties.fromfile(
+        'D:/GK-Pattern-Data-Gen/test_skirt_per_panel_200324-17-09/dataset_properties.json')
 
     base_path = Path('D:/GK-Pattern-Data-Gen/')
-    generate(base_path, base_path / 'Patterns' / 'skirt_per_panel.json', 
-             size=5, 
-             data_to_subfolders=True, 
-             name='test')
+    pattern_path = base_path / 'Patterns'
+    generate(base_path, pattern_path, props)
