@@ -42,7 +42,7 @@ class PatternWrapper():
             self.__randomize_parameters()
             self.___update_pattern()
 
-    def save_pattern(self, path, to_subfolder=True):
+    def serialize(self, path, to_subfolder=True):
         # log context
         if to_subfolder:
             log_dir = Path(path) / self.name
@@ -128,9 +128,6 @@ class PatternWrapper():
                                  + self.parameter_processors.keys())
 
             for panel_influence in self.parameters[parameter]['influence']:
-                print(parameter, panel_influence['panel'],
-                      panel_influence['edge_list'])
-
                 for edge in panel_influence['edge_list']:
                     self.parameter_processors[param_type](
                         panel_influence['panel'], edge, value)
