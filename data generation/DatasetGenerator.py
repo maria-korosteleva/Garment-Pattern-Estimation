@@ -5,6 +5,7 @@ import time
 import json
 import os
 import random
+import shutil
 
 # My module
 import pattern
@@ -81,6 +82,9 @@ def generate(path, templates_path, props):
     props['data_folder'] = data_folder
     path_with_dataset = path / data_folder
     os.makedirs(path_with_dataset)
+    # Copy template for convernience
+    shutil.copyfile(template_file_path, 
+                    path_with_dataset / ('template_' + template_file_path.name))
 
     # init random seed
     random.seed(props['random_seed'])
@@ -97,24 +101,22 @@ def generate(path, templates_path, props):
 
     # log properties
     props.serialize(path_with_dataset / 'dataset_properties.json')
-    # TODO copy template? 
 
 
+# ------------------ MAIN ------------------------
 if __name__ == "__main__":
     
-    new = False
+    new = True
 
     if new:
         props = DatasetProperties(
             'skirt_per_panel.json', 
-            size=100,
+            size=5,
             data_to_subfolders=False, 
             name='N')
     else:
         props = DatasetProperties.fromfile(
-            'D:/GK-Pattern-Data-Gen/N_skirt_per_panel_200324-17-22/dataset_properties.json')
+            'F:/GK-Pattern-Data-Gen/N_skirt_per_panel_200324-17-22/dataset_properties.json')
 
     # Generator
-    base_path = Path('D:/GK-Pattern-Data-Gen/')
-    pattern_path = base_path / 'Patterns'
-    generate(base_path, pattern_path, props)
+    generate('F:/GK-Pattern-Data-Gen/', './Patterns', props)
