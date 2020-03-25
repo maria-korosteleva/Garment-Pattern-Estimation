@@ -50,6 +50,9 @@ class PatternWrapper():
         self.pattern = self.template['pattern']
         self.parameters = self.template['parameters']
 
+        self.scaling_for_drawing = self.__verts_to_px_scaling_factor()
+
+        # randomization setup
         self.parameter_processors = {
             'length': self.__extend_edge,
             'curve': self.__curve_edge
@@ -164,22 +167,44 @@ class PatternWrapper():
 
     # -------- Drawing ---------
 
+    def __verts_to_px_scaling_factor(self):
+        """
+        Estimates multiplicative factor to convert vertex units to pixel coordinates
+        Heuritic approach, s.t. all the patterns from the same template are displayed similarly
+        """
+        any_panel = next(iter(self.pattern['panels'].values()))
+        vertices = np.asarray(any_panel['vertices'])
+
+        box_size = np.max(vertices, axis=0) - np.min(vertices, axis=0) 
+        if box_size[0] < 2:      # meters
+            scaling_to_px = 200
+        elif box_size[0] < 200:  # sentimeters
+            scaling_to_px = 2
+        else:                    # pixels
+            scaling_to_px = 1  
+
+        return scaling_to_px
+
     def ___draw_a_panel(self, drawing, panel_name, offset=[0, 0], scaling=1):
         """
         Adds a requested panel to the svg drawing with given offset and scaling
-        Returns the lower-right vertex coordinate for the convenice of
-        future offsetting
+        Assumes (!!) 
+            that edges are correctly oriented to form a closed loop
+        Returns 
+            the lower-right vertex coordinate for the convenice of future offsetting.
         """
-
         panel = self.pattern['panels'][panel_name]
-        vertices = np.asarray(panel['vertices'], dtype=int) * scaling + offset
+        vertices = np.asarray(panel['vertices'], dtype=int)
 
+        # Scale & shift vertices for visibility
+        vertices = vertices * scaling + offset
+
+        # draw
         start = vertices[panel['edges'][0]['endpoints'][0]]
         path = drawing.path(['M', start[0], start[1]],
                             stroke='black', fill='rgb(255,217,194)')
         for edge in panel['edges']:
-            # assumes (!!)  that edges are correctly oriented to form a closed
-            # loop when summed
+            # TODO add darts visualization here!
             start = vertices[edge['endpoints'][0]]
             end = vertices[edge['endpoints'][1]]
             if ('curvature' in edge):
@@ -190,10 +215,7 @@ class PatternWrapper():
                     ['Q', control_point[0], control_point[1], end[0], end[1]])
             else:
                 path.push(['L', end[0], end[1]])
-
-            # TODO add darts visualization here!
-
-        path.push('z')
+        path.push('z')  # path finished
         drawing.add(path)
 
         # name the panel
@@ -212,7 +234,7 @@ class PatternWrapper():
             panel_offset = self.___draw_a_panel(
                 dwg, panel,
                 offset=[panel_offset[0] + base_offset[0], base_offset[1]],
-                scaling=10)
+                scaling=self.scaling_for_drawing)
 
         # final sizing & save
         dwg['width'] = str(panel_offset[0] + base_offset[0]) + 'px'

@@ -113,7 +113,7 @@ if __name__ == "__main__":
             'skirt_per_panel.json', 
             size=5,
             data_to_subfolders=False, 
-            name='N')
+            name='pic_scaling')
     else:
         props = DatasetProperties.fromfile(
             'F:/GK-Pattern-Data-Gen/N_skirt_per_panel_200324-17-22/dataset_properties.json')
