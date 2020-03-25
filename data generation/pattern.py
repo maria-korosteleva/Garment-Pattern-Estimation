@@ -40,6 +40,7 @@ class PatternWrapper():
     """
 
     # ------------ Interface -------------
+    
     def __init__(self, template_file, randomize=""):
 
         self.template_file = Path(template_file)
@@ -60,7 +61,7 @@ class PatternWrapper():
 
         if randomize:
             self.__randomize_parameters()
-            self.___update_pattern()
+            self.__update_pattern_by_param_values()
 
     def serialize(self, path, to_subfolder=True):
         # log context
@@ -82,6 +83,7 @@ class PatternWrapper():
         self.__save_as_image(svg_file, png_file)
 
     # --------- Pattern operations ----------
+
     def __randomize_parameters(self):
         """
         Sets new random values for the pattern parameters
@@ -92,7 +94,33 @@ class PatternWrapper():
             new_value = random.uniform(param_range[0], param_range[1])
             self.parameters[parameter]['value'] = new_value
 
-    def __extend_edge(self, panel_name, edge, scaling_factor, direction):
+    def __update_pattern_by_param_values(self):
+        """
+        Recalculates vertex positions and edge curves according to current
+        parameter values
+        (!) Assumes that the current pattern is a template:
+                was created with all the parameters equal to 1
+        """
+        # Edge length adjustments
+        for parameter in self.template['parameter_order']:
+            value = self.parameters[parameter]['value']
+            param_type = self.parameters[parameter]['type']
+            if param_type not in self.parameter_processors:
+                raise ValueError("Incorrect parameter type. Alowed are "
+                                 + self.parameter_processors.keys())
+
+            for panel_influence in self.parameters[parameter]['influence']:
+                for edge in panel_influence['edge_list']:
+                    self.parameter_processors[param_type](
+                        panel_influence['panel'], edge, value)
+
+                self.__normalize_panel_translation(panel_influence['panel'])
+        
+        # print(self.name, self.__edge_length('front', 0), self.__edge_length('back', 0))
+
+    # -------- Updating edges by parameters ---------
+
+    def __extend_edge(self, panel_name, edge_influence, scaling_factor):
         """
         Shrinks/elongates a given edge of a given panel.
         Both vertices are updated equally ignoring the edge direction
@@ -100,19 +128,20 @@ class PatternWrapper():
         coordinates of curve controls
         """
         panel = self.pattern['panels'][panel_name]
-        v_id_start, v_id_end = tuple(panel['edges'][edge]['endpoints'])
+        v_id_start, v_id_end = tuple(
+            panel['edges'][edge_influence["id"]]['endpoints'])
         v_start, v_end = np.array(panel['vertices'][v_id_start]), \
             np.array(panel['vertices'][v_id_end])
-            
+
         # future edge    
         new_edge_vector = scaling_factor * (v_end - v_start)
 
         # apply extention in the appropriate direction
-        if direction == 'end':
+        if edge_influence["direction"] == 'end':
             v_end = v_start + new_edge_vector
-        elif direction == 'start':
+        elif edge_influence["direction"] == 'start':
             v_start = v_end - new_edge_vector
-        else:
+        else:  # both
             v_middle = (v_start + v_end) / 2
             new_half_edge_vector = new_edge_vector / 2
             v_start, v_end = v_middle - new_half_edge_vector, \
@@ -129,6 +158,8 @@ class PatternWrapper():
         control_vert = panel['edges'][edge]['curvature']
         control_vert[1] *= scaling_factor
 
+    # -------- Pattern utils ---------
+
     def __normalize_panel_translation(self, panel_name):
         """
         Shifts all panel vertices s.t. panel bounding box starts at zero
@@ -140,41 +171,8 @@ class PatternWrapper():
         vertices = vertices - offset
 
         panel['vertices'] = vertices.tolist()
-
-    def ___update_pattern(self):
-        """
-        Recalculates vertex positions and edge curves according to current
-        parameter values
-        (!) Assumes that the current pattern is a template:
-                was created with all the parameters equal to 1
-        """
-        # Edge length adjustments
-        for parameter in self.template['parameter_order']:
-            value = self.parameters[parameter]['value']
-            param_type = self.parameters[parameter]['type']
-            if param_type not in self.parameter_processors:
-                raise ValueError("Incorrect parameter type. Alowed are "
-                                 + self.parameter_processors.keys())
-
-            for panel_influence in self.parameters[parameter]['influence']:
-                for idx, edge in enumerate(panel_influence['edge_list']):
-                    if param_type == 'length':
-                        self.__extend_edge(panel_influence['panel'], 
-                                           edge, value, 
-                                           panel_influence['extention_direction'][idx])
-                    elif param_type == 'curve':
-                        self.__curve_edge(panel_influence['panel'], 
-                                          edge, value)
-                    else: 
-                        raise ValueError()
-                    # self.parameter_processors[param_type](
-                    #    panel_influence['panel'], edge, value)
-
-                self.__normalize_panel_translation(panel_influence['panel'])
-        
-        # print(self.name, self.__edge_length('front', 0), self.__edge_length('back', 0))
-
-    def ___calc_control_coord(self, start, end, control_scale):
+    
+    def __calc_control_coord(self, start, end, control_scale):
         """
         Derives absolute coordinates of Bezier control point given as an offset
         """
@@ -238,7 +236,7 @@ class PatternWrapper():
             end = vertices[edge['endpoints'][1]]
             if ('curvature' in edge):
                 control_scale = edge['curvature']
-                control_point = self.___calc_control_coord(
+                control_point = self.__calc_control_coord(
                     start, end, control_scale)
                 path.push(
                     ['Q', control_point[0], control_point[1], end[0], end[1]])
@@ -274,7 +272,7 @@ class PatternWrapper():
         svg_pattern = svglib.svg2rlg(svg_filename.as_posix())
         renderPM.drawToFile(svg_pattern, png_filename, fmt='png')
 
-    # -------- Utils ---------
+    # -------- Other Utils ---------
 
     def __id_generator(self, size=10,
                        chars=string.ascii_uppercase + string.digits):

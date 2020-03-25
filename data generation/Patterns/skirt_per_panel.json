@@ -82,13 +82,29 @@
       "influence" : [
         {
           "panel": "front",
-          "edge_list" : [1, 3],
-          "extention_direction" : ["end", "start"]
+          "edge_list" : [
+            {
+              "id" : 1, 
+              "direction" : "end"
+            }, 
+            {
+              "id" : 3, 
+              "dir" : "start"
+            }
+          ]
         },
         {
           "panel": "back",
-          "edge_list" : [1, 3],
-          "extention_direction" : ["end", "start"] 
+          "edge_list" : [
+            {
+              "id" : 1, 
+              "direction" : "end"
+            }, 
+            {
+              "id" : 3, 
+              "dir" : "start"
+            }
+          ]
         }
       ]
     }, 
@@ -99,13 +115,21 @@
       "influence" : [
         {
           "panel": "front",
-          "edge_list" : [2],
-          "extention_direction" : ["both"]
+          "edge_list" : [
+            {
+              "id" : 2, 
+              "direction" : "both"
+            }
+          ]
         },
         {
           "panel": "back",
-          "edge_list" : [2],
-          "extention_direction" : ["both"]
+          "edge_list" : [
+            {
+              "id" : 2, 
+              "direction" : "both"
+            }
+          ]
         }
       ]
     }, 
