@@ -92,7 +92,7 @@ class PatternWrapper():
             new_value = random.uniform(param_range[0], param_range[1])
             self.parameters[parameter]['value'] = new_value
 
-    def __extend_edge(self, panel_name, edge, scaling_factor):
+    def __extend_edge(self, panel_name, edge, scaling_factor, direction):
         """
         Shrinks/elongates a given edge of a given panel.
         Both vertices are updated equally ignoring the edge direction
@@ -103,10 +103,21 @@ class PatternWrapper():
         v_id_start, v_id_end = tuple(panel['edges'][edge]['endpoints'])
         v_start, v_end = np.array(panel['vertices'][v_id_start]), \
             np.array(panel['vertices'][v_id_end])
-        v_middle = (v_start + v_end) / 2
-        new_half_edge_vector = scaling_factor * (v_end - v_middle)
-        v_start, v_end = v_middle - new_half_edge_vector, \
-            v_middle + new_half_edge_vector
+            
+        # future edge    
+        new_edge_vector = scaling_factor * (v_end - v_start)
+
+        # apply extention in the appropriate direction
+        if direction == 'end':
+            v_end = v_start + new_edge_vector
+        elif direction == 'start':
+            v_start = v_end - new_edge_vector
+        else:
+            v_middle = (v_start + v_end) / 2
+            new_half_edge_vector = new_edge_vector / 2
+            v_start, v_end = v_middle - new_half_edge_vector, \
+                v_middle + new_half_edge_vector
+
         panel['vertices'][v_id_end] = v_end.tolist()
         panel['vertices'][v_id_start] = v_start.tolist()
 
@@ -137,7 +148,6 @@ class PatternWrapper():
         (!) Assumes that the current pattern is a template:
                 was created with all the parameters equal to 1
         """
-        # TODO add other parameter types
         # Edge length adjustments
         for parameter in self.template['parameter_order']:
             value = self.parameters[parameter]['value']
@@ -147,11 +157,22 @@ class PatternWrapper():
                                  + self.parameter_processors.keys())
 
             for panel_influence in self.parameters[parameter]['influence']:
-                for edge in panel_influence['edge_list']:
-                    self.parameter_processors[param_type](
-                        panel_influence['panel'], edge, value)
+                for idx, edge in enumerate(panel_influence['edge_list']):
+                    if param_type == 'length':
+                        self.__extend_edge(panel_influence['panel'], 
+                                           edge, value, 
+                                           panel_influence['extention_direction'][idx])
+                    elif param_type == 'curve':
+                        self.__curve_edge(panel_influence['panel'], 
+                                          edge, value)
+                    else: 
+                        raise ValueError()
+                    # self.parameter_processors[param_type](
+                    #    panel_influence['panel'], edge, value)
 
                 self.__normalize_panel_translation(panel_influence['panel'])
+        
+        # print(self.name, self.__edge_length('front', 0), self.__edge_length('back', 0))
 
     def ___calc_control_coord(self, start, end, control_scale):
         """
@@ -164,6 +185,14 @@ class PatternWrapper():
         control_point = control_start + control_scale[1] * edge_perp
 
         return control_point 
+
+    def __edge_length(self, panel, edge):
+        panel = self.pattern['panels'][panel]
+        v_id_start, v_id_end = tuple(panel['edges'][edge]['endpoints'])
+        v_start, v_end = np.array(panel['vertices'][v_id_start]), \
+            np.array(panel['vertices'][v_id_end])
+        
+        return np.linalg.norm(v_end - v_start)
 
     # -------- Drawing ---------
 
