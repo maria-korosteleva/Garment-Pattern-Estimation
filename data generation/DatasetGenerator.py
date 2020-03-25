@@ -11,6 +11,15 @@ import pattern
 
 
 class DatasetProperties():
+    """Keeps loads, and saves properties of a synthetic dataset.
+        Objects of the class can be treated as dictionaries.
+        Mandatory properties include
+            * size (number of datapoints)
+            * template (name of template file which variation forms a datapoint)
+            * random_seed (for reproducibility)
+            * to_subfolders (whether each datapoint is stored in a separate subfolder)
+            * name (of a current dataset)
+    """
     def __init__(self, template_names, size, 
                  data_to_subfolders=True, name="", random_seed=None):
         self.properties = {}
@@ -50,8 +59,20 @@ class DatasetProperties():
 
 
 def generate(path, templates_path, props):
+    """Generates a synthetic dataset of patterns with given properties
+        Params:
+            path : path to folder to put a new dataset into
+            templates_path : path to folder with pattern templates
+            props : an instance of DatasetProperties class
+                    requested properties of the dataset
+        Not Implemented: 
+            * Generation from multiple template patterns
+            * Physics simulation of garments
+    """
     path = Path(path)
     # TODO modify to support multiple templates
+    if isinstance(props['templates'], list):
+        raise NotImplemented('Generation from multiple templates is not supported')
     template_file_path = Path(templates_path) / props['templates']
 
     # create data folder

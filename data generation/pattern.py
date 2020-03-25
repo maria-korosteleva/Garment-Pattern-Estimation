@@ -16,10 +16,27 @@ import time
 
 class PatternWrapper():
     """
-    Processing of pattern template in custom JSON format
-    * Loading
-    * Changing the pattern parameters
-    * Converting to various needed representations
+        Loading, represenation convertion, parameter randomization of a pattern template
+        in custom JSON format.
+        Input:
+            * Pattern template in custom JSON format
+        Output representations: 
+            * Pattern instance in custom JSON format 
+                (with updated parameter values and vertex positions)
+            * SVG (stitching info is lost)
+            * PNG for visualization
+
+        Implementation limitations: 
+            * Parameter randomization is only performed once on loading
+            * Only accepts unchanged template files (all parameter values = 1) 
+            otherwise, parameter values will go out of control and outside of the original range
+            (with no way to recognise it)
+        
+        Not implemented: 
+            * Convertion to NN-friendly format
+            * Support for patterns with darts
+            * Convertion to Simulatable format
+            * Panel positioning
     """
 
     # ------------ Interface -------------
