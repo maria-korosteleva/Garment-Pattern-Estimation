@@ -111,9 +111,9 @@ if __name__ == "__main__":
     if new:
         props = DatasetProperties(
             'skirt_per_panel.json', 
-            size=20,
+            size=200,
             data_to_subfolders=False, 
-            name='edge_dir')
+            name='curve_2d')
     else:
         props = DatasetProperties.fromfile(
             'F:/GK-Pattern-Data-Gen/N_skirt_per_panel_200324-17-22/dataset_properties.json')

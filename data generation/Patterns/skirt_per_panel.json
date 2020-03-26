@@ -89,7 +89,7 @@
             }, 
             {
               "id" : 3, 
-              "dir" : "start"
+              "direction" : "start"
             }
           ]
         },
@@ -102,7 +102,7 @@
             }, 
             {
               "id" : 3, 
-              "dir" : "start"
+              "direction" : "start"
             }
           ]
         }
@@ -134,8 +134,11 @@
       ]
     }, 
     "low_wide_curve" : {
-      "value" : 1,
-      "range" : [-1, 1],
+      "value" : [1, 1],
+      "range" : [
+        [0, 1],
+        [-1, 1]
+      ],
       "type" : "curve", 
       "influence" : [
         {

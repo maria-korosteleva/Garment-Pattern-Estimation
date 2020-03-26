@@ -83,6 +83,10 @@ class PatternWrapper():
         self.__save_as_image(svg_file, png_file)
 
     # --------- Pattern operations ----------
+    @staticmethod
+    def __new_value(param_range):
+        """Random value within range given as an iteratable"""
+        return random.uniform(param_range[0], param_range[1])
 
     def __randomize_parameters(self):
         """
@@ -90,9 +94,16 @@ class PatternWrapper():
         Parameter type agnostic
         """
         for parameter in self.parameters:
-            param_range = self.parameters[parameter]['range']
-            new_value = random.uniform(param_range[0], param_range[1])
-            self.parameters[parameter]['value'] = new_value
+            param_ranges = self.parameters[parameter]['range']
+
+            # check if parameter has multiple values (=> multiple ranges) like for curves
+            if isinstance(self.parameters[parameter]['value'], list): 
+                values = []
+                for param_range in param_ranges:
+                    values.append(PatternWrapper.__new_value(param_range))
+                self.parameters[parameter]['value'] = values
+            else:  # simple 1-value parameter
+                self.parameters[parameter]['value'] = PatternWrapper.__new_value(param_ranges)
 
     def __update_pattern_by_param_values(self):
         """
@@ -122,11 +133,15 @@ class PatternWrapper():
 
     def __extend_edge(self, panel_name, edge_influence, scaling_factor):
         """
-        Shrinks/elongates a given edge of a given panel.
-        Both vertices are updated equally ignoring the edge direction
-        Applies equally to straight and curvy edges tnks to relative
-        coordinates of curve controls
+            Shrinks/elongates a given edge of a given panel. Applies equally
+            to straight and curvy edges tnks to relative coordinates of curve controls
+            Expects
+                * each influenced edge to supply the elongatoin direction
+                * scalar scaling_factor
         """
+        if isinstance(scaling_factor, list):
+            raise ValueError("Multiple scaling factors are not supported")
+
         panel = self.pattern['panels'][panel_name]
         v_id_start, v_id_end = tuple(
             panel['edges'][edge_influence["id"]]['endpoints'])
@@ -151,12 +166,27 @@ class PatternWrapper():
         panel['vertices'][v_id_start] = v_start.tolist()
 
     def __curve_edge(self, panel_name, edge, scaling_factor):
+        """
+            Updated the curvature of an edge accoding to scaling_factor.
+            Can only be applied to edges with curvature information
+            scaling_factor can be
+                * scalar -- only the Y of control point is changed
+                * 2-value list -- both coordinated of control are updated
+        """
         panel = self.pattern['panels'][panel_name]
         if 'curvature' not in panel['edges'][edge]:
             raise ValueError('Applying curvature scaling to non-curvy edge '
                              + str(edge) + ' of ' + panel_name)
-        control_vert = panel['edges'][edge]['curvature']
-        control_vert[1] *= scaling_factor
+        control = panel['edges'][edge]['curvature']
+        if isinstance(scaling_factor, list):
+            control = [
+                control[0] * scaling_factor[0],
+                control[1] * scaling_factor[1]
+            ]
+        else:
+            control[1] *= scaling_factor
+
+        panel['edges'][edge]['curvature'] = control
 
     # -------- Pattern utils ---------
 
