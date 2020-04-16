@@ -11,3 +11,6 @@ __pycache__
 
 # Compiled files
 *.pyc
+
+# custom settings -- to have customized local copy
+system.json
