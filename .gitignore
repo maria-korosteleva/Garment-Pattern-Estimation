@@ -12,5 +12,8 @@ __pycache__
 # Compiled files
 *.pyc
 
+# Maya
+.mayaSwatches
+
 # custom settings -- to have customized local copy
 system.json
