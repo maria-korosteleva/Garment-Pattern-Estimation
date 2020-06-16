@@ -1,50 +1,25 @@
 
 from pathlib import Path
-import time
-import yaml
+
 
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
-import torch.nn as nn
 import wandb as wb
 
 # My modules
 import dataloaders as dl
-import trainer
+from trainer import Trainer
 import nets
 from customconfig import Properties
 
-def yaml_config(filename):
-    """Load yaml config setup from file"""
-    # See https://stackoverflow.com/questions/1773805/how-can-i-parse-a-yaml-file-in-python
-    with open(filename, 'r') as stream:
-        try:
-            return yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-            raise exc
-
-
 # Basic Parameters
-# -------- CONFIG -------
-setup = dict(
-    random_seed=int(time.time()),
-    dataset=r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest',
-    device='cuda:0' if torch.cuda.is_available() else 'cpu',
-    epochs=100,
-    batch_size=64,
-    learning_rate=0.001
-)
+trainer = Trainer(
+    r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='refactoring-config')
 
-wb.init(name="refactoring-config", project='Test-Garments-Reconstruction', config=setup)
-
-# --------- Reproducibility
-# see https://pytorch.org/docs/stable/notes/randomness.html
-torch.manual_seed(wb.config.random_seed)
-if 'cuda' in wb.config.device:
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+trainer.init_randomizer()
 
 #-------- DATA --------
 # Initial load
@@ -63,39 +38,21 @@ training_set, validation_set = torch.utils.data.random_split(
 
 print ('Split: {} / {}'.format(len(training_set), len(validation_set)))
 
-training_loader = DataLoader(training_set, wb.config.batch_size, shuffle=True)
-validation_loader = DataLoader(validation_set, wb.config.batch_size)
+training_loader = DataLoader(training_set, trainer.setup['batch_size'], shuffle=True)
+validation_loader = DataLoader(validation_set, trainer.setup['batch_size'])
 
 
 # model
 model = nets.ShirtfeaturesMLP()
-wb.config.net = 'ShirtfeaturesMLP'
-
-# optimizer
-optimizer = torch.optim.SGD(model.parameters(), lr = wb.config.learning_rate)
-wb.config.optimizer = 'SGD'
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=1)
-wb.config.lr_scheduling = True
-
-# loss function
-regression_loss = nn.MSELoss()
-wb.config.loss = 'MSELoss'
-
-# init Weights&biases run
-#os.environ['WANDB_MODE'] = 'dryrun'
-
-wb.watch(model, log='all')
 
 # ----- Fit ---------
 
-trainer.fit(model, regression_loss, optimizer, scheduler, training_loader, validation_loader)
+trainer.fit(model, training_loader, validation_loader)
 
-print ("Finished training")
-
-# loss on validation set
+# --------------- loss on validation set --------------
 model.eval()
 with torch.no_grad():
-    valid_loss = sum([regression_loss(model(batch['features']), batch['pattern_params']) for batch in validation_loader]) 
+    valid_loss = sum([trainer.regression_loss(model(batch['features']), batch['pattern_params']) for batch in validation_loader]) 
 
 print ('Validation loss: {}'.format(valid_loss))
 
