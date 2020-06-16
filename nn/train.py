@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import time
 
 import torch
 from torch.utils.data import DataLoader
@@ -7,29 +8,33 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import wandb as wb
 
+# My modules
 import dataloaders as dl
 import trainer
 import nets
 
 
+# Basic Parameters
+# -------- CONFIG -------
+wb.init(name="refactoring-config", project='Test-Garments-Reconstruction')
+
+wb.config.random_seed = int(time.time())  # 0
+wb.config.epochs = 100
+wb.config.learning_rate = 0.001
+wb.config.batch_size = 64
+wb.config.dataset = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+wb.config.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
 # --------- Reproducibility
 # see https://pytorch.org/docs/stable/notes/randomness.html
-torch.manual_seed(0)
-
-# when using cuda
-# torch.backends.cudnn.deterministic = True
-# torch.backends.cudnn.benchmark = False
-data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-
-# Basic Parameters
-batch_size = 64
-epochs_num = 100
-learning_rate = 0.001
-logdir = './logdir'
+torch.manual_seed(wb.config.random_seed)
+if 'cuda' in wb.config.device:
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 #-------- DATA --------
 # Initial load
-shirt_dataset = dl.ParametrizedShirtDataSet(Path(data_location), 
+shirt_dataset = dl.ParametrizedShirtDataSet(Path(wb.config.dataset), 
                                   dl.SampleToTensor())
 # Data normalization
 # mean, std = dl.get_mean_std(DataLoader(shirt_dataset, 100))
@@ -44,26 +49,30 @@ training_set, validation_set = torch.utils.data.random_split(
 
 print ('Split: {} / {}'.format(len(training_set), len(validation_set)))
 
-training_loader = DataLoader(training_set, batch_size, shuffle=True)
-validation_loader = DataLoader(validation_set, batch_size)
+training_loader = DataLoader(training_set, wb.config.batch_size, shuffle=True)
+validation_loader = DataLoader(validation_set, wb.config.batch_size)
 
 
 # model
 model = nets.ShirtfeaturesMLP()
+wb.config.net = 'ShirtfeaturesMLP'
 
 # optimizer
-optimizer = torch.optim.SGD(model.parameters(), lr = learning_rate)
+optimizer = torch.optim.SGD(model.parameters(), lr = wb.config.learning_rate)
+wb.config.optimizer = 'SGD'
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=1)
+wb.config.lr_scheduling = True
 
 # loss function
 regression_loss = nn.MSELoss()
+wb.config.loss = 'MSELoss'
 
 # init Weights&biases run
 #os.environ['WANDB_MODE'] = 'dryrun'
 
-wb.init(name="refactoring-no-norm", project='Test-Garments-Reconstruction')
-
 wb.watch(model, log='all')
+
+# ----- Fit ---------
 
 trainer.fit(model, regression_loss, optimizer, scheduler, training_loader, validation_loader)
 

@@ -3,17 +3,12 @@ import numpy as np
 import torch
 import wandb as wb
 
-batch_size = 64
-epochs_num = 100
-learning_rate = 0.001
-logdir = './logdir'
-
 def fit(model, regression_loss, optimizer, scheduler, train_loader, valid_loader):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(wb.config.device)
     print(device)
     
     model.to(device)
-    for epoch in range (epochs_num):
+    for epoch in range (wb.config.epochs):
         model.train()
         for i, batch in enumerate(train_loader):
             features, params = batch['features'].to(device), batch['pattern_params'].to(device)
