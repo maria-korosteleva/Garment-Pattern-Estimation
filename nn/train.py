@@ -28,18 +28,16 @@ def yaml_config(filename):
 
 # Basic Parameters
 # -------- CONFIG -------
-config = yaml_config('./nn/config-defaults.yaml')  # use yaml for wandb config compatibility -- I can just gran the config file from there
-config['random_seed']['value'] = int(time.time())
-config['dataset'] = {}
-config['dataset']['value'] = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-config['device'] = {}
-config['device']['value'] = "cuda:0" if torch.cuda.is_available() else "cpu"
+setup = dict(
+    random_seed=int(time.time()),
+    dataset=r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest',
+    device='cuda:0' if torch.cuda.is_available() else 'cpu',
+    epochs=100,
+    batch_size=64,
+    learning_rate=0.001
+)
 
-print(config)
-
-wb.init(name="refactoring-config", project='Test-Garments-Reconstruction')
-
-print(wb.config)
+wb.init(name="refactoring-config", project='Test-Garments-Reconstruction', config=setup)
 
 # --------- Reproducibility
 # see https://pytorch.org/docs/stable/notes/randomness.html
