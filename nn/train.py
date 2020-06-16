@@ -15,15 +15,31 @@ import trainer
 import nets
 from customconfig import Properties
 
+def yaml_config(filename):
+    """Load yaml config setup from file"""
+    # See https://stackoverflow.com/questions/1773805/how-can-i-parse-a-yaml-file-in-python
+    with open(filename, 'r') as stream:
+        try:
+            return yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+            raise exc
+
 
 # Basic Parameters
 # -------- CONFIG -------
-props = Properties('./nn/config-defaults.json')
-props['random_seed'] = int(time.time())
-props['dataset'] = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-props['device'] = "cuda:0" if torch.cuda.is_available() else "cpu"
+config = yaml_config('./nn/config-defaults.yaml')  # use yaml for wandb config compatibility -- I can just gran the config file from there
+config['random_seed']['value'] = int(time.time())
+config['dataset'] = {}
+config['dataset']['value'] = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+config['device'] = {}
+config['device']['value'] = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-wb.init(name="refactoring-config", project='Test-Garments-Reconstruction', config=props.properties)
+print(config)
+
+wb.init(name="refactoring-config", project='Test-Garments-Reconstruction')
+
+print(wb.config)
 
 # --------- Reproducibility
 # see https://pytorch.org/docs/stable/notes/randomness.html
