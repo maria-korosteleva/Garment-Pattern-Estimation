@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import time
+import yaml
 
 import torch
 from torch.utils.data import DataLoader
@@ -12,18 +13,17 @@ import wandb as wb
 import dataloaders as dl
 import trainer
 import nets
+from customconfig import Properties
 
 
 # Basic Parameters
 # -------- CONFIG -------
-wb.init(name="refactoring-config", project='Test-Garments-Reconstruction')
+props = Properties('./nn/config-defaults.json')
+props['random_seed'] = int(time.time())
+props['dataset'] = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+props['device'] = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-wb.config.random_seed = int(time.time())  # 0
-wb.config.epochs = 100
-wb.config.learning_rate = 0.001
-wb.config.batch_size = 64
-wb.config.dataset = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-wb.config.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+wb.init(name="refactoring-config", project='Test-Garments-Reconstruction', config=props.properties)
 
 # --------- Reproducibility
 # see https://pytorch.org/docs/stable/notes/randomness.html

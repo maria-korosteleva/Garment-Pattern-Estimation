@@ -1,0 +1,16 @@
+# defailt config for NN training
+
+epochs:
+  desc: Number of epochs to train over
+  value: 100
+batch_size:
+  desc: Size of each mini-batch
+  value: 64
+learning_rate:
+  desc: starting learning rate
+  value: 0.001
+dataset:
+  desc: 'data used for training'
+  value: 'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+random_seed:
+  value: 0
