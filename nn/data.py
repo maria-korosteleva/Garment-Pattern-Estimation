@@ -8,8 +8,7 @@ import torchvision.transforms as transforms
 
 import openmesh as om
 
-# ---------------------- Wrapper ------------------
-
+# ---------------------- Main Wrapper ------------------
 class DatasetWrapper(object):
     """Resposible for keeping dataset, its splits, loaders & processing routines"""
     def __init__(self, in_dataset):
@@ -72,46 +71,7 @@ class SampleToTensor(object):
         }
 
 
-# Custom transforms -- normalize
-class NormalizeInputfeatures(object):
-    """Convert ndarrays in sample to Tensors."""
-    def __init__(self, mean_features, std_features):
-        self.mean = mean_features
-        self.std = std_features
-    
-    def __call__(self, sample):
-        features = sample['features']
-        
-        return {
-            'features': torch.div((features - self.mean), self.std), 
-            'pattern_params': sample['pattern_params'], 
-            'name': sample['name']
-        }
-
-
-# Data Normalization?
-def get_mean_std(dataloader):
-    
-    stats = { 
-        'batch_sums': [], 
-        'batch_sq_sums': []}
-    
-    for data in dataloader:
-        batch_sum = data['features'].sum(0)
-        stats['batch_sums'].append(batch_sum)
-
-    mean_features = sum(stats['batch_sums']) / len(dataloader)
-    
-    for data in dataloader:
-        batch_sum_sq = (data['features'] - mean_features.view(1, len(mean_features)))**2
-        stats['batch_sq_sums'].append(batch_sum_sq.sum(0))
-                        
-    std_features = torch.sqrt(sum(stats['batch_sq_sums']) / len(dataloader))
-    
-    return mean_features, std_features
-
-# --------------------- Dataset -------------------------
-# custom DataSet class
+# --------------------- Datasets -------------------------
 class ParametrizedShirtDataSet(Dataset):
     """
     For loading the data of "Learning Shared Shape Space.." paper
@@ -225,14 +185,3 @@ if __name__ == "__main__":
     for name in dataset.datapoints_names:
         if not (dataset.root_path / name / dataset.garment_3d_filename).exists():
             print(name)
-
-    # Normalization of features
-    loader = DataLoader(dataset, 64)
-    mean, std = get_mean_std(loader)
-    print(mean, std)
-
-    dataset_normalized = ParametrizedShirtDataSet(
-        Path(data_location), transforms.Compose([SampleToTensor(), NormalizeInputfeatures(mean, std)]))
-
-    print(dataset[1]['features'])
-    print(dataset_normalized[1]['features'])

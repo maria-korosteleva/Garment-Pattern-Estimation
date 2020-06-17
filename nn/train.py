@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
 # My modules
-import dataloaders as dl
+import data
 from trainer import Trainer
 import nets
 
@@ -16,17 +16,10 @@ trainer = Trainer(
     datapath, 
     project_name='Test-Garments-Reconstruction', 
     run_name='refactoring-code')
-
 trainer.init_randomizer()
 
-#-------- DATA --------
-# Initial load
-shirts = dl.DatasetWrapper(dl.ParametrizedShirtDataSet(Path(datapath)))
-# Data normalization
-# mean, std = dl.get_mean_std(DataLoader(shirt_dataset, 100))
-# shirt_dataset = dl.ParametrizedShirtDataSet(Path(data_location), transforms.Compose([dl.SampleToTensor(), dl.NormalizeInputfeatures(mean, std)]))
-
 # Data load and split
+shirts = data.DatasetWrapper(data.ParametrizedShirtDataSet(Path(datapath)))
 shirts.new_split(valid_percent=10)
 shirts.new_loaders(trainer.setup['batch_size'], shuffle_train=True)
 
@@ -34,8 +27,6 @@ print ('Split: {} / {}'.format(len(shirts.training), len(shirts.validation)))
 
 # model
 model = nets.ShirtfeaturesMLP()
-
-# ----- Fit ---------
 
 trainer.fit(model, shirts.loader_train, shirts.loader_validation)
 
@@ -45,7 +36,6 @@ with torch.no_grad():
     valid_loss = sum([trainer.regression_loss(model(batch['features']), batch['pattern_params']) for batch in shirts.loader_validation]) 
 
 print ('Validation loss: {}'.format(valid_loss))
-
 
 # save prediction for validation to file
 model.eval()
