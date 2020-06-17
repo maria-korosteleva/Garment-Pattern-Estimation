@@ -16,16 +16,17 @@ trainer = Trainer(
     datapath, 
     project_name='Test-Garments-Reconstruction', 
     run_name='refactoring-checkpoints')
-trainer.init_randomizer()
 
 # Data load and split
 shirts = data.DatasetWrapper(data.ParametrizedShirtDataSet(Path(datapath)))
 shirts.new_split(valid_percent=10)
 shirts.new_loaders(trainer.setup['batch_size'], shuffle_train=True)
+trainer.update_config(data_split=shirts.split_info)
 
 print ('Split: {} / {}'.format(len(shirts.training), len(shirts.validation)))
 
 # model
+trainer.init_randomizer()
 model = nets.ShirtfeaturesMLP()
 
 trainer.fit(model, shirts.loader_train, shirts.loader_validation)

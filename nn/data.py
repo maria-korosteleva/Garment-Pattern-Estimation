@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from pathlib import Path
+import time
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -21,14 +22,33 @@ class DatasetWrapper(object):
         self.loader_train = None
         self.loader_validation = None
         self.loader_test = None
+
+        self.split_info = {
+            'random_seed': None, 
+            'valid_percent': None, 
+            'test_percent': None
+        }
     
-    def new_split(self, valid_percent, test_percent=None):
+    def new_split(self, valid_percent, test_percent=None, random_seed=None):
         """Creates train/validation or train/validation/test splits
             depending on provided parameters
             """
-        valid_size = (int) (len(self.dataset) * valid_percent / 100)
-        if test_percent:
-            test_size = (int) (len(self.dataset) * test_percent / 100)
+        self.split_info['random_seed'] = random_seed if random_seed else int(time.time())
+        self.split_info.update(valid_percent=valid_percent, test_percent=test_percent)
+        
+        return self.load_split()
+
+    def load_split(self, split_info=None):
+        """Get the split by provided parameters. Can be used to reproduce splits on the same dataset"""
+        if split_info:
+            if any([key not in split_info for key in self.split_info]):
+                raise ValueError('Specified split information is not full: {}'.format(split_info))
+            self.split_info = split_info
+
+        torch.manual_seed(self.split_info['random_seed'])
+        valid_size = (int) (len(self.dataset) * self.split_info['valid_percent'] / 100)
+        if self.split_info['test_percent']:
+            test_size = (int) (len(self.dataset) * self.split_info['test_percent'] / 100)
             self.training, self.validation, self.test = torch.utils.data.random_split(
                 self.dataset, (len(self.dataset) - valid_size - test_size, valid_size, test_size))
         else:
@@ -40,10 +60,6 @@ class DatasetWrapper(object):
 
     def save_split(self, path):
         """Save split to external file"""
-        pass
-    
-    def load_split(self, filename):
-        """Load split from external file"""
         pass
 
     def new_loaders(self, batch_size, shuffle_train=True):
