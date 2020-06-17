@@ -173,7 +173,7 @@ def init_sim_props(props, batch_run=False, force_restart=False):
         last_processed = props['sim']['stats']['processed'][-1]
         props['sim']['stats']['stop_over'].append(last_processed)  # indicate resuming dataset simulation 
 
-        if not any([name in last_processed for name in props['render']['stats']['render_time']]):
+        if not any([(name in last_processed) or (last_processed in name) for name in props['render']['stats']['render_time']]):
             # crash detected -- the last example does not appear in the stats
             if last_processed not in props['sim']['stats']['fails']['crashes']:
                 # first time to crash here -- try to re-do this example => remove from visited
@@ -218,7 +218,7 @@ def template_simulation(spec, scene, sim_props, delete_on_clean=False, caching=F
 
     # save even if sim failed -- to see what happened!
     garment.save_mesh()
-    scene.render(garment.path, garment.name + '_scene')
+    scene.render(garment.path, garment.name)
     if save_maya_scene:
         # save current Maya scene
         cmds.file(rename=os.path.join(garment.path, garment.name + '_scene'))
