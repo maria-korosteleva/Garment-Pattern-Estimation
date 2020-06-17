@@ -31,7 +31,7 @@ class Trainer():
         """Init randomizatoin for torch globally for reproducibility"""
         # see https://pytorch.org/docs/stable/notes/randomness.html
         torch.manual_seed(self.setup['random_seed'])
-        if 'cuda' in wb.config.device:
+        if 'cuda' in self.setup['device']:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 
@@ -70,7 +70,7 @@ class Trainer():
         if self.setup['optimizer'] == 'SGD':
             # future 'else'
             print('NN Warning::Using default SGD optimizer')
-            self.optimizer = torch.optim.SGD(model.parameters(), lr = wb.config.learning_rate)
+            self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'])
         
     def _add_loss(self):
         if self.setup['loss'] == 'MSELoss':
