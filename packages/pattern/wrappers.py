@@ -45,12 +45,8 @@ class VisPattern(core.ParametrizedPattern):
     def serialize(self, path, to_subfolder=True, tag=''):
 
         log_dir = super().serialize(path, to_subfolder, tag=tag)
-        if to_subfolder:
-            svg_file = os.path.join(log_dir, tag + '_pattern.svg')
-            png_file = os.path.join(log_dir, tag + '_pattern.png')
-        else:
-            svg_file = os.path.join(log_dir, (self.name + tag + '_pattern.svg'))
-            png_file = os.path.join(log_dir, (self.name + tag + '_pattern.png'))
+        svg_file = os.path.join(log_dir, (self.name + tag + '_pattern.svg'))
+        png_file = os.path.join(log_dir, (self.name + tag + '_pattern.png'))
 
         # save visualtisation
         self._save_as_image(svg_file, png_file)
