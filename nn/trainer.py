@@ -1,21 +1,31 @@
 # Training loop func
 import numpy as np
 import os
+from pathlib import Path
 import time
 
 import torch
 import torch.nn as nn
 import wandb as wb
 
+# My modules
+import data
+
 class Trainer():
-    def __init__(self, data_name, project_name='Train', run_name='Run', no_sync=False):
+    def __init__(self, project_name='Train', run_name='Run', no_sync=False, allow_resume=False):
         """Initialize training"""
+        self.checkpoint_filename = 'last_checkpoint.pth'
+        
         self.project = project_name
         self.run_name = run_name
+        self.no_sync = no_sync
+        self.resume = allow_resume
+        self.datawraper = None
+
         # default training setup
         self.setup = dict(
-            random_seed=int(time.time()),
-            dataset=data_name,
+            model_random_seed=None,
+            dataset=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=100,
             batch_size=64,
@@ -24,19 +34,41 @@ class Trainer():
             optimizer='SGD',
             lr_scheduling=True
         )
-
-        self.no_sync = no_sync
    
-    def init_randomizer(self):
+    def init_randomizer(self, random_seed=None):
         """Init randomizatoin for torch globally for reproducibility"""
         # see https://pytorch.org/docs/stable/notes/randomness.html
-        torch.manual_seed(self.setup['random_seed'])
+        if random_seed:
+            self.setup['model_random_seed'] = random_seed
+        elif not self.setup['model_random_seed']:
+            self.setup['model_random_seed'] = int(time.time())
+
+        torch.manual_seed(self.setup['model_random_seed'])
         if 'cuda' in self.setup['device']:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 
-    def fit(self, model, train_loader, valid_loader, run_name=''):
+    def update_config(self, **kwargs):
+        """add given values to training config"""
+        self.setup.update(kwargs)
 
+    def use_dataset(self, dataset, valid_percent=None, test_percent=None):
+        """Use specified dataset for training with given split settings"""
+        self.setup['dataset'] = dataset.name
+        self.datawraper = data.DatasetWrapper(dataset)
+        self.datawraper.new_split(valid_percent, test_percent)
+        self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
+
+        self.update_config(data_split=self.datawraper.split_info)
+
+        print ('{} split: {} / {}'.format(dataset.name, len(self.datawraper.training), len(self.datawraper.validation)))
+
+        return self.datawraper
+
+    def fit(self, model, run_name=''):
+        """Fit proveided model to reviosly configured dataset"""
+        if not self.datawraper:
+            raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
         if run_name:
             self.run_name = run_name
         self.setup['model'] = model.__class__.__name__
@@ -45,28 +77,43 @@ class Trainer():
         self._add_loss()
         self._add_scheduler()
 
-        self._init_wb_run(model)
+        start_epoch = self._init_wb_run(model)
 
         self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
         
-        wb.save('checkpoint*.pth')  # upload checkpoints as they are created https://docs.wandb.com/library/save
-        self._fit_loop(model, train_loader, valid_loader)
+        wb.save('*checkpoint*')  # upload checkpoints as they are created https://docs.wandb.com/library/save
+        self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
         self._save_final(model)
         print ("Trainer::Finished training")
-
-    def update_config(self, **kwargs):
-        """add given values to training config"""
-        self.setup.update(kwargs)
 
     # ---- Private -----
     def _init_wb_run(self, model):
         # init Weights&biases run
         if self.no_sync:
             os.environ['WANDB_MODE'] = 'dryrun'  # No sync with cloud
-        wb.init(name=self.run_name, project=self.project, config=self.setup)
+        print(self.resume)
+        wb.init(name=self.run_name, project=self.project, config=self.setup, resume=self.resume)
+
+        if wb.run.resumed:
+            # restore last checkpoint
+            wb.restore(self.checkpoint_filename)
+            checkpoint = torch.load(Path(wb.run.dir) / self.checkpoint_filename)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+
+            # restore data split -- assuming wb config values are also restored
+            self.datawraper.load_split(wb.config.data_split)  # NOTE : random number generator reset
+            self.datawraper.new_loaders(wb.config.batch_size)  # should reproduce shuffle before resume
+            
+            # TODO restore config??? 
+        else:
+            start_epoch = 0
+
         wb.watch(model, log='all')
+        return start_epoch
 
     def _add_optimizer(self, model):
         
@@ -131,9 +178,9 @@ class Trainer():
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            }, os.path.join(wb.run.dir, 'checkpoint_{}.pth'.format(epoch)))
+            }, Path(wb.run.dir) / self.checkpoint_filename)
     
     def _save_final(self, model):
         """Save full model for future independent inference"""
 
-        torch.save(model, os.path.join(wb.run.dir, 'model.pth'))
+        torch.save(model, Path(wb.run.dir) / 'model.pth')

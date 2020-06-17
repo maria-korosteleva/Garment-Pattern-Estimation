@@ -101,6 +101,7 @@ class ParametrizedShirtDataSet(Dataset):
                 on a sample.
         """
         self.root_path = Path(root_dir)
+        self.name = self.root_path.name
         
         # list of items = subfolders
         self.datapoints_names = next(os.walk(self.root_path))[1]

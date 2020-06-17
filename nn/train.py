@@ -10,26 +10,22 @@ import data
 from trainer import Trainer
 import nets
 
-# Basic Parameters
+# init
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 trainer = Trainer(
-    datapath, 
     project_name='Test-Garments-Reconstruction', 
-    run_name='refactoring-checkpoints')
+    run_name='resume', 
+    allow_resume=True)
 
 # Data load and split
-shirts = data.DatasetWrapper(data.ParametrizedShirtDataSet(Path(datapath)))
-shirts.new_split(valid_percent=10)
-shirts.new_loaders(trainer.setup['batch_size'], shuffle_train=True)
-trainer.update_config(data_split=shirts.split_info)
-
-print ('Split: {} / {}'.format(len(shirts.training), len(shirts.validation)))
+shirts = trainer.use_dataset(data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=10)
 
 # model
 trainer.init_randomizer()
 model = nets.ShirtfeaturesMLP()
 
-trainer.fit(model, shirts.loader_train, shirts.loader_validation)
+# fit
+trainer.fit(model)
 
 # --------------- loss on validation set --------------
 model.eval()
