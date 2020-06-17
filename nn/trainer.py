@@ -50,8 +50,11 @@ class Trainer():
         self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
         
+        wb.save('checkpoint*.pth')  # upload checkpoints as they are created https://docs.wandb.com/library/save
         self._fit_loop(model, train_loader, valid_loader)
-        print ("Finished training")
+
+        self._save_final(model)
+        print ("Trainer::Finished training")
 
     def update_config(self, **kwargs):
         """add given values to training config"""
@@ -85,10 +88,10 @@ class Trainer():
         else:
             print('NN Warning: no learning scheduling set')
 
-    def _fit_loop(self, model, train_loader, valid_loader):
+    def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
         """Fit loop with the setup already performed"""
         model.to(self.device)
-        for epoch in range (wb.config.epochs):
+        for epoch in range (start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
                 features, params = batch['features'].to(self.device), batch['pattern_params'].to(self.device)
@@ -105,16 +108,32 @@ class Trainer():
                 # logging
                 if i % 5 == 4:
                     wb.log({'epoch': epoch, 'loss': loss})
-            
+            # checkpoint
+            self._save_checkpoint(model, epoch)
+
+            # scheduler step
             model.eval()
             with torch.no_grad():
                 losses, nums = zip(
                     *[(self.regression_loss(model(features), params), len(batch)) for batch in valid_loader]
-                )
-                
+                )                
             valid_loss = np.sum(losses) / np.sum(nums)
             self.scheduler.step(valid_loss)
             
+            # little logging
             print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
             wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
 
+    def _save_checkpoint(self, model, epoch):
+        """Save checkpoint to be used to resume training"""
+        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            }, os.path.join(wb.run.dir, 'checkpoint_{}.pth'.format(epoch)))
+    
+    def _save_final(self, model):
+        """Save full model for future independent inference"""
+
+        torch.save(model, os.path.join(wb.run.dir, 'model.pth'))

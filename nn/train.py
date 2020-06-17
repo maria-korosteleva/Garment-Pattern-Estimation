@@ -15,7 +15,7 @@ datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 trainer = Trainer(
     datapath, 
     project_name='Test-Garments-Reconstruction', 
-    run_name='refactoring-code')
+    run_name='refactoring-checkpoints')
 trainer.init_randomizer()
 
 # Data load and split
