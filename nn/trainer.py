@@ -134,6 +134,7 @@ class Trainer():
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
         """Fit loop with the setup already performed"""
         model.to(self.device)
+        log_step = wb.run.step - 1
         for epoch in range (start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
@@ -150,7 +151,8 @@ class Trainer():
                 
                 # logging
                 if i % 5 == 4:
-                    wb.log({'epoch': epoch, 'loss': loss})
+                    log_step += 1
+                    wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
 
             # scheduler step
             model.eval()
@@ -163,7 +165,7 @@ class Trainer():
             
             # little logging
             print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
-            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
+            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
 
             # checkpoint
             self._save_checkpoint(model, epoch)

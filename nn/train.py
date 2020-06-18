@@ -17,8 +17,8 @@ system_info = customconfig.Properties('./system.json')
 trainer = Trainer(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='resume', 
-    resume_run_id='2gxm4sfg') 
+    run_name='epoch-step', 
+    resume_run_id=None) 
 
 # Data load and split
 shirts = trainer.use_dataset(data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=10)
