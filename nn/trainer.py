@@ -2,6 +2,7 @@
 import numpy as np
 import os
 from pathlib import Path
+import requests
 import time
 
 import torch
@@ -12,14 +13,15 @@ import wandb as wb
 import data
 
 class Trainer():
-    def __init__(self, project_name='Train', run_name='Run', no_sync=False, allow_resume=False):
+    def __init__(self, wandb_username, project_name='Train', run_name='Run', no_sync=False, resume_run_id=None):
         """Initialize training"""
-        self.checkpoint_filename = 'last_checkpoint.pth'
+        self.checkpoint_filetag = 'checkpoint'
+        self.wandb_username = wandb_username
         
         self.project = project_name
         self.run_name = run_name
         self.no_sync = no_sync
-        self.resume = allow_resume
+        self.resume_run_id = resume_run_id
         self.datawraper = None
 
         # default training setup
@@ -93,22 +95,12 @@ class Trainer():
         # init Weights&biases run
         if self.no_sync:
             os.environ['WANDB_MODE'] = 'dryrun'  # No sync with cloud
-        print(self.resume)
-        wb.init(name=self.run_name, project=self.project, config=self.setup, resume=self.resume)
+        wb.init(name=self.run_name, project=self.project, config=self.setup, resume=self.resume_run_id)
 
         if wb.run.resumed:
-            # restore last checkpoint
-            wb.restore(self.checkpoint_filename)
-            checkpoint = torch.load(Path(wb.run.dir) / self.checkpoint_filename)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            start_epoch = checkpoint['epoch'] + 1
+            start_epoch = self._restore_run(model)
 
-            # restore data split -- assuming wb config values are also restored
-            self.datawraper.load_split(wb.config.data_split)  # NOTE : random number generator reset
-            self.datawraper.new_loaders(wb.config.batch_size)  # should reproduce shuffle before resume
-            
-            # TODO restore config??? 
+            print('Trainer: Resumed run {} ({}) from epoch {}'.format(self.run_name, self.resume_run_id, start_epoch))
         else:
             start_epoch = 0
 
@@ -119,13 +111,13 @@ class Trainer():
         
         if self.setup['optimizer'] == 'SGD':
             # future 'else'
-            print('NN Warning::Using default SGD optimizer')
+            print('Trainer::Warning::Using default SGD optimizer')
             self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'])
         
     def _add_loss(self):
         if self.setup['loss'] == 'MSELoss':
             # future 'else'
-            print('NN Warning::Using default MSELoss loss')
+            print('Trainer::Warning::Using default MSELoss loss')
             self.regression_loss = nn.MSELoss()
 
     def _add_scheduler(self):
@@ -133,7 +125,11 @@ class Trainer():
                 and self.setup['lr_scheduling']):
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=1)
         else:
-            print('NN Warning: no learning scheduling set')
+            print('Trainer::Warning::no learning scheduling set')
+
+    def _checkpoint_filename(self, epoch):
+        """Produce filename for the checkpoint of given epoch"""
+        return '{}_{}.pth'.format(self.checkpoint_filetag, epoch)
 
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
         """Fit loop with the setup already performed"""
@@ -155,8 +151,6 @@ class Trainer():
                 # logging
                 if i % 5 == 4:
                     wb.log({'epoch': epoch, 'loss': loss})
-            # checkpoint
-            self._save_checkpoint(model, epoch)
 
             # scheduler step
             model.eval()
@@ -171,6 +165,46 @@ class Trainer():
             print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
             wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
 
+            # checkpoint
+            self._save_checkpoint(model, epoch)
+
+    def _restore_run(self, model):
+        """Restore the training process from the point it stopped at. 
+            Assuming 
+                * current wb.config state is the same as it was when run was initially created
+                * all the necessary training objects are already created and only need update
+                * self.resume_run_id is properly set
+            Returns id of the next epoch to resume from. """
+        
+        # data split
+        self.datawraper.load_split(wb.config.data_split)  # NOTE : random number generator reset
+        self.datawraper.new_loaders(wb.config.batch_size)  # should reproduce shuffle before resume
+
+        # get latest checkoint info
+        print('Trying to load checkpoint..')
+        last_epoch = wb.run.summary['epoch']
+        # look for last uncorruted checkpoint
+        while last_epoch >= 0:
+            try:
+                wb.restore(self._checkpoint_filename(last_epoch), run_path=self.wandb_username + '/' + self.project + '/' + self.resume_run_id)
+                # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
+                checkpoint = torch.load(Path(wb.run.dir) / self._checkpoint_filename(last_epoch))
+                break
+            except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError):  # raised when file is corrupted or not found -- go to earlier one
+                print('Trainer::Warning::checkpoint from epoch {} is corrupted or lost'.format(last_epoch))
+                last_epoch -= 1
+        else:
+            raise RuntimeError(
+                'Trainer::No uncorupted checkpoints found for resuming the run from epoch{}. It\'s recommended to start anew'.format(wb.run.summary['epoch']))
+        
+        # checkpoint loaded correctly
+        model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])  # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
+
+        # new epoch id
+        return checkpoint['epoch'] + 1
+
     def _save_checkpoint(self, model, epoch):
         """Save checkpoint to be used to resume training"""
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
@@ -178,7 +212,8 @@ class Trainer():
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            }, Path(wb.run.dir) / self.checkpoint_filename)
+            'scheduler_state_dict': self.scheduler.state_dict()
+            }, Path(wb.run.dir) / self._checkpoint_filename(epoch))
     
     def _save_final(self, model):
         """Save full model for future independent inference"""

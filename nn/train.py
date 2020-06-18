@@ -6,16 +6,19 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
 # My modules
+import customconfig
 import data
 from trainer import Trainer
 import nets
 
 # init
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+system_info = customconfig.Properties('./system.json')
 trainer = Trainer(
+    system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
     run_name='resume', 
-    allow_resume=True)
+    resume_run_id='2gxm4sfg') 
 
 # Data load and split
 shirts = trainer.use_dataset(data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=10)
