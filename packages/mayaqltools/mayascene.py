@@ -290,7 +290,7 @@ class MayaGarment(core.ParametrizedPattern):
         non_static_len = len(diff_L1[diff_L1 > threshold])  # compare vertex-wize to allow accurate control over outliers
 
         if non_static_len == 0 or non_static_len < len(self.current_verts) * 0.01 * allowed_non_static_percent:  
-            print('\nStatic with {} non-static vertices'.format(non_static_len))
+            print('\nStatic with {} non-static vertices out of {}'.format(non_static_len, len(self.current_verts)))
             return True, non_static_len
         else:
             return False, non_static_len
