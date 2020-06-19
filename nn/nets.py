@@ -10,9 +10,9 @@ class ShirtfeaturesMLP(nn.Module):
         
         # layers definitions
         self.sequence = nn.Sequential(
-            nn.Linear(36756, 3000), 
+            nn.Linear(1500, 300),  # nn.Linear(36756, 3000),
             nn.ReLU(), 
-            nn.Linear(3000, 300), 
+            nn.Linear(300, 300),  # nn.Linear(3000, 300)
             nn.ReLU(), 
             nn.Linear(300, 60),
             nn.ReLU(),

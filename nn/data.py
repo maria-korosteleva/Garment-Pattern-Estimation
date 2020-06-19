@@ -154,6 +154,9 @@ class ParametrizedShirtDataSet(Dataset):
         datapoint_name = self.datapoints_names[idx]
         
         vert_list = self.read_verts(datapoint_name)
+
+        # DEBUG
+        vert_list = vert_list[:500]
         
         # read the pattern parameters
         pattern_parameters = self.read_pattern_params(datapoint_name)
