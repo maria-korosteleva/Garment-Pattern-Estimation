@@ -16,6 +16,7 @@ class Trainer():
     def __init__(self, wandb_username, project_name='Train', run_name='Run', no_sync=False, resume_run_id=None):
         """Initialize training"""
         self.checkpoint_filetag = 'checkpoint'
+        self.final_filetag = 'fin_model_state'
         self.wandb_username = wandb_username
         
         self.project = project_name
@@ -220,4 +221,4 @@ class Trainer():
     def _save_final(self, model):
         """Save full model for future independent inference"""
 
-        torch.save(model, Path(wb.run.dir) / 'model.pth')
+        torch.save(model.state_dict(), Path(wb.run.dir) / (self.final_filetag + '.pth'))
