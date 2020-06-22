@@ -30,7 +30,7 @@ class Trainer():
             model_random_seed=None,
             dataset=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=10,
+            epochs=5,
             batch_size=64,
             learning_rate=0.001,
             loss='MSELoss',
@@ -155,13 +155,11 @@ class Trainer():
                     log_step += 1
                     wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
 
-            # scheduler step
+            # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses, nums = zip(
-                    *[(self.regression_loss(model(features), params), len(batch)) for batch in valid_loader]
-                )                
-            valid_loss = np.sum(losses) / np.sum(nums)
+                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['pattern_params'].to(self.device)) for batch in valid_loader]
+            valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
             
             # little logging
