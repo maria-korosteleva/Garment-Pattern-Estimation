@@ -13,12 +13,15 @@ import openmesh as om
 class DatasetWrapper(object):
     """Resposible for keeping dataset, its splits, loaders & processing routines"""
     def __init__(self, in_dataset):
+
         self.dataset = in_dataset
+        self.data_section_list = ['full', 'train', 'validation', 'test']
 
         self.training = in_dataset
         self.validation = None
         self.test = None
 
+        self.loader_full = None
         self.loader_train = None
         self.loader_validation = None
         self.loader_test = None
@@ -29,6 +32,19 @@ class DatasetWrapper(object):
             'test_percent': None
         }
     
+    def get_loader(self, data_section='full'):
+        """Return loader that corresponds to given data section. None if requested loader does not exist"""
+        if data_section == 'full':
+            return self.loader_full
+        elif data_section == 'train':
+            return self.loader_train
+        elif data_section == 'test':
+            return self.loader_test
+        elif data_section == 'validation':
+            return self.loader_validation
+        
+        raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
+
     def new_split(self, valid_percent, test_percent=None, random_seed=None):
         """Creates train/validation or train/validation/test splits
             depending on provided parameters
@@ -69,6 +85,8 @@ class DatasetWrapper(object):
         self.loader_validation = DataLoader(self.validation, batch_size) if self.validation else None
 
         self.loader_test = DataLoader(self.test, batch_size) if self.test else None
+
+        self.loader_full = DataLoader(self.dataset, batch_size)
 
         return self.loader_train, self.loader_validation, self.loader_test
 
@@ -117,7 +135,7 @@ class ParametrizedShirtDataSet(Dataset):
 
         # Use default tensor transform + the ones from input
         self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
-        
+
     def update_transform(self, transform):
         """apply new transform when loading the data"""
         self.transform = transform

@@ -1,3 +1,3 @@
 """Evaluate a model on the data"""
 
-from tester import Tester
+from prediction import PredictionManager
