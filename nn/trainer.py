@@ -11,18 +11,15 @@ import wandb as wb
 
 # My modules
 import data
+from experiment import WandbRunWrappper
 
 class Trainer():
     def __init__(self, wandb_username, project_name='Train', run_name='Run', no_sync=False, resume_run_id=None):
         """Initialize training"""
-        self.checkpoint_filetag = 'checkpoint'
-        self.final_filetag = 'fin_model_state'
-        self.wandb_username = wandb_username
-        
-        self.project = project_name
-        self.run_name = run_name
+        self.experiment = WandbRunWrappper(
+            wandb_username, project_name, run_name, resume_run_id
+        )
         self.no_sync = no_sync
-        self.resume_run_id = resume_run_id
         self.datawraper = None
 
         # default training setup
@@ -68,40 +65,35 @@ class Trainer():
 
         return self.datawraper
 
-    def fit(self, model, run_name=''):
+    def fit(self, model):
         """Fit proveided model to reviosly configured dataset"""
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
-        if run_name:
-            self.run_name = run_name
+
         self.setup['model'] = model.__class__.__name__
 
         self._add_optimizer(model)
         self._add_loss()
         self._add_scheduler()
 
-        start_epoch = self._init_wb_run(model)
+        start_epoch = self._start_experiment(model)
 
         self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
         
-        wb.save('*checkpoint*')  # upload checkpoints as they are created https://docs.wandb.com/library/save
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
-        self._save_final(model)
+        self.experiment.save(model.state_dict(), final=True)
         print ("Trainer::Finished training")
 
     # ---- Private -----
-    def _init_wb_run(self, model):
-        # init Weights&biases run
-        if self.no_sync:
-            os.environ['WANDB_MODE'] = 'dryrun'  # No sync with cloud
-        wb.init(name=self.run_name, project=self.project, config=self.setup, resume=self.resume_run_id)
+    def _start_experiment(self, model):
+        self.experiment.init_run(self.setup, self.no_sync)
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
 
-            print('Trainer: Resumed run {} ({}) from epoch {}'.format(self.run_name, self.resume_run_id, start_epoch))
+            print('Trainer: Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
         else:
             start_epoch = 0
 
@@ -127,10 +119,6 @@ class Trainer():
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=1)
         else:
             print('Trainer::Warning::no learning scheduling set')
-
-    def _checkpoint_filename(self, epoch):
-        """Produce filename for the checkpoint of given epoch"""
-        return '{}_{}.pth'.format(self.checkpoint_filetag, epoch)
 
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
         """Fit loop with the setup already performed"""
@@ -178,22 +166,19 @@ class Trainer():
             Returns id of the next epoch to resume from. """
         
         # data split
-        self.datawraper.load_split(wb.config.data_split)  # NOTE : random number generator reset
-        self.datawraper.new_loaders(wb.config.batch_size)  # should reproduce shuffle before resume
+        split, batch_size = self.experiment.data_info()
+        self.datawraper.load_split(split)  # NOTE : random number generator reset
+        self.datawraper.new_loaders(batch_size)  # should reproduce shuffle before resume
 
         # get latest checkoint info
         print('Trying to load checkpoint..')
-        last_epoch = wb.run.summary['epoch']
+        last_epoch = self.experiment.last_epoch()
         # look for last uncorruted checkpoint
         while last_epoch >= 0:
-            try:
-                wb.restore(self._checkpoint_filename(last_epoch), run_path=self.wandb_username + '/' + self.project + '/' + self.resume_run_id)
-                # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
-                checkpoint = torch.load(Path(wb.run.dir) / self._checkpoint_filename(last_epoch))
-                break
-            except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError):  # raised when file is corrupted or not found -- go to earlier one
-                print('Trainer::Warning::checkpoint from epoch {} is corrupted or lost'.format(last_epoch))
-                last_epoch -= 1
+            checkpoint = self.experiment.load_checkpoint_file(last_epoch)
+            if checkpoint:
+                break  # successfull load
+            last_epoch -= 1
         else:
             raise RuntimeError(
                 'Trainer::No uncorupted checkpoints found for resuming the run from epoch{}. It\'s recommended to start anew'.format(wb.run.summary['epoch']))
@@ -208,15 +193,13 @@ class Trainer():
 
     def _save_checkpoint(self, model, epoch):
         """Save checkpoint to be used to resume training"""
-        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
-        torch.save({
+        self.experiment.save(
+            {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict()
-            }, Path(wb.run.dir) / self._checkpoint_filename(epoch))
-    
-    def _save_final(self, model):
-        """Save full model for future independent inference"""
-
-        torch.save(model.state_dict(), Path(wb.run.dir) / (self.final_filetag + '.pth'))
+            },
+            epoch=epoch
+        )
+        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
