@@ -55,6 +55,21 @@ class DatasetWrapper(object):
         
         raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
 
+    def new_loaders(self, batch_size=None, shuffle_train=True):
+        """Create loaders for current data split. Note that result depends on the random number generator!"""
+        if batch_size is not None:
+            self.batch_size = batch_size
+        if self.batch_size is None:
+            raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
+
+        self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
+        self.loader_full = DataLoader(self.dataset, self.batch_size)
+
+        return self.loader_train, self.loader_validation, self.loader_test
+
+    # -------- Reproducibility ---------------
     def new_split(self, valid_percent, test_percent=None, random_seed=None):
         """Creates train/validation or train/validation/test splits
             depending on provided parameters
@@ -95,19 +110,23 @@ class DatasetWrapper(object):
         """Save split to external file"""
         pass
 
-    def new_loaders(self, batch_size=None, shuffle_train=True):
-        """Create loaders for current data split. Note that result depends on the random number generator!"""
-        if batch_size is not None:
-            self.batch_size = batch_size
-        if self.batch_size is None:
-            raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
-
-        self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
-        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
-        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
-        self.loader_full = DataLoader(self.dataset, self.batch_size)
-
-        return self.loader_train, self.loader_validation, self.loader_test
+    # --------- Managing predictions on this data ---------
+    def predict(self, model, section='test', single_batch=False):
+        """Save model predictions on the given dataset section"""
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+        model.eval()
+        with torch.no_grad():
+            loader = self.get_loader(section)
+            if loader:
+                if single_batch:
+                    batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
+                    features = batch['features'].to(device)
+                    self.dataset.save_prediction_batch(model(features), batch['name'])
+                else:
+                    for batch in loader:
+                        features = batch['features'].to(device)
+                        self.dataset.save_prediction_batch(model(features), batch['name'])
 
 # ------------------ Transforms ----------------
 # Custom transforms -- to tensor

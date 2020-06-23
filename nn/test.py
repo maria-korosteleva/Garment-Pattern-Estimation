@@ -3,12 +3,9 @@
 from pathlib import Path
 
 # My modules
-import customconfig
-import data
+import customconfig, data, metrics, nets
 from trainer import Trainer
 from experiment import WandbRunWrappper
-from prediction import PredictionManager
-import nets
 
 # init
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
@@ -31,11 +28,10 @@ shirts_wrapper = data.DatasetWrapper(
     known_split=split, batch_size=batch_size)
 
 # Evaluate
-tester = PredictionManager()
-valid_loss = tester.metrics(model, shirts_wrapper, 'validation')
+valid_loss = metrics.eval_metrics(model, shirts_wrapper, 'validation')
 print ('Validation loss: {}'.format(valid_loss))
 
 experiment.add_statistic('valid_metrics', valid_loss)
 
 # save prediction for validation to file
-tester.predict(model, shirts_wrapper, 'validation')
+shirts_wrapper.predict(model, 'validation')
