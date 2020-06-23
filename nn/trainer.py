@@ -14,14 +14,11 @@ import data
 from experiment import WandbRunWrappper
 
 class Trainer():
-    def __init__(self, wandb_username, project_name='Train', run_name='Run', no_sync=False, resume_run_id=None):
+    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None):
         """Initialize training"""
-        self.experiment = WandbRunWrappper(
-            wandb_username, project_name, run_name, resume_run_id
-        )
-        self.no_sync = no_sync
+        self.experiment = experiment_tracker
         self.datawraper = None
-
+        
         # default training setup
         self.setup = dict(
             model_random_seed=None,
@@ -34,9 +31,14 @@ class Trainer():
             optimizer='SGD',
             lr_scheduling=True
         )
+
+        if dataset is not None:
+            self.use_dataset(dataset, valid_percent, test_percent)
    
     def init_randomizer(self, random_seed=None):
-        """Init randomizatoin for torch globally for reproducibility"""
+        """Init randomizatoin for torch globally for reproducibility. 
+            Using this function ensures that random seed will be recorded in config
+        """
         # see https://pytorch.org/docs/stable/notes/randomness.html
         if random_seed:
             self.setup['model_random_seed'] = random_seed
@@ -88,7 +90,7 @@ class Trainer():
 
     # ---- Private -----
     def _start_experiment(self, model):
-        self.experiment.init_run(self.setup, self.no_sync)
+        self.experiment.init_run(self.setup)
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
@@ -121,7 +123,7 @@ class Trainer():
             print('Trainer::Warning::no learning scheduling set')
 
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
-        """Fit loop with the setup already performed"""
+        """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
         model.to(self.device)
         log_step = wb.run.step - 1
         for epoch in range (start_epoch, wb.config.epochs):
@@ -181,7 +183,7 @@ class Trainer():
             last_epoch -= 1
         else:
             raise RuntimeError(
-                'Trainer::No uncorupted checkpoints found for resuming the run from epoch{}. It\'s recommended to start anew'.format(wb.run.summary['epoch']))
+                'Trainer::No uncorupted checkpoints found for resuming the run from epoch{}. It\'s recommended to start anew'.format(self.experiment.last_epoch()))
         
         # checkpoint loaded correctly
         model.load_state_dict(checkpoint['model_state_dict'])

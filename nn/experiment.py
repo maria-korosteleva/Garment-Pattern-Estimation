@@ -6,7 +6,18 @@ import torch
 import wandb as wb
 
 class WandbRunWrappper(object):
-    def __init__(self, wandb_username, project_name='Train', run_name='Run', run_id=None):
+    """Class provides 
+        * a convenient way to store wandb run info 
+        * some functions & params shortcuts to access wandb functionality
+        * for implemented functions, transparent workflow for finished and active (initialized) run 
+
+        Wrapper currently does NOT wrap one-liners routinely called for active runs like wb.log(), wb.watch()  
+    """
+    def __init__(self, wandb_username, project_name='Train', run_name='Run', run_id=None, no_sync=False):
+        """Init experiment tracking with wandb
+            With no_sync==True, run won't sync with wandb cloud. 
+            Note that resuming won't work for off-cloud runs as it requiers fetching files from the cloud"""
+
         self.checkpoint_filetag = 'checkpoint'
         self.final_filetag = 'fin_model_state'
         self.wandb_username = wandb_username
@@ -14,19 +25,17 @@ class WandbRunWrappper(object):
         self.project = project_name
         self.run_name = run_name
         self.run_id = run_id
+        self.no_sync = False
 
         # cannot use wb.config, wb.run, etc. until run initialized & logging started & local path
         self.initialized = False  
 
     # ----- start&stop ------
-    def init_run(self, config={}, no_sync=False):
+    def init_run(self, config={}):
         """Start wandb logging. 
-            If run_id is given, run is automatically resumed.
-            
-            With no_sync==True, run won't sync with wandb cloud. 
-            Note that resuming won't work for off-cloud runs as it requiers fetching files from the cloud
+            If run_id is known, run is automatically resumed.
             """
-        if no_sync:
+        if self.no_sync:
             os.environ['WANDB_MODE'] = 'dryrun'
         wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
         self.run_id = wb.run.id
