@@ -19,7 +19,7 @@ trainer = Trainer(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
     run_name='wb_wrapper', 
-    resume_run_id='31xqr0qp') 
+    resume_run_id=None) 
 
 # Data load and split
 shirts = trainer.use_dataset(data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=10)

@@ -176,8 +176,8 @@ class Trainer():
         # look for last uncorruted checkpoint
         while last_epoch >= 0:
             checkpoint = self.experiment.load_checkpoint_file(last_epoch)
-            if checkpoint:
-                break  # successfull load
+            if checkpoint is not None:
+               break  # successfull load
             last_epoch -= 1
         else:
             raise RuntimeError(

@@ -81,12 +81,13 @@ class WandbRunWrappper(object):
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore files from the could')
         try:
+            print('Requesting {}'.format(self.checkpoint_filename(epoch)))
             wb.restore(self.checkpoint_filename(epoch), run_path=self.cloud_path())
             # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
             checkpoint = torch.load(self.local_path() / self.checkpoint_filename(epoch))
             return checkpoint
-        except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError):  # raised when file is corrupted or not found -- go to earlier one
-            print('WbRunWrapper:Warning:checkpoint from epoch {} is corrupted or lost'.format(epoch))
+        except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
+            print('WbRunWrapper:Warning:checkpoint from epoch {} is corrupted or lost: {}'.format(epoch, e))
             return None
     
     def load_final_model(self):
