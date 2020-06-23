@@ -68,6 +68,10 @@ class WandbRunWrappper(object):
         run.summary[tag] = info
         run.summary.update()
 
+    def is_finished(self):
+        run = self._run_object()
+        return run.state == 'finished'
+
     # ---- file info -----
     def checkpoint_filename(self, epoch):
         """Produce filename for the checkpoint of given epoch"""

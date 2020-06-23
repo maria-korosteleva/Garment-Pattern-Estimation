@@ -16,7 +16,7 @@ experiment = WandbRunWrappper(
     no_sync=False) 
 
 # train
-trainer = Trainer(experiment, data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=10)
+trainer = Trainer(experiment, data.ParametrizedShirtDataSet(Path(datapath)), valid_percent=15, test_percent=10)
 shirts_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
@@ -24,12 +24,11 @@ model = nets.ShirtfeaturesMLP()
 # fit
 trainer.fit(model)
 
-# --------------- Final tests on validation set --------------
-experiment.stop()  # Test on finished runs
-valid_loss = metrics.eval_metrics(model, shirts_wrapper, 'validation')
-print ('Validation loss: {}'.format(valid_loss))
+# --------------- Final evaluation --------------
+final_metrics = metrics.eval_metrics(model, shirts_wrapper, 'test')
+print ('Test metrics: {}'.format(final_metrics))
 
-experiment.add_statistic('valid_metrics', valid_loss)
+experiment.add_statistic('test', final_metrics)
 
 # save prediction for validation to file
-shirts_wrapper.predict(model, 'validation')
+shirts_wrapper.predict(model, 'test')

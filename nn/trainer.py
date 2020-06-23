@@ -63,8 +63,6 @@ class Trainer():
 
         self.update_config(data_split=self.datawraper.split_info)
 
-        print ('{} split: {} / {}'.format(dataset.name, len(self.datawraper.training), len(self.datawraper.validation)))
-
         return self.datawraper
 
     def fit(self, model):

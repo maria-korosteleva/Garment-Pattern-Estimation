@@ -104,6 +104,10 @@ class DatasetWrapper(object):
         if self.batch_size is not None:
             self.new_loaders()  # s.t. loaders could be used right away
 
+        print ('{} split: {} / {} / {}'.format(self.dataset.name, len(self.training), 
+                                               len(self.validation) if self.validation else None, 
+                                               len(self.test) if self.test else None))
+
         return self.training, self.validation, self.test
 
     def save_split(self, path):
