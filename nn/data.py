@@ -11,8 +11,11 @@ import openmesh as om
 
 # ---------------------- Main Wrapper ------------------
 class DatasetWrapper(object):
-    """Resposible for keeping dataset, its splits, loaders & processing routines"""
-    def __init__(self, in_dataset):
+    """Resposible for keeping dataset, its splits, loaders & processing routines.
+        Allows to reproduce earlier splits
+    """
+    def __init__(self, in_dataset, known_split=None, batch_size=None, shuffle_train=True):
+        """Initialize wrapping around provided dataset. If splits/batch_size is known """
 
         self.dataset = in_dataset
         self.data_section_list = ['full', 'train', 'validation', 'test']
@@ -21,6 +24,7 @@ class DatasetWrapper(object):
         self.validation = None
         self.test = None
 
+        self.batch_size = None
         self.loader_full = None
         self.loader_train = None
         self.loader_validation = None
@@ -31,6 +35,12 @@ class DatasetWrapper(object):
             'valid_percent': None, 
             'test_percent': None
         }
+
+        if known_split is not None:
+            self.load_split(known_split)
+        if batch_size is not None:
+            self.batch_size = batch_size
+            self.new_loaders(batch_size, shuffle_train)
     
     def get_loader(self, data_section='full'):
         """Return loader that corresponds to given data section. None if requested loader does not exist"""
@@ -54,8 +64,10 @@ class DatasetWrapper(object):
         
         return self.load_split()
 
-    def load_split(self, split_info=None):
-        """Get the split by provided parameters. Can be used to reproduce splits on the same dataset"""
+    def load_split(self, split_info=None, batch_size=None):
+        """Get the split by provided parameters. Can be used to reproduce splits on the same dataset.
+            NOTE this function re-initializes torch random number generator!
+        """
         if split_info:
             if any([key not in split_info for key in self.split_info]):
                 raise ValueError('Specified split information is not full: {}'.format(split_info))
@@ -71,22 +83,29 @@ class DatasetWrapper(object):
             self.training, self.validation = torch.utils.data.random_split(
                 self.dataset, (len(self.dataset) - valid_size, valid_size))
             self.test = None
-        
+
+        if batch_size is not None:
+            self.batch_size = batch_size
+        if self.batch_size is not None:
+            self.new_loaders()  # s.t. loaders could be used right away
+
         return self.training, self.validation, self.test
 
     def save_split(self, path):
         """Save split to external file"""
         pass
 
-    def new_loaders(self, batch_size, shuffle_train=True):
-        """Create loaders for current data split"""
-        self.loader_train = DataLoader(self.training, batch_size, shuffle=shuffle_train)
+    def new_loaders(self, batch_size=None, shuffle_train=True):
+        """Create loaders for current data split. Note that result depends on the random number generator!"""
+        if batch_size is not None:
+            self.batch_size = batch_size
+        if self.batch_size is None:
+            raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
 
-        self.loader_validation = DataLoader(self.validation, batch_size) if self.validation else None
-
-        self.loader_test = DataLoader(self.test, batch_size) if self.test else None
-
-        self.loader_full = DataLoader(self.dataset, batch_size)
+        self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
+        self.loader_full = DataLoader(self.dataset, self.batch_size)
 
         return self.loader_train, self.loader_validation, self.loader_test
 

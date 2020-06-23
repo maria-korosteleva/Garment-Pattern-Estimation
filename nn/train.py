@@ -1,9 +1,4 @@
-
 from pathlib import Path
-
-import torch
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
 
 # My modules
 import customconfig
@@ -33,9 +28,12 @@ model = nets.ShirtfeaturesMLP()
 trainer.fit(model)
 
 # --------------- Final tests on validation set --------------
-tester = PredictionManager(model)
-valid_loss = tester.metrics(shirts_wrapper, 'validation')
+experiment.stop()  # Test on finished runs
+tester = PredictionManager()
+valid_loss = tester.metrics(model, shirts_wrapper, 'validation')
 print ('Validation loss: {}'.format(valid_loss))
 
+experiment.add_statistic('valid_metrics', valid_loss)
+
 # save prediction for validation to file
-tester.predict(shirts_wrapper, 'validation')
+tester.predict(model, shirts_wrapper, 'validation')

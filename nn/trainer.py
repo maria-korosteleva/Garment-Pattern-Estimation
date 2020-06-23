@@ -169,8 +169,7 @@ class Trainer():
         
         # data split
         split, batch_size = self.experiment.data_info()
-        self.datawraper.load_split(split)  # NOTE : random number generator reset
-        self.datawraper.new_loaders(batch_size)  # should reproduce shuffle before resume
+        self.datawraper.load_split(split, batch_size)  # NOTE : random number generator reset
 
         # get latest checkoint info
         print('Trying to load checkpoint..')

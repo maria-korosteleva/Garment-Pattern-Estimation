@@ -62,6 +62,12 @@ class WandbRunWrappper(object):
         run = self._run_object()
         return run.config['data_split'], run.config['batch_size']
 
+    def add_statistic(self, tag, info):
+        """Add info the run summary (e.g. stats on test set)"""
+        run = self._run_object()
+        run.summary[tag] = info
+        run.summary.update()
+
     # ---- file info -----
     def checkpoint_filename(self, epoch):
         """Produce filename for the checkpoint of given epoch"""
@@ -80,31 +86,45 @@ class WandbRunWrappper(object):
         return self.wandb_username + '/' + self.project + '/' + self.run_id
 
     def local_path(self):
-        if self.initialized:
-            return Path(wb.run.dir)
-        raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
+        # if self.initialized:
+        return Path(wb.run.dir)
+        # raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
 
     # ----- working with files -------
-    def load_checkpoint_file(self, epoch):
+    def load_checkpoint_file(self, epoch, to_path=Path('.')):
         """Load checkpoint file for given epoch from the cloud"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore files from the could')
         try:
             print('Requesting {}'.format(self.checkpoint_filename(epoch)))
-            wb.restore(self.checkpoint_filename(epoch), run_path=self.cloud_path())
+            if self.initialized:  # use run directory
+                wb.restore(self.checkpoint_filename(epoch), run_path=self.cloud_path())
+                to_path = self.local_path() 
+            else:
+                wb.restore(self.checkpoint_filename(epoch), run_path=self.cloud_path(), replace=True, root=to_path)
+                # TODO think about deleting loaded file
+    
             # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
-            checkpoint = torch.load(self.local_path() / self.checkpoint_filename(epoch))
+            checkpoint = torch.load(to_path / self.checkpoint_filename(epoch))
             return checkpoint
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
             print('WbRunWrapper:Warning:checkpoint from epoch {} is corrupted or lost: {}'.format(epoch, e))
             return None
     
-    def load_final_model(self):
+    def load_final_model(self, to_path=Path('.')):
         """Load final model parameters file from the cloud if it exists"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
         try:
-            wb.restore(self.final_filename, run_path=self.cloud_path())
+            if self.initialized:  # use run directory
+                wb.restore(self.final_filename(), run_path=self.cloud_path())
+                to_path = self.local_path() 
+            else:
+                wb.restore(self.final_filename(), run_path=self.cloud_path(), replace=True, root=to_path)
+                # TODO think about deleting loaded file
+            model_info = torch.load(to_path / self.final_filename())
+            return model_info
+
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             print('WbRunWrapper:Warning:No file with final weights found in run {}'.format(self.cloud_path()))
             return None
