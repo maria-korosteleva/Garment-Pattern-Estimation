@@ -24,6 +24,29 @@ class ShirtfeaturesMLP(nn.Module):
         
         return self.sequence(x_batch)
 
+
+class GarmentParamsMLP(nn.Module):
+    """MLP for training on shirts dataset. Assumes 100 features parameters used"""
+    
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        
+        # layers definitions
+        self.sequence = nn.Sequential(
+            nn.Linear(in_size, 300),
+            nn.ReLU(), 
+            nn.Linear(300, 300),
+            nn.ReLU(), 
+            nn.Linear(300, 60),
+            nn.ReLU(),
+            nn.Linear(60, out_size)
+        )
+    
+    def forward(self, x_batch):
+        #print (x_batch)
+        
+        return self.sequence(x_batch)
+
 if __name__ == "__main__":
     net = ShirtfeaturesMLP()
 

@@ -152,7 +152,7 @@ class SampleToTensor(object):
 
 # --------------------- Datasets -------------------------
 
-class GarmentDatasetParams(Dataset):
+class GarmentParamsDataset(Dataset):
     """
     For loading the custom generated data & predicting generated parameters
     """
@@ -175,13 +175,13 @@ class GarmentDatasetParams(Dataset):
         to_ignore = ['renders']
         self.datapoints_names = [directory for directory in dirs if directory not in to_ignore]
         self._ingnore_fails()
-        
-        # datapoint folder structure
-        self.garment_3d_filename = 'shirt_mesh_r.obj'
-        # self.pattern_params_filename = 'shirt_info.txt'
 
         # Use default tensor transform + the ones from input
         self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
+
+        elem = self[0]
+        self.feature_size = elem['features'].shape[0]
+        self.ground_truth_size = elem['ground_truth'].shape[0]
 
     def update_transform(self, transform):
         """apply new transform when loading the data"""
@@ -215,7 +215,7 @@ class GarmentDatasetParams(Dataset):
             sample = self.transform(sample)
         
         return sample
-   
+
     def save_prediction_batch(self, predicted_params, names):
         """Saves predicted params of the datapoint to the original data folder"""
         raise NotImplementedError()
@@ -370,7 +370,7 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = GarmentDatasetParams(data_location)
+    dataset = GarmentParamsDataset(data_location)
 
     print(len(dataset))
     print(dataset[100]['name'], dataset[100]['features'].shape, dataset[100]['ground_truth'])
