@@ -25,8 +25,8 @@ def single_file_sim(resources, props, caching=False):
         init_sim_props(props, True)
         qw.load_plugin()
         scene = mymaya.Scene(
-            os.path.join(resources['bodies_path'], dataset_props['body']),
-            dataset_props['render'], 
+            os.path.join(resources['bodies_path'], props['body']),
+            props['render'], 
             scenes_path=resources['scenes_path'])
 
         # Main part

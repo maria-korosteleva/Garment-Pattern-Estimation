@@ -274,6 +274,17 @@ class ParametrizedPattern(BasicPattern):
             'length_equality'
         ]
 
+    def param_values_list(self):
+        """Returns current values of all parameters as a list in the pattern defined parameter order"""
+        value_list = []
+        for parameter in self.spec['parameter_order']:
+            value = self.parameters[parameter]['value']
+            if isinstance(value, list):
+                value_list += value
+            else:
+                value_list.append(value)
+        return value_list
+
     def reloadJSON(self):
         """(Re)loads pattern info from spec file. 
         Useful when spec is updated from outside"""
@@ -450,7 +461,7 @@ class ParametrizedPattern(BasicPattern):
         """
         if multiplicative:
             if isinstance(value, list):
-                if any(np.isclose(value), 0):
+                if any(np.isclose(value, 0)):
                     raise ZeroDivisionError('Zero value encountered while restoring multiplicative parameter.')
                 return map(lambda x: 1 / x, value)
             else:
@@ -521,7 +532,7 @@ class ParametrizedPattern(BasicPattern):
                         edge['value'] = 1
 
     def _meta_edge(self, panel_name, edge_influence):
-        """Returns info for the given edge\meta-edge in inified form"""
+        """Returns info for the given edge or meta-edge in inified form"""
 
         panel = self.pattern['panels'][panel_name]
         edge_ids = edge_influence['id']
@@ -562,7 +573,7 @@ class ParametrizedPattern(BasicPattern):
         spec_backup = copy.deepcopy(self.spec)
         self._randomize_parameters()
         self._update_pattern_by_param_values()
-        for tries in range(100):  # upper bound on trials to avoid infinite loop
+        for _ in range(100):  # upper bound on trials to avoid infinite loop
             if not self.is_self_intersecting():
                 break
 

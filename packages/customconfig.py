@@ -76,7 +76,7 @@ class Properties():
 
     def clean_stats(self, properties):
         """ Remove info from all Stats sub sections """
-        for key, value in properties.items():
+        for _, value in properties.items():
             # detect section
             if isinstance(value, dict) and 'stats' in value:
                 value['stats'] = {}

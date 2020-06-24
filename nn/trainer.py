@@ -127,7 +127,7 @@ class Trainer():
         for epoch in range (start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
-                features, params = batch['features'].to(self.device), batch['pattern_params'].to(self.device)
+                features, params = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
                 
                 #with torch.autograd.detect_anomaly():
                 preds = model(features)
@@ -146,7 +146,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['pattern_params'].to(self.device)) for batch in valid_loader]
+                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['ground_truth'].to(self.device)) for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
             

@@ -6,8 +6,11 @@ import time
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
-
 import openmesh as om
+
+# My modules
+from customconfig import Properties
+from pattern.core import ParametrizedPattern
 
 # ---------------------- Main Wrapper ------------------
 class DatasetWrapper(object):
@@ -138,16 +141,131 @@ class SampleToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     
     def __call__(self, sample):
-        features, params = sample['features'], sample['pattern_params']
+        features, params = sample['features'], sample['ground_truth']
         
         return {
             'features': torch.from_numpy(features).float(), 
-            'pattern_params': torch.from_numpy(params).float(), 
+            'ground_truth': torch.from_numpy(params).float(), 
             'name': sample['name']
         }
 
 
 # --------------------- Datasets -------------------------
+
+class GarmentDatasetParams(Dataset):
+    """
+    For loading the custom generated data & predicting generated parameters
+    """
+    
+    def __init__(self, root_dir, *argtranforms):
+        """
+        Args:
+            root_dir (string): Directory with all examples as subfolders
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.root_path = Path(root_dir)
+        self.name = self.root_path.name
+        self.dataset_props = Properties(self.root_path / 'dataset_properties.json')
+        if not self.dataset_props['to_subfolders']:
+            raise NotImplementedError('Working with datasets with all satapopints ')
+
+        # list of items = subfolders
+        root, dirs, files = next(os.walk(self.root_path))
+        to_ignore = ['renders']
+        self.datapoints_names = [directory for directory in dirs if directory not in to_ignore]
+        self._ingnore_fails()
+        
+        # datapoint folder structure
+        self.garment_3d_filename = 'shirt_mesh_r.obj'
+        # self.pattern_params_filename = 'shirt_info.txt'
+
+        # Use default tensor transform + the ones from input
+        self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
+
+    def update_transform(self, transform):
+        """apply new transform when loading the data"""
+        self.transform = transform
+               
+    def __len__(self):
+        """Number of entries in the dataset"""
+        return len(self.datapoints_names)   
+
+    def __getitem__(self, idx):
+        """Called when indexing: read the corresponding data. 
+        Does not support list indexing"""
+        
+        if torch.is_tensor(idx):  # allow indexing by tensors
+            idx = idx.tolist()
+            
+        datapoint_name = self.datapoints_names[idx]
+        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+
+        vert_list = self._read_verts(datapoint_name, folder_elements)
+
+        # DEBUG
+        vert_list = vert_list[:500]
+        
+        # read the pattern parameters
+        pattern_parameters = self._read_pattern_params(datapoint_name, folder_elements)
+        
+        sample = {'features': vert_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
+        
+        if self.transform is not None:
+            sample = self.transform(sample)
+        
+        return sample
+   
+    def save_prediction_batch(self, predicted_params, names):
+        """Saves predicted params of the datapoint to the original data folder"""
+        raise NotImplementedError()
+
+        # for prediction, name in zip(predicted_params, names):
+        #     path_to_prediction = self.root_path / '..' / 'predictions' / name
+        #     try:
+        #         os.makedirs(path_to_prediction)
+        #     except OSError:
+        #         pass
+            
+        #     prediction = prediction.tolist()
+        #     with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
+        #         f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
+        #         print ('Saved ' + name)
+
+    # ------ Private --------
+    def _ingnore_fails(self):
+        """Remove all elements marked as failure from the datapoint list"""
+        fails_dict = self.dataset_props['sim']['stats']['fails']
+        # TODO allow not to ignore some of the subsections
+        for subsection in fails_dict:
+            for fail in fails_dict[subsection]:
+                try:
+                    self.datapoints_names.remove(fail)
+                    print('Dataset:: {} ignored'.format(fail))
+                except ValueError:  # if fail was already removed based on previous failure subsection
+                    pass
+
+    def _read_verts(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        obj_list = [file for file in folder_elements if 'sim.obj' in file]
+        if not obj_list:
+            raise RuntimeError('Dataset:Error: geometry file *sim.obj not found for {}'.format(datapoint_name))
+        
+        mesh = om.read_trimesh(str(self.root_path / datapoint_name / obj_list[0]))
+        
+        return mesh.points()
+        
+    def _read_pattern_params(self, datapoint_name, folder_elements):
+        """9 pattern size parameters from a given datapoint subfolder"""
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = ParametrizedPattern(self.root_path / datapoint_name / spec_list[0])
+
+        return np.array(pattern.param_values_list())
+   
+
 class ParametrizedShirtDataSet(Dataset):
     """
     For loading the data of "Learning Shared Shape Space.." paper
@@ -221,7 +339,7 @@ class ParametrizedShirtDataSet(Dataset):
         # read the pattern parameters
         pattern_parameters = self.read_pattern_params(datapoint_name)
         
-        sample = {'features': vert_list.ravel(), 'pattern_params': pattern_parameters, 'name': datapoint_name}
+        sample = {'features': vert_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
         
         if self.transform is not None:
             sample = self.transform(sample)
@@ -242,26 +360,21 @@ class ParametrizedShirtDataSet(Dataset):
             with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
                 f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
                 print ('Saved ' + name)
-    
-    def feature_size(self):
-        return 12252 * 3
         
 
 if __name__ == "__main__":
 
-    data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-    dataset = ParametrizedShirtDataSet(
-        Path(data_location), SampleToTensor())
+    # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+    system = Properties('./system.json')
+    dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+
+    data_location = Path(system['output']) / dataset_folder
+
+    dataset = GarmentDatasetParams(data_location)
 
     print(len(dataset))
-    print(dataset[100]['features'])
-    print(dataset[100]['features'].shape)
-    print(dataset[0]['pattern_params'].shape)
+    print(dataset[100]['name'], dataset[100]['features'].shape, dataset[100]['ground_truth'])
+    print(dataset[0]['ground_truth'].shape)
     # print (dataset[1000])
 
     # loader = DataLoader(dataset, 10, shuffle=True)
-
-    # test if all elements are avaliable
-    for name in dataset.datapoints_names:
-        if not (dataset.root_path / name / dataset.garment_3d_filename).exists():
-            print(name)

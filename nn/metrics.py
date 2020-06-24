@@ -19,7 +19,7 @@ def eval_metrics(model, data_wrapper, section='test'):
         if loader:
             current_metrics = dict.fromkeys(metric_functions, 0)
             for batch in loader:
-                features, params = batch['features'].to(device), batch['pattern_params'].to(device)
+                features, params = batch['features'].to(device), batch['ground_truth'].to(device)
                 for metric in current_metrics:
                     current_metrics[metric] += metric_functions[metric](model(features), params)
             # normalize & convert
