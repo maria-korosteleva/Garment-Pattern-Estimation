@@ -56,7 +56,7 @@ class Trainer():
 
     def use_dataset(self, dataset, valid_percent=None, test_percent=None):
         """Use specified dataset for training with given split settings"""
-        self.setup['dataset'] = dataset.name
+        self.setup['dataset'] = dataset.config
         self.datawraper = data.DatasetWrapper(dataset)
         self.datawraper.new_split(valid_percent, test_percent)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)

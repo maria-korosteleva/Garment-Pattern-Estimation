@@ -28,3 +28,6 @@ Provides tools to train and run the pattern prediction model on 3D garment geome
 * Numpy
 * Pytorch
 * scipy
+* Maya
+* Qualoth for Maya
+* igl (Python, https://libigl.github.io/libigl-python-bindings/) + meshplot for viewing

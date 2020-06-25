@@ -5,8 +5,10 @@ import time
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-import torchvision.transforms as transforms
+# import torchvision.transforms as transforms
 import openmesh as om
+import igl
+import meshplot
 
 # My modules
 from customconfig import Properties
@@ -157,7 +159,7 @@ class GarmentParamsDataset(Dataset):
     For loading the custom generated data & predicting generated parameters
     """
     
-    def __init__(self, root_dir, *argtranforms):
+    def __init__(self, root_dir, mesh_samples=1000, *argtranforms):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -170,6 +172,11 @@ class GarmentParamsDataset(Dataset):
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all satapopints ')
 
+        self.config = {
+            'name': self.name,
+            'mesh_samples': mesh_samples
+        }
+
         # list of items = subfolders
         root, dirs, files = next(os.walk(self.root_path))
         to_ignore = ['renders']
@@ -177,7 +184,8 @@ class GarmentParamsDataset(Dataset):
         self._ingnore_fails()
 
         # Use default tensor transform + the ones from input
-        self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
+        # self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
+        self.transform = SampleToTensor()
 
         elem = self[0]
         self.feature_size = elem['features'].shape[0]
@@ -201,15 +209,12 @@ class GarmentParamsDataset(Dataset):
         datapoint_name = self.datapoints_names[idx]
         folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
 
-        vert_list = self._read_verts(datapoint_name, folder_elements)
-
-        # DEBUG
-        vert_list = vert_list[:500]
+        points_list = self._sample_points(datapoint_name, folder_elements)
         
         # read the pattern parameters
         pattern_parameters = self._read_pattern_params(datapoint_name, folder_elements)
         
-        sample = {'features': vert_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
+        sample = {'features': points_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
         
         if self.transform is not None:
             sample = self.transform(sample)
@@ -245,15 +250,32 @@ class GarmentParamsDataset(Dataset):
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
 
-    def _read_verts(self, datapoint_name, folder_elements):
+    def _sample_points(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
         if not obj_list:
             raise RuntimeError('Dataset:Error: geometry file *sim.obj not found for {}'.format(datapoint_name))
         
-        mesh = om.read_trimesh(str(self.root_path / datapoint_name / obj_list[0]))
-        
-        return mesh.points()
+        verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
+
+        num_samples = self.config['mesh_samples']
+
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_samples, verts, faces)
+
+        # convert to normal coordinates
+        points = np.empty(barycentric_samples.shape)
+        for i in range(len(face_ids)):
+            face = faces[face_ids[i] - 1]
+            barycentric_coords = barycentric_samples[i]
+            face_verts = verts[face]
+            points[i] = np.dot(barycentric_coords, face_verts)
+
+        # Debug
+        # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
+        #     meshplot.offline()
+        #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
+
+        return points
         
     def _read_pattern_params(self, datapoint_name, folder_elements):
         """9 pattern size parameters from a given datapoint subfolder"""
@@ -280,6 +302,9 @@ class ParametrizedShirtDataSet(Dataset):
         """
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
+        self.config = {
+            'name': self.root_path.name
+        }
         
         # list of items = subfolders
         self.datapoints_names = next(os.walk(self.root_path))[1]
@@ -370,11 +395,11 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = GarmentParamsDataset(data_location)
+    dataset = GarmentParamsDataset(data_location, mesh_samples=10000)
 
     print(len(dataset))
-    print(dataset[100]['name'], dataset[100]['features'].shape, dataset[100]['ground_truth'])
+    # print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
     print(dataset[0]['ground_truth'].shape)
-    # print (dataset[1000])
+    # print(dataset[0]['features'])
 
     # loader = DataLoader(dataset, 10, shuffle=True)

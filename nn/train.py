@@ -12,12 +12,12 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='my_garments_data', 
+    run_name='sampling', 
     run_id=None, 
     no_sync=False) 
 
 # train
-dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder)
+dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
 trainer = Trainer(experiment, dataset, valid_percent=15, test_percent=10)
 dataset_wrapper = trainer.datawraper
 # model

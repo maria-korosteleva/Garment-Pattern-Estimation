@@ -17,3 +17,6 @@ __pycache__
 
 # custom settings -- to have customized local copy
 system.json
+
+# file for small script tries
+tmp.py
