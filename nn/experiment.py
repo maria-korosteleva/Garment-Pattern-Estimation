@@ -64,9 +64,13 @@ class WandbRunWrappper(object):
 
     def add_statistic(self, tag, info):
         """Add info the run summary (e.g. stats on test set)"""
-        run = self._run_object()
-        run.summary[tag] = info
-        run.summary.update()
+        # different methods for on-going & finished runs
+        if self.initialized:
+            wb.run.summary[tag] = info
+        else:
+            run = self._run_object()
+            run.summary[tag] = info
+            run.summary.update()
 
     def is_finished(self):
         run = self._run_object()
