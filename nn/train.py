@@ -12,8 +12,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='shirts', 
-    run_id=None, 
+    run_name='shirts-artifacts-resume', 
+    run_id='2uhu1z1m', 
     no_sync=False) 
 
 # train
@@ -24,7 +24,7 @@ dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
 # model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
-model = nets.ShirtfeaturesMLP()
+model = nets.ShirtfeaturesMLP(dataset.feature_size, dataset.ground_truth_size)
 # fit
 trainer.fit(model)
 
