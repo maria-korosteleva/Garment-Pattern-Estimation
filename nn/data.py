@@ -157,7 +157,54 @@ class SampleToTensor(object):
 
 # --------------------- Datasets -------------------------
 
-class GarmentParamsDataset(Dataset):
+class BaseDataset(Dataset):
+    """Ensure that all my datasets follow this interface"""
+    def __init__(self, root_dir, **configkwargs):
+        """Kind of Universal init for my datasets"""
+        self.root_path = Path(root_dir)
+        self.name = self.root_path.name
+        self._init_config(*configkwargs)
+        
+        # list of items = subfolders
+        _, dirs, _ = next(os.walk(self.root_path))
+        self.datapoints_names = dirs
+        self._clean_datapoint_list()
+
+        # Use default tensor transform + the ones from input
+        self.transform = SampleToTensor()
+
+        elem = self[0]
+        self.feature_size = elem['features'].shape[0]
+        self.ground_truth_size = elem['ground_truth'].shape[0]
+
+    # -------- Private -------------
+    def _init_config(self, **kwargs):
+        """Define dataset configuration:
+            * to be part of experimental setup on wandb
+            * Control obtainign values for datapoints"""
+        self.config = {'name': self.name, }
+        self.config.update(kwargs)
+
+    def _clean_datapoint_list(self):
+        """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
+        # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
+        pass
+    
+    def save_to_wandb(self, experiment):
+        """Save data cofiguration to current expetiment run"""
+        experiment.add_config('dataset', self.config)
+
+    def __len__(self):
+        """Number of entries in the dataset"""
+        return len(self.datapoints_names)  
+
+    def update_transform(self, transform):
+        """apply new transform when loading the data"""
+        raise NotImplementedError('BaseDataset:Error:current transform support is poor')
+        self.transform = transform
+    
+
+class GarmentParamsDataset(BaseDataset):
     """
     For loading the custom generated data & predicting generated parameters
     """
@@ -193,15 +240,7 @@ class GarmentParamsDataset(Dataset):
 
         elem = self[0]
         self.feature_size = elem['features'].shape[0]
-        self.ground_truth_size = elem['ground_truth'].shape[0]
-
-    def update_transform(self, transform):
-        """apply new transform when loading the data"""
-        self.transform = transform
-               
-    def __len__(self):
-        """Number of entries in the dataset"""
-        return len(self.datapoints_names)   
+        self.ground_truth_size = elem['ground_truth'].shape[0] 
 
     def __getitem__(self, idx):
         """Called when indexing: read the corresponding data. 
@@ -230,7 +269,6 @@ class GarmentParamsDataset(Dataset):
         experiment.add_config('dataset', self.config)
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
-
 
     def save_prediction_batch(self, predicted_params, names):
         """Saves predicted params of the datapoint to the original data folder"""
@@ -299,7 +337,7 @@ class GarmentParamsDataset(Dataset):
         return np.array(pattern.param_values_list())
    
 
-class ParametrizedShirtDataSet(Dataset):
+class ParametrizedShirtDataSet(BaseDataset):
     """
     For loading the data of "Learning Shared Shape Space.." paper
     """
@@ -336,14 +374,6 @@ class ParametrizedShirtDataSet(Dataset):
         self.feature_size = elem['features'].shape[0]
         self.ground_truth_size = elem['ground_truth'].shape[0]
 
-    def update_transform(self, transform):
-        """apply new transform when loading the data"""
-        self.transform = transform
-               
-    def __len__(self):
-        """Number of entries in the dataset"""
-        return len(self.datapoints_names)   
-    
     def read_verts(self, datapoint_name):
         """features parameters from a given datapoint subfolder"""
         assert (self.root_path / datapoint_name / self.garment_3d_filename).exists(), datapoint_name
@@ -404,6 +434,7 @@ class ParametrizedShirtDataSet(Dataset):
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
         experiment.add_config('dataset', self.config)
+
 
 
 if __name__ == "__main__":
