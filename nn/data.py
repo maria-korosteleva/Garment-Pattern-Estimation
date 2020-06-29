@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from pathlib import Path
+import shutil
 import time
 
 import torch
@@ -114,9 +115,12 @@ class DatasetWrapper(object):
 
         return self.training, self.validation, self.test
 
-    def save_split(self, path):
-        """Save split to external file"""
-        pass
+    def save_to_wandb(self, experiment):
+        """Save current data info to the wandb experiment"""
+        # Split
+        experiment.add_config('data_split', self.split_info)
+        # data info
+        self.dataset.save_to_wandb(experiment)
 
     # --------- Managing predictions on this data ---------
     def predict(self, model, section='test', single_batch=False):
@@ -220,6 +224,13 @@ class GarmentParamsDataset(Dataset):
             sample = self.transform(sample)
         
         return sample
+
+    def save_to_wandb(self, experiment):
+        """Save data cofiguration to current expetiment run"""
+        experiment.add_config('dataset', self.config)
+
+        shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
+
 
     def save_prediction_batch(self, predicted_params, names):
         """Saves predicted params of the datapoint to the original data folder"""
@@ -389,7 +400,11 @@ class ParametrizedShirtDataSet(Dataset):
             with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
                 f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
                 print ('Saved ' + name)
-        
+
+    def save_to_wandb(self, experiment):
+        """Save data cofiguration to current expetiment run"""
+        experiment.add_config('dataset', self.config)
+
 
 if __name__ == "__main__":
 

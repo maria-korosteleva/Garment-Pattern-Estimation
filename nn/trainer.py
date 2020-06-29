@@ -22,7 +22,6 @@ class Trainer():
         # default training setup
         self.setup = dict(
             model_random_seed=None,
-            dataset=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=5,
             batch_size=64,
@@ -56,12 +55,9 @@ class Trainer():
 
     def use_dataset(self, dataset, valid_percent=None, test_percent=None):
         """Use specified dataset for training with given split settings"""
-        self.setup['dataset'] = dataset.config
         self.datawraper = data.DatasetWrapper(dataset)
         self.datawraper.new_split(valid_percent, test_percent)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
-
-        self.update_config(data_split=self.datawraper.split_info)
 
         return self.datawraper
 
@@ -96,6 +92,7 @@ class Trainer():
             print('Trainer: Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
         else:
             start_epoch = 0
+            self.datawraper.save_to_wandb(self.experiment)
 
         wb.watch(model, log='all')
         return start_epoch

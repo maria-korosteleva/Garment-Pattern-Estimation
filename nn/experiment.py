@@ -40,8 +40,9 @@ class WandbRunWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
         wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
         self.run_id = wb.run.id
-        # upload checkpoints as they are created https://docs.wandb.com/library/save
+        # upload these files as they are created https://docs.wandb.com/library/save
         wb.save('*' + self.checkpoint_filetag + '*')  
+        wb.save(os.path.join(wb.run.dir, '*.json'))  
         # self.artifact = wb.Artifact(self.run_name, type='model')
         # wb.run.use_artifact(self.artifact)
 
@@ -74,6 +75,13 @@ class WandbRunWrappper(object):
             run = self._run_object()
             run.summary[tag] = info
             run.summary.update()
+
+    def add_config(self, tag, info):
+        """Add new value to run config. Only for ongoing runs!"""
+        if self.initialized:
+            wb.config[tag] = info
+        else:
+            raise RuntimeError('WandbRunWrappper:Error:Cannot add config to finished run')
 
     def is_finished(self):
         run = self._run_object()
