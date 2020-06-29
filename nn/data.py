@@ -6,7 +6,6 @@ import time
 import torch
 from torch.utils.data import DataLoader, Dataset
 # import torchvision.transforms as transforms
-import openmesh as om
 import igl
 import meshplot
 
@@ -172,6 +171,7 @@ class GarmentParamsDataset(Dataset):
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all satapopints ')
 
+        # to be part of experimental setup on wandb
         self.config = {
             'name': self.name,
             'mesh_samples': mesh_samples
@@ -319,7 +319,11 @@ class ParametrizedShirtDataSet(Dataset):
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
         # Use default tensor transform + the ones from input
-        self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
+        self.transform = SampleToTensor()
+
+        elem = self[0]
+        self.feature_size = elem['features'].shape[0]
+        self.ground_truth_size = elem['ground_truth'].shape[0]
 
     def update_transform(self, transform):
         """apply new transform when loading the data"""
@@ -333,9 +337,9 @@ class ParametrizedShirtDataSet(Dataset):
         """features parameters from a given datapoint subfolder"""
         assert (self.root_path / datapoint_name / self.garment_3d_filename).exists(), datapoint_name
         
-        mesh = om.read_trimesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
+        verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
         
-        return mesh.points()
+        return verts
         
     def read_pattern_params(self, datapoint_name):
         """9 pattern size parameters from a given datapoint subfolder"""

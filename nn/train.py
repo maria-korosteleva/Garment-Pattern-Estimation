@@ -12,17 +12,19 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='sampling', 
+    run_name='shirts', 
     run_id=None, 
     no_sync=False) 
 
 # train
-dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
-trainer = Trainer(experiment, dataset, valid_percent=15, test_percent=10)
+# dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
+dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
+trainer = Trainer(experiment, dataset, valid_percent=10, test_percent=10)
 dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
-model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
+# model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
+model = nets.ShirtfeaturesMLP()
 # fit
 trainer.fit(model)
 
@@ -33,4 +35,4 @@ print ('Test metrics: {}'.format(final_metrics))
 experiment.add_statistic('test', final_metrics)  # TODO doesn't work for unfinished runs??? 3e2awx85
 
 # save prediction for validation to file
-dataset_wrapper.predict(model, 'test')
+# dataset_wrapper.predict(model, 'test')
