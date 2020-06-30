@@ -12,19 +12,19 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='props', 
+    run_name='dataset_refactor', 
     run_id=None, 
     no_sync=False) 
 
 # train
-dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
-# dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
+# dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
+dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
 trainer = Trainer(experiment, dataset, valid_percent=10, test_percent=10)
 dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
-model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
-# model = nets.ShirtfeaturesMLP(dataset.feature_size, dataset.ground_truth_size)
+# model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
+model = nets.ShirtfeaturesMLP(dataset.feature_size, dataset.ground_truth_size)
 # fit
 trainer.fit(model)
 

@@ -163,7 +163,7 @@ class BaseDataset(Dataset):
         """Kind of Universal init for my datasets"""
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
-        self._init_config(*configkwargs)
+        self._init_config(**configkwargs)
         
         # list of items = subfolders
         _, dirs, _ = next(os.walk(self.root_path))
@@ -177,32 +177,65 @@ class BaseDataset(Dataset):
         self.feature_size = elem['features'].shape[0]
         self.ground_truth_size = elem['ground_truth'].shape[0]
 
-    # -------- Private -------------
-    def _init_config(self, **kwargs):
-        """Define dataset configuration:
-            * to be part of experimental setup on wandb
-            * Control obtainign values for datapoints"""
-        self.config = {'name': self.name, }
-        self.config.update(kwargs)
-
-    def _clean_datapoint_list(self):
-        """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
-        # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
-        pass
-    
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
         experiment.add_config('dataset', self.config)
+
+    def save_prediction_batch(self, predictions, datapoints):
+        """Saves predicted params of the datapoint to the original data folder"""
+
+    def update_transform(self, transform):
+        """apply new transform when loading the data"""
+        raise NotImplementedError('BaseDataset:Error:current transform support is poor')
+        # self.transform = transform
 
     def __len__(self):
         """Number of entries in the dataset"""
         return len(self.datapoints_names)  
 
-    def update_transform(self, transform):
-        """apply new transform when loading the data"""
-        raise NotImplementedError('BaseDataset:Error:current transform support is poor')
-        self.transform = transform
-    
+    def __getitem__(self, idx):
+        """Called when indexing: read the corresponding data. 
+        Does not support list indexing"""
+        
+        if torch.is_tensor(idx):  # allow indexing by tensors
+            idx = idx.tolist()
+            
+        datapoint_name = self.datapoints_names[idx]
+        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+
+        feature_list = self._get_features(datapoint_name, folder_elements)
+        
+        # read the pattern parameters
+        ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
+        
+        sample = {'features': feature_list.ravel(), 'ground_truth': ground_truth, 'name': datapoint_name}
+        
+        if self.transform is not None:
+            sample = self.transform(sample)
+        
+        return sample
+
+    def _init_config(self, **kwargs):
+        """Define dataset configuration:
+            * to be part of experimental setup on wandb
+            * Control obtainign values for datapoints"""
+        self.config = {'name': self.name}
+        self.config.update(kwargs)
+
+    # -------- Data-specific basic functions --------
+    def _clean_datapoint_list(self):
+        """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
+        # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
+        pass
+
+    def _get_features(self, datapoint_name, folder_elements=None):
+        """Read/generate datapoint features"""
+        return np.array([0])
+
+    def _get_ground_truth(self, datapoint_name, folder_elements=None):
+        """Ground thruth prediction for a datapoint"""
+        return np.array([0])
+
 
 class GarmentParamsDataset(BaseDataset):
     """
@@ -216,57 +249,15 @@ class GarmentParamsDataset(BaseDataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.root_path = Path(root_dir)
-        self.name = self.root_path.name
-        self.dataset_props = Properties(self.root_path / 'dataset_properties.json')
+        self.dataset_props = Properties(Path(root_dir) / 'dataset_properties.json')
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all satapopints ')
 
-        # to be part of experimental setup on wandb
-        self.config = {
-            'name': self.name,
-            'mesh_samples': mesh_samples
-        }
-
-        # list of items = subfolders
-        root, dirs, files = next(os.walk(self.root_path))
-        to_ignore = ['renders']
-        self.datapoints_names = [directory for directory in dirs if directory not in to_ignore]
-        self._ingnore_fails()
-
-        # Use default tensor transform + the ones from input
-        # self.transform = transforms.Compose([SampleToTensor()] + list(argtranforms))
-        self.transform = SampleToTensor()
-
-        elem = self[0]
-        self.feature_size = elem['features'].shape[0]
-        self.ground_truth_size = elem['ground_truth'].shape[0] 
-
-    def __getitem__(self, idx):
-        """Called when indexing: read the corresponding data. 
-        Does not support list indexing"""
-        
-        if torch.is_tensor(idx):  # allow indexing by tensors
-            idx = idx.tolist()
-            
-        datapoint_name = self.datapoints_names[idx]
-        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-
-        points_list = self._sample_points(datapoint_name, folder_elements)
-        
-        # read the pattern parameters
-        pattern_parameters = self._read_pattern_params(datapoint_name, folder_elements)
-        
-        sample = {'features': points_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
-        
-        if self.transform is not None:
-            sample = self.transform(sample)
-        
-        return sample
-
+        super().__init__(root_dir, mesh_samples=mesh_samples)
+     
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
-        experiment.add_config('dataset', self.config)
+        super().save_to_wandb(experiment)
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
 
@@ -274,21 +265,11 @@ class GarmentParamsDataset(BaseDataset):
         """Saves predicted params of the datapoint to the original data folder"""
         raise NotImplementedError()
 
-        # for prediction, name in zip(predicted_params, names):
-        #     path_to_prediction = self.root_path / '..' / 'predictions' / name
-        #     try:
-        #         os.makedirs(path_to_prediction)
-        #     except OSError:
-        #         pass
-            
-        #     prediction = prediction.tolist()
-        #     with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
-        #         f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
-        #         print ('Saved ' + name)
-
-    # ------ Private --------
-    def _ingnore_fails(self):
+    # ------ Data-specific basic functions --------
+    def _clean_datapoint_list(self):
         """Remove all elements marked as failure from the datapoint list"""
+        self.datapoints_names.remove('renders')  # TODO read ignore list from props
+
         fails_dict = self.dataset_props['sim']['stats']['fails']
         # TODO allow not to ignore some of the subsections
         for subsection in fails_dict:
@@ -299,7 +280,7 @@ class GarmentParamsDataset(BaseDataset):
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
 
-    def _sample_points(self, datapoint_name, folder_elements):
+    def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
         if not obj_list:
@@ -326,8 +307,8 @@ class GarmentParamsDataset(BaseDataset):
 
         return points
         
-    def _read_pattern_params(self, datapoint_name, folder_elements):
-        """9 pattern size parameters from a given datapoint subfolder"""
+    def _get_ground_truth(self, datapoint_name, folder_elements):
+        """Pattern parameters from a given datapoint subfolder"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
         if not spec_list:
             raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
@@ -349,72 +330,13 @@ class ParametrizedShirtDataSet(BaseDataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.root_path = Path(root_dir)
-        self.name = self.root_path.name
-        self.config = {
-            'name': self.root_path.name
-        }
-        
-        # list of items = subfolders
-        self.datapoints_names = next(os.walk(self.root_path))[1]
-        
-        # remove non-valid element
-        self.datapoints_names.remove('P3ORMPBNJJAJ')
-        
         # datapoint folder structure
         self.mesh_filename = 'shirt_mesh_r.obj'
         self.pattern_params_filename = 'shirt_info.txt'
         self.features_filename = 'visfea.mat'
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
-        # Use default tensor transform + the ones from input
-        self.transform = SampleToTensor()
-
-        elem = self[0]
-        self.feature_size = elem['features'].shape[0]
-        self.ground_truth_size = elem['ground_truth'].shape[0]
-
-    def read_verts(self, datapoint_name):
-        """features parameters from a given datapoint subfolder"""
-        assert (self.root_path / datapoint_name / self.garment_3d_filename).exists(), datapoint_name
-        
-        verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
-        
-        return verts
-        
-    def read_pattern_params(self, datapoint_name):
-        """9 pattern size parameters from a given datapoint subfolder"""
-        assert (self.root_path / datapoint_name / self.pattern_params_filename).exists(), datapoint_name
-        
-        # assuming that we need the numbers from the last line in file
-        with open(self.root_path / datapoint_name / self.pattern_params_filename) as f:
-            lines = f.readlines()
-            params = np.fromstring(lines[-1],  sep = ' ')
-        return params
-       
-    def __getitem__(self, idx):
-        """Called when indexing: read the corresponding data. 
-        Does not support list indexing"""
-        
-        if torch.is_tensor(idx):  # allow indexing by tensors
-            idx = idx.tolist()
-            
-        datapoint_name = self.datapoints_names[idx]
-        
-        vert_list = self.read_verts(datapoint_name)
-
-        # DEBUG
-        vert_list = vert_list[:500]
-        
-        # read the pattern parameters
-        pattern_parameters = self.read_pattern_params(datapoint_name)
-        
-        sample = {'features': vert_list.ravel(), 'ground_truth': pattern_parameters, 'name': datapoint_name}
-        
-        if self.transform is not None:
-            sample = self.transform(sample)
-        
-        return sample
+        super().__init__(root_dir)
         
     def save_prediction_batch(self, predicted_params, names):
         """Saves predicted params of the datapoint to the original data folder"""
@@ -431,11 +353,29 @@ class ParametrizedShirtDataSet(BaseDataset):
                 f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
                 print ('Saved ' + name)
 
-    def save_to_wandb(self, experiment):
-        """Save data cofiguration to current expetiment run"""
-        experiment.add_config('dataset', self.config)
-
-
+    # ------ Data-specific basic functions  -------
+    def _clean_datapoint_list(self):
+        """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
+        self.datapoints_names.remove('P3ORMPBNJJAJ')
+    
+    def _get_features(self, datapoint_name, folder_elements=None):
+        """features parameters from a given datapoint subfolder"""
+        assert (self.root_path / datapoint_name / self.garment_3d_filename).exists(), datapoint_name
+        
+        verts, _ = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
+        
+        return verts[:500]
+        
+    def _get_ground_truth(self, datapoint_name, folder_elements=None):
+        """9 pattern size parameters from a given datapoint subfolder"""
+        assert (self.root_path / datapoint_name / self.pattern_params_filename).exists(), datapoint_name
+        
+        # assuming that we need the numbers from the last line in file
+        with open(self.root_path / datapoint_name / self.pattern_params_filename) as f:
+            lines = f.readlines()
+            params = np.fromstring(lines[-1],  sep = ' ')
+        return params
+       
 
 if __name__ == "__main__":
 
