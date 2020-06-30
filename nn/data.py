@@ -288,7 +288,7 @@ class GarmentParamsDataset(BaseDataset):
 
             # copy originals for comparison
             for file in (self.root_path / name).glob('*'):
-                if '.mb' not in file.suffix:
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
 
     # ------ Data-specific basic functions --------

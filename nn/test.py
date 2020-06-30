@@ -43,6 +43,8 @@ model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
 # experiment.add_statistic('valid_metrics', valid_loss)
 
 # save prediction for validation to file
-prediction_path = datawrapper.predict(model, save_to=Path('./wandb'), sections=['validation', 'test'])
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 
 print('Saved to {}'.format(prediction_path))
+
+# experiment.add_artifact(prediction_path, datawrapper.dataset.name, 'result')

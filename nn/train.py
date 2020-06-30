@@ -34,7 +34,9 @@ print ('Test metrics: {}'.format(final_metrics))
 
 experiment.add_statistic('test', final_metrics)  # TODO doesn't work for unfinished runs??? 3e2awx85
 
-# save prediction for validation to file
-dataset_wrapper.predict(model, './wandb', 'test')
+# save predictions
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+
+print('Predictions saved to {}'.format(prediction_path))
 
 # TODO upload as artifact
