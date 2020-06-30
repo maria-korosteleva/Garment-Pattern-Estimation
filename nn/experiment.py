@@ -83,6 +83,25 @@ class WandbRunWrappper(object):
         else:
             raise RuntimeError('WandbRunWrappper:Error:Cannot add config to finished run')
 
+    def add_artifact(self, path, name, type):
+        """Create a new wandb artifact and upload all the contents there"""
+
+        run = wb.run if self.initialized else self._run_object()
+        path = Path(path)
+
+        artifact = wb.Artifact(name, type=type)
+        if path.is_file():
+            artifact.add_file(str(path))
+        else:
+            for child in path.iterdir():
+                if child.is_file():
+                    artifact.add_file(str(child))
+                else:
+                    artifact.add_dir(str(child))
+                    
+        run.log_artifact(artifact)
+
+
     def is_finished(self):
         run = self._run_object()
         return run.state == 'finished'
@@ -186,5 +205,5 @@ class WandbRunWrappper(object):
     # ------- utils -------
     def _run_object(self):
         """ Shortcut for getting reference to wandb api run object. 
-            This object allows to access both ongoing & finished runs"""
+            To uniformly access both ongoing & finished runs"""
         return wb.Api().run(self.cloud_path())

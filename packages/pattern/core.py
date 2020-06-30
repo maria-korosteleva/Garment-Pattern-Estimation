@@ -56,9 +56,9 @@ class BasicPattern(object):
     def serialize(self, path, to_subfolder=True, tag=''):
         # log context
         if to_subfolder:
-            log_dir = os.path.join(path, self.name + tag)
+            log_dir = os.path.join(path, self.name)
             os.makedirs(log_dir)
-            spec_file = os.path.join(log_dir, 'specification.json')
+            spec_file = os.path.join(log_dir, tag + 'specification.json')
         else:
             log_dir = path
             spec_file = os.path.join(path, (self.name + tag + '_specification.json'))
@@ -284,6 +284,24 @@ class ParametrizedPattern(BasicPattern):
             else:
                 value_list.append(value)
         return value_list
+
+    def apply_param_list(self, values):
+        """Apply given parameters supplied as a list of param_values_list() form"""
+
+        self._restore_template(params_to_default=False)
+
+        # set new values
+        value_count = 0
+        for parameter in self.spec['parameter_order']:
+            last_value = self.parameters[parameter]['value']
+            if isinstance(last_value, list):
+                self.parameters[parameter]['value'] = [values[value_count + i] for i in range(len(last_value))]
+                value_count += len(last_value)
+            else:
+                self.parameters[parameter]['value'] = values[value_count]
+                value_count += 1
+        
+        self._update_pattern_by_param_values()
 
     def reloadJSON(self):
         """(Re)loads pattern info from spec file. 

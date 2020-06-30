@@ -51,6 +51,8 @@ class VisPattern(core.ParametrizedPattern):
         # save visualtisation
         self._save_as_image(svg_file, png_file)
 
+        return log_dir
+
     # -------- Drawing ---------
 
     def _verts_to_px_scaling_factor(self):

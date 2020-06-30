@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import time
+from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -13,6 +14,7 @@ import meshplot
 # My modules
 from customconfig import Properties
 from pattern.core import ParametrizedPattern
+from pattern.wrappers import VisPattern
 
 # ---------------------- Main Wrapper ------------------
 class DatasetWrapper(object):
@@ -123,22 +125,32 @@ class DatasetWrapper(object):
         self.dataset.save_to_wandb(experiment)
 
     # --------- Managing predictions on this data ---------
-    def predict(self, model, section='test', single_batch=False):
+    def predict(self, model, save_to, sections=['test'], single_batch=False):
         """Save model predictions on the given dataset section"""
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        model.to(device)
-        model.eval()
-        with torch.no_grad():
-            loader = self.get_loader(section)
-            if loader:
-                if single_batch:
-                    batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
-                    features = batch['features'].to(device)
-                    self.dataset.save_prediction_batch(model(features), batch['name'])
-                else:
-                    for batch in loader:
+        # Main path
+        prediction_path = save_to / (self.dataset.name + '_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        prediction_path.mkdir(parents=True, exist_ok=True)
+
+        for section in sections:
+            # Section path
+            section_dir = prediction_path / section
+            section_dir.mkdir(parents=True, exist_ok=True)
+
+            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+            model.to(device)
+            model.eval()
+            with torch.no_grad():
+                loader = self.get_loader(section)
+                if loader:
+                    if single_batch:
+                        batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
                         features = batch['features'].to(device)
-                        self.dataset.save_prediction_batch(model(features), batch['name'])
+                        self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+                    else:
+                        for batch in loader:
+                            features = batch['features'].to(device)
+                            self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+        return prediction_path
 
 # ------------------ Transforms ----------------
 # Custom transforms -- to tensor
@@ -181,8 +193,9 @@ class BaseDataset(Dataset):
         """Save data cofiguration to current expetiment run"""
         experiment.add_config('dataset', self.config)
 
-    def save_prediction_batch(self, predictions, datapoints):
+    def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
+        pass
 
     def update_transform(self, transform):
         """apply new transform when loading the data"""
@@ -261,9 +274,22 @@ class GarmentParamsDataset(BaseDataset):
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
 
-    def save_prediction_batch(self, predicted_params, names):
+    def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
-        raise NotImplementedError()
+
+        for prediction, name in zip(predictions, datanames):
+            prediction = prediction.tolist()
+            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
+
+            # apply new parameters
+            pattern.apply_param_list(prediction)
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if '.mb' not in file.suffix:
+                    shutil.copy2(str(file), str(final_dir))
 
     # ------ Data-specific basic functions --------
     def _clean_datapoint_list(self):
@@ -338,10 +364,10 @@ class ParametrizedShirtDataSet(BaseDataset):
 
         super().__init__(root_dir)
         
-    def save_prediction_batch(self, predicted_params, names):
+    def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
         
-        for prediction, name in zip(predicted_params, names):
+        for prediction, name in zip(predictions, datanames):
             path_to_prediction = self.root_path / '..' / 'predictions' / name
             try:
                 os.makedirs(path_to_prediction)
