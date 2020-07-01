@@ -64,7 +64,7 @@ class WandbRunWrappper(object):
         """Info on the data setup from the run config:
             Split & batch size info """
         run = self._run_object()
-        return run.config['data_split'], run.config['batch_size']
+        return run.config['data_split'], run.config['batch_size'], run.config['dataset']
 
     def add_statistic(self, tag, info):
         """Add info the run summary (e.g. stats on test set)"""
@@ -100,7 +100,6 @@ class WandbRunWrappper(object):
                     artifact.add_dir(str(child))
                     
         run.log_artifact(artifact)
-
 
     def is_finished(self):
         run = self._run_object()
