@@ -186,8 +186,8 @@ class BaseDataset(Dataset):
         self.transform = SampleToTensor()
 
         elem = self[0]
-        self.feature_size = elem['features'].shape[0]
-        self.ground_truth_size = elem['ground_truth'].shape[0]
+        self.config['feature_size'] = elem['features'].shape[0]
+        self.config['ground_truth_size'] = elem['ground_truth'].shape[0]
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""

@@ -24,12 +24,12 @@ dataset = data.ParametrizedShirtDataSet(datapath)
 # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
 
-split, batch_size = experiment.data_info()  # note that run is not initialized -- we use info from finished run
+split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-model = nets.ShirtfeaturesMLP(dataset.feature_size, dataset.ground_truth_size)
-# model = nets.GarmentParamsMLP(dataset.feature_size, dataset.ground_truth_size)
+model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+# model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
 # model.load_state_dict(experiment.load_checkpoint_file(1, to_path=Path('./wandb'))['model_state_dict'])
 
