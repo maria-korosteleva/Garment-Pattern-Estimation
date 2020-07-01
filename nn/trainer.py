@@ -14,7 +14,7 @@ import data
 from experiment import WandbRunWrappper
 
 class Trainer():
-    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, with_visualization=False):
+    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, split_seed=None, with_visualization=False):
         """Initialize training and dataset split (if given)
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
@@ -34,7 +34,7 @@ class Trainer():
         )
 
         if dataset is not None:
-            self.use_dataset(dataset, valid_percent, test_percent)
+            self.use_dataset(dataset, valid_percent, test_percent, split_seed)
    
     def init_randomizer(self, random_seed=None):
         """Init randomizatoin for torch globally for reproducibility. 
@@ -55,10 +55,10 @@ class Trainer():
         """add given values to training config"""
         self.setup.update(kwargs)
 
-    def use_dataset(self, dataset, valid_percent=None, test_percent=None):
+    def use_dataset(self, dataset, valid_percent=None, test_percent=None, random_seed=None):
         """Use specified dataset for training with given split settings"""
         self.datawraper = data.DatasetWrapper(dataset)
-        self.datawraper.new_split(valid_percent, test_percent)
+        self.datawraper.new_split(valid_percent, test_percent, random_seed)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
 
         return self.datawraper
