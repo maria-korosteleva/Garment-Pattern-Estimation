@@ -6,6 +6,7 @@
 from __future__ import print_function
 from __future__ import division
 import copy
+import errno
 import json
 import numpy as np
 import os
@@ -57,7 +58,11 @@ class BasicPattern(object):
         # log context
         if to_subfolder:
             log_dir = os.path.join(path, self.name)
-            os.makedirs(log_dir)
+            try:
+                os.makedirs(log_dir)
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
             spec_file = os.path.join(log_dir, tag + 'specification.json')
         else:
             log_dir = path

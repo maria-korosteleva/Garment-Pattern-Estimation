@@ -14,16 +14,18 @@ import data
 from experiment import WandbRunWrappper
 
 class Trainer():
-    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None):
-        """Initialize training"""
+    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, with_visualization=False):
+        """Initialize training and dataset split (if given)
+            * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
         self.datawraper = None
+        self.log_with_visualization = with_visualization
         
         # default training setup
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=5,
+            epochs=3,
             batch_size=64,
             learning_rate=0.001,
             loss='MSELoss',
@@ -62,10 +64,9 @@ class Trainer():
         return self.datawraper
 
     def fit(self, model):
-        """Fit proveided model to reviosly configured dataset"""
+        """Fit provided model to reviosly configured dataset"""
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
-
         self.setup['model'] = model.__class__.__name__
 
         self._add_optimizer(model)
@@ -76,6 +77,9 @@ class Trainer():
 
         self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
+
+        self.folder_for_preds = Path(wb.run.dir) / 'intermediate_preds'
+        self.folder_for_preds.mkdir(exist_ok=True)
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
@@ -147,9 +151,26 @@ class Trainer():
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
             
-            # little logging
+            # Base logging
             print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
-            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
+            wb.log({
+                'epoch': epoch, 
+                'valid_loss': valid_loss, 
+                'learning_rate': self.optimizer.param_groups[0]['lr'],
+                }, step=log_step)
+
+            # prediction for visual reference
+            if self.log_with_visualization:
+                for batch in valid_loader:
+                    Path(wb.run.dir) / 'intermediate_preds'
+                    self.datawraper.dataset.save_prediction_batch(model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
+                    name = batch['name'][0]  # just one to see the dynamics in wandb ui
+                    wb.log({
+                        name: wb.Image(str(self.folder_for_preds / name / (name + '_predicted__pattern.png')), ),
+                        'epoch': epoch,
+                    }, 
+                    step=log_step)
+                    break  # One is enough
 
             # checkpoint
             self._save_checkpoint(model, epoch)

@@ -368,11 +368,8 @@ class ParametrizedShirtDataSet(BaseDataset):
         """Saves predicted params of the datapoint to the original data folder"""
         
         for prediction, name in zip(predictions, datanames):
-            path_to_prediction = self.root_path / '..' / 'predictions' / name
-            try:
-                os.makedirs(path_to_prediction)
-            except OSError:
-                pass
+            path_to_prediction = Path(save_to) / name
+            path_to_prediction.mkdir(parents=True, exist_ok=True)
             
             prediction = prediction.tolist()
             with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
