@@ -171,11 +171,11 @@ class SampleToTensor(object):
 
 class BaseDataset(Dataset):
     """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, **configkwargs):
+    def __init__(self, root_dir, start_config={}):
         """Kind of Universal init for my datasets"""
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
-        self._init_config(**configkwargs)
+        self._init_config(start_config)
         
         # list of items = subfolders
         _, dirs, _ = next(os.walk(self.root_path))
@@ -228,12 +228,12 @@ class BaseDataset(Dataset):
         
         return sample
 
-    def _init_config(self, **kwargs):
+    def _init_config(self, start_config):
         """Define dataset configuration:
             * to be part of experimental setup on wandb
             * Control obtainign values for datapoints"""
-        self.config = {'name': self.name}
-        self.config.update(kwargs)
+        self.config = start_config
+        self.config['name'] = self.name
 
     # -------- Data-specific basic functions --------
     def _clean_datapoint_list(self):
@@ -255,7 +255,7 @@ class GarmentParamsDataset(BaseDataset):
     For loading the custom generated data & predicting generated parameters
     """
     
-    def __init__(self, root_dir, mesh_samples=1000, *argtranforms):
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -265,8 +265,11 @@ class GarmentParamsDataset(BaseDataset):
         self.dataset_props = Properties(Path(root_dir) / 'dataset_properties.json')
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all satapopints ')
+        
+        if 'mesh_samples' not in start_config:  
+            start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
-        super().__init__(root_dir, mesh_samples=mesh_samples)
+        super().__init__(root_dir, start_config)
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -349,7 +352,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, *argtranforms):
+    def __init__(self, root_dir, start_config={}):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -362,7 +365,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         self.features_filename = 'visfea.mat'
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
-        super().__init__(root_dir)
+        super().__init__(root_dir, start_config)
         
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder"""

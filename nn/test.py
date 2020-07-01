@@ -12,24 +12,27 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='prediction', 
-    run_id='170ynuax')  # finished experiment
+    run_name='data_configs', 
+    run_id='1ps5qz31')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
-datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-dataset = data.ParametrizedShirtDataSet(datapath)
-# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-# dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
-
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
+
+# datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+# dataset = data.ParametrizedShirtDataSet(datapath, data_config)
+dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, data_config)
+
+print(dataset.config)
+
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-# model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+# model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
 # model.load_state_dict(experiment.load_checkpoint_file(1, to_path=Path('./wandb'))['model_state_dict'])
 

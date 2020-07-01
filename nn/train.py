@@ -17,7 +17,7 @@ experiment = WandbRunWrappper(
     no_sync=False) 
 
 # train
-# dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, mesh_samples=1000)
+# dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, {'mesh_samples': 2000})
 dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
