@@ -185,9 +185,16 @@ class BaseDataset(Dataset):
         # Use default tensor transform + the ones from input
         self.transform = SampleToTensor()
 
+        # in\out sizes
         elem = self[0]
-        self.config['feature_size'] = elem['features'].shape[0]
-        self.config['ground_truth_size'] = elem['ground_truth'].shape[0]
+        feature_size, gt_size = elem['features'].shape[0], elem['ground_truth'].shape[0]
+        # sanity checks
+        if ('feature_size' in self.config and feature_size != self.config['feature_size']
+                or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
+            raise RuntimeError('BaseDataset:Error:feature shape {} or ground thruth shape {} from loaded config do not match calculated values: {}, {}'.format(
+                self.config['feature_size'],  self.config['ground_truth_size'], feature_size, gt_size))
+
+        self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -233,6 +240,9 @@ class BaseDataset(Dataset):
             * to be part of experimental setup on wandb
             * Control obtainign values for datapoints"""
         self.config = start_config
+        if 'name' in self.config and self.name != self.config['name']:
+            print('BaseDataset:Warning:dataset name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
+
         self.config['name'] = self.name
 
     # -------- Data-specific basic functions --------

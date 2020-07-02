@@ -12,7 +12,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='data_configs', 
+    run_name='access_try', 
     run_id=None, 
     no_sync=False) 
 

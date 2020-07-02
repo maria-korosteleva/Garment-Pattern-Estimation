@@ -173,8 +173,7 @@ class WandbRunWrappper(object):
             return model_info
 
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
-            print('WbRunWrapper:Warning:No file with final weights found in run {}'.format(self.cloud_path()))
-            return None
+            raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
     
     def save(self, state, epoch=None, final=False, filename=''):
         """Save given state dict as torch checkpoint to local run dir
