@@ -223,12 +223,10 @@ class BaseDataset(Dataset):
         datapoint_name = self.datapoints_names[idx]
         folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
 
-        feature_list = self._get_features(datapoint_name, folder_elements)
-        
-        # read the pattern parameters
+        features = self._get_features(datapoint_name, folder_elements)
         ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
         
-        sample = {'features': feature_list.ravel(), 'ground_truth': ground_truth, 'name': datapoint_name}
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
         
         if self.transform is not None:
             sample = self.transform(sample)
@@ -321,6 +319,12 @@ class GarmentParamsDataset(BaseDataset):
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        points = self._sample_points(datapoint_name, folder_elements)
+
+        return points.ravel()  # flat vector as a feature
+        
+    def _sample_points(self, datapoint_name, folder_elements):
+        """Make a sample from the 3d surface of a given datapoint"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
         if not obj_list:
             raise RuntimeError('Dataset:Error: geometry file *sim.obj not found for {}'.format(datapoint_name))
@@ -343,9 +347,8 @@ class GarmentParamsDataset(BaseDataset):
         # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
         #     meshplot.offline()
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
-
         return points
-        
+
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Pattern parameters from a given datapoint subfolder"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -356,6 +359,15 @@ class GarmentParamsDataset(BaseDataset):
 
         return np.array(pattern.param_values_list())
    
+
+class Garment3DParamsDataset(GarmentParamsDataset):
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}):
+        super().__init__(root_dir, start_config)
+    
+    # the only difference with parent class in the shape of the features
+    def _get_features(self, datapoint_name, folder_elements):
+        points = self._sample_points(datapoint_name, folder_elements)
+        return points  # return in 3D
 
 class ParametrizedShirtDataSet(BaseDataset):
     """
@@ -400,7 +412,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         
         verts, _ = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
         
-        return verts[:500]
+        return verts[:500].ravel()
         
     def _get_ground_truth(self, datapoint_name, folder_elements=None):
         """9 pattern size parameters from a given datapoint subfolder"""
@@ -421,7 +433,7 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = GarmentParamsDataset(data_location, mesh_samples=10000)
+    dataset = GarmentParamsDataset(data_location, { 'mesh_samples': 10000 })
 
     print(len(dataset))
     # print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])

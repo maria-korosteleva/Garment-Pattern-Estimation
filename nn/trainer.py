@@ -78,8 +78,9 @@ class Trainer():
         self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
 
-        self.folder_for_preds = Path(wb.run.dir) / 'intermediate_preds'
-        self.folder_for_preds.mkdir(exist_ok=True)
+        if self.log_with_visualization:
+            self.folder_for_preds = Path(wb.run.dir) / 'intermediate_preds'
+            self.folder_for_preds.mkdir(exist_ok=True)
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
@@ -135,14 +136,12 @@ class Trainer():
                 loss = self.regression_loss(preds, params)
                 #print ('Epoch: {}, Batch: {}, Loss: {}'.format(epoch, i, loss))
                 loss.backward()
-                
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 
                 # logging
-                if i % 5 == 4:
-                    log_step += 1
-                    wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
+                log_step += 1
+                wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
 
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()

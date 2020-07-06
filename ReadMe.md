@@ -27,6 +27,7 @@ Provides tools to train and run the pattern prediction model on 3D garment geome
 * Python 3.6
 * Numpy
 * Pytorch
+* torch-geometric (https://pytorch-geometric.readthedocs.io/en/latest/index.html)
 * scipy
 * Maya
 * Qualoth for Maya
