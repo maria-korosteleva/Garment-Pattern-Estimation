@@ -40,9 +40,7 @@ class WandbRunWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        print(config, self.run_id, self.project, self.run_name)
-
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, entity=self.wandb_username)
+        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
         self.run_id = wb.run.id
 
         # upload these files as they are created https://docs.wandb.com/library/save

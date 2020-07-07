@@ -10,8 +10,7 @@ import torch.nn as nn
 import wandb as wb
 
 # My modules
-import data
-from experiment import WandbRunWrappper
+import data as data
 
 class Trainer():
     def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, split_seed=None, with_visualization=False):
@@ -25,7 +24,7 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=3,
+            epochs=50,
             batch_size=64,
             learning_rate=0.001,
             loss='MSELoss',

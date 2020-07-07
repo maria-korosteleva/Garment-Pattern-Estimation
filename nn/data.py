@@ -7,9 +7,9 @@ from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-# import torchvision.transforms as transforms
+import torchvision.transforms as transforms
 import igl
-import meshplot
+# import meshplot  # when uncommented, could lead to problems with wandb run syncing
 
 # My modules
 from customconfig import Properties
@@ -368,6 +368,7 @@ class Garment3DParamsDataset(GarmentParamsDataset):
     def _get_features(self, datapoint_name, folder_elements):
         points = self._sample_points(datapoint_name, folder_elements)
         return points  # return in 3D
+
 
 class ParametrizedShirtDataSet(BaseDataset):
     """
