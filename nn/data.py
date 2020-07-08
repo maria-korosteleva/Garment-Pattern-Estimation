@@ -175,7 +175,8 @@ class BaseDataset(Dataset):
         """Kind of Universal init for my datasets"""
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
-        self._init_config(start_config)
+        self.config = {}
+        self.update_config(start_config)
         
         # list of items = subfolders
         _, dirs, _ = next(os.walk(self.root_path))
@@ -233,15 +234,16 @@ class BaseDataset(Dataset):
         
         return sample
 
-    def _init_config(self, start_config):
+    def update_config(self, in_config):
         """Define dataset configuration:
             * to be part of experimental setup on wandb
             * Control obtainign values for datapoints"""
-        self.config = start_config
+        self.config.update(in_config)
         if 'name' in self.config and self.name != self.config['name']:
             print('BaseDataset:Warning:dataset name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
 
         self.config['name'] = self.name
+        self._update_on_config_change()
 
     # -------- Data-specific basic functions --------
     def _clean_datapoint_list(self):
@@ -257,6 +259,9 @@ class BaseDataset(Dataset):
         """Ground thruth prediction for a datapoint"""
         return np.array([0])
 
+    def _update_on_config_change(self):
+        """Update object inner state after config values have changed"""
+        pass
 
 class GarmentParamsDataset(BaseDataset):
     """
