@@ -63,7 +63,7 @@ class SetAbstractionModule(nn.Module):
     def forward(self, features, pos, batch):
         idx = geometric.fps(pos, batch, ratio=self.ratio)
         row, col = geometric.radius(pos, pos[idx], self.radius, batch, batch[idx],
-                            max_num_neighbors=64)
+                            max_num_neighbors=32)
         edge_index = torch.stack([col, row], dim=0)
         features = self.conv(features, (pos, pos[idx]), edge_index)
         pos, batch = pos[idx], batch[idx]

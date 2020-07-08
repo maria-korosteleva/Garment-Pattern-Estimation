@@ -25,10 +25,10 @@ class Trainer():
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=50,
-            batch_size=64,
+            batch_size=32,
             learning_rate=0.001,
             loss='MSELoss',
-            optimizer='SGD',
+            optimizer='Adam',
             lr_scheduling=True
         )
 
@@ -105,8 +105,12 @@ class Trainer():
         
         if self.setup['optimizer'] == 'SGD':
             # future 'else'
-            print('Trainer::Warning::Using default SGD optimizer')
+            print('Trainer::Using default SGD optimizer')
             self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'])
+        elif self.setup['optimizer'] == 'Adam':
+            # future 'else'
+            print('Trainer::Using default SGD optimizer')
+            self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'])
         
     def _add_loss(self):
         if self.setup['loss'] == 'MSELoss':

@@ -12,7 +12,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='PointNet++-on-sampled', 
+    run_name='PointNetpp-on-sampled', 
     run_id=None, 
     no_sync=False) 
 
@@ -27,7 +27,7 @@ dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 0.2, 'r2': 0.4})
+model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration
@@ -42,6 +42,7 @@ experiment.add_statistic('test', final_metrics)
 
 # save predictions
 prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+experiment.add_statistic('predictions_folder', prediction_path.name)
 
 print('Predictions saved to {}'.format(prediction_path))
 
