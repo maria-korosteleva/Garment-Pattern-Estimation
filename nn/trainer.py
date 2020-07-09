@@ -200,7 +200,7 @@ class Trainer():
         last_epoch = self.experiment.last_epoch()
         # look for last uncorruted checkpoint
         while last_epoch >= 0:
-            checkpoint = self.experiment.load_checkpoint_file(last_epoch)
+            checkpoint = self.experiment.load_checkpoint_file()  # latest
             if checkpoint is not None:
                break  # successfull load
             last_epoch -= 1
@@ -225,6 +225,6 @@ class Trainer():
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict()
             },
-            epoch=epoch
+            checkpoint=True
         )
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training

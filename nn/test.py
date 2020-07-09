@@ -33,8 +33,8 @@ datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_s
 # ----- Model architecture -----
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
-# model.load_state_dict(experiment.load_checkpoint_file(1, to_path=Path('./wandb'))['model_state_dict'])
+# model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
+model.load_state_dict(experiment.load_checkpoint_file(1, to_path=Path('./wandb'))['model_state_dict'])
 
 # ------- Evaluate --------
 # valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')

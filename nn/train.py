@@ -11,9 +11,9 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='PointNetpp-on-sampled', 
-    run_id=None, 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='checkpoints', 
+    run_id='3edy0hz0', 
     no_sync=False) 
 
 # train
