@@ -138,14 +138,14 @@ class WandbRunWrappper(object):
         # raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
 
     # ----- working with files -------
-    def load_checkpoint_file(self, to_path=Path('./wanbb/'), version=None):
+    def load_checkpoint_file(self, to_path=Path('./wandb/'), version=None):
         """Load checkpoint file for given epoch from the cloud"""
         if not self.run_id or not self.initialized:
             raise RuntimeError('WbRunWrapper:Error:Need to have active run and know run id to restore checkpoint from the could')
             # TODO relax requirements after fix of https://github.com/wandb/client/issues/1147
         try:
             artifact_path = self.checkpoint_artifactname(version=version)
-            print('Requesting checkpoint artifacts {}'.format(artifact_path))
+            print('Experiment::Requesting checkpoint artifacts {}'.format(artifact_path))
 
             artifact = wb.run.use_artifact(artifact_path)
             filepath = artifact.download(str(to_path))
@@ -154,8 +154,8 @@ class WandbRunWrappper(object):
             checkpoint = torch.load(str(Path(filepath) / self.checkpoint_filename()))
             return checkpoint
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
-            print('WbRunWrapper:Warning:checkpoint from version {} is corrupted or lost: {}'.format(version if version else 'latest', e))
-            return None
+            print('WbRunWrapper::Error::checkpoint from version {} is corrupted or lost: {}'.format(version if version else 'latest', e))
+            raise e
     
     def load_final_model(self, to_path=Path('.')):
         """Load final model parameters file from the cloud if it exists"""

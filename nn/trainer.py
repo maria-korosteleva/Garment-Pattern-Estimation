@@ -75,7 +75,7 @@ class Trainer():
         self._add_scheduler()
 
         start_epoch = self._start_experiment(model)
-        print('NN training Using device: {}'.format(self.device))
+        print('Trainer::NN training Using device: {}'.format(self.device))
 
         if self.log_with_visualization:
             self.folder_for_preds = Path(wb.run.dir) / 'intermediate_preds'
@@ -92,7 +92,7 @@ class Trainer():
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
-            print('Trainer: Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
+            print('Trainer::Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
 
             if self.device != wb.config.device:
                 # device doesn't matter much, so we just inform but do not crash
@@ -184,9 +184,10 @@ class Trainer():
     def _restore_run(self, model):
         """Restore the training process from the point it stopped at. 
             Assuming 
-                * current wb.config state is the same as it was when run was initially created
-                * all the necessary training objects are already created and only need update
-                * self.resume_run_id is properly set
+                * Current wb.config state is the same as it was when run was initially created
+                * All the necessary training objects are already created and only need update
+                * All related object types are the same as in the resuming run (model, optimizer, etc.)
+                * Self.run_id is properly set
             Returns id of the next epoch to resume from. """
         
         # data split
@@ -196,18 +197,9 @@ class Trainer():
         self.datawraper.load_split(split, batch_size)  # NOTE : random number generator reset
 
         # get latest checkoint info
-        print('Trying to load checkpoint..')
-        last_epoch = self.experiment.last_epoch()
-        # look for last uncorruted checkpoint
-        while last_epoch >= 0:
-            checkpoint = self.experiment.load_checkpoint_file()  # latest
-            if checkpoint is not None:
-               break  # successfull load
-            last_epoch -= 1
-        else:
-            raise RuntimeError(
-                'Trainer::No uncorupted checkpoints found for resuming the run from epoch{}. It\'s recommended to start anew'.format(self.experiment.last_epoch()))
-        
+        print('Trainer::Loading checkpoint to resume run..')
+        checkpoint = self.experiment.load_checkpoint_file()  # latest
+
         # checkpoint loaded correctly
         model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
