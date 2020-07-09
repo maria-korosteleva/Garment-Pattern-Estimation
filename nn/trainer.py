@@ -68,13 +68,13 @@ class Trainer():
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
         self.setup['model'] = model.__class__.__name__
 
+        self.device = self.setup['device']
+    
         self._add_optimizer(model)
         self._add_loss()
         self._add_scheduler()
 
         start_epoch = self._start_experiment(model)
-
-        self.device = torch.device(wb.config.device)
         print('NN training Using device: {}'.format(self.device))
 
         if self.log_with_visualization:
@@ -92,8 +92,11 @@ class Trainer():
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
-
             print('Trainer: Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
+
+            if self.device != wb.config.device:
+                # device doesn't matter much, so we just inform but do not crash
+                print('Trainer::Warning::Resuming run on different device. Was {}, now using {}'.format(wb.config.device, self.device))
         else:
             start_epoch = 0
             self.datawraper.save_to_wandb(self.experiment)
@@ -109,7 +112,8 @@ class Trainer():
             self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'])
         elif self.setup['optimizer'] == 'Adam':
             # future 'else'
-            print('Trainer::Using default SGD optimizer')
+            print('Trainer::Using Adam optimizer')
+            model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'])
         
     def _add_loss(self):
@@ -186,7 +190,9 @@ class Trainer():
             Returns id of the next epoch to resume from. """
         
         # data split
-        split, batch_size = self.experiment.data_info()
+        split, batch_size, data_config = self.experiment.data_info()
+
+        self.datawraper.dataset.update_config(data_config)
         self.datawraper.load_split(split, batch_size)  # NOTE : random number generator reset
 
         # get latest checkoint info
