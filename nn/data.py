@@ -293,8 +293,10 @@ class GarmentParamsDataset(BaseDataset):
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
 
     def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder"""
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations"""
 
+        prediction_imgs = []
         for prediction, name in zip(predictions, datanames):
             prediction = prediction.tolist()
             pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
@@ -303,12 +305,15 @@ class GarmentParamsDataset(BaseDataset):
             pattern.apply_param_list(prediction)
             # save
             final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
 
             # copy originals for comparison
             for file in (self.root_path / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
-
+        return prediction_imgs
+    
     # ------ Data-specific basic functions --------
     def _clean_datapoint_list(self):
         """Remove all elements marked as failure from the datapoint list"""
@@ -398,8 +403,10 @@ class ParametrizedShirtDataSet(BaseDataset):
         super().__init__(root_dir, start_config, transforms=transforms)
         
     def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder"""
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with predictions"""
         
+        prediction_files = []
         for prediction, name in zip(predictions, datanames):
             path_to_prediction = Path(save_to) / name
             path_to_prediction.mkdir(parents=True, exist_ok=True)
@@ -408,6 +415,8 @@ class ParametrizedShirtDataSet(BaseDataset):
             with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
                 f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
                 print ('Saved ' + name)
+            prediction_files.append(str(path_to_prediction / self.pattern_params_filename))
+        return prediction_files
 
     # ------ Data-specific basic functions  -------
     def _clean_datapoint_list(self):

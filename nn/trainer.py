@@ -29,7 +29,8 @@ class Trainer():
             learning_rate=0.001,
             loss='MSELoss',
             optimizer='Adam',
-            lr_scheduling=True
+            lr_scheduling=True, 
+            early_stopping='learning_rate'
         )
 
         if dataset is not None:
@@ -78,7 +79,8 @@ class Trainer():
         print('Trainer::NN training Using device: {}'.format(self.device))
 
         if self.log_with_visualization:
-            self.folder_for_preds = Path(wb.run.dir) / 'intermediate_preds'
+            # go to upper dir to avoid bug TODO https://github.com/wandb/client/issues/1128
+            self.folder_for_preds = Path(wb.run.dir) / '..' / 'intermediate_preds'
             self.folder_for_preds.mkdir(exist_ok=True)
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
@@ -87,6 +89,45 @@ class Trainer():
         print ("Trainer::Finished training")
 
     # ---- Private -----
+    def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
+        """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
+        model.to(self.device)
+        log_step = wb.run.step - 1
+        for epoch in range (start_epoch, wb.config.epochs):
+            model.train()
+            for i, batch in enumerate(train_loader):
+                features, params = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
+                
+                #with torch.autograd.detect_anomaly():
+                preds = model(features)
+                loss = self.regression_loss(preds, params)
+                #print ('Epoch: {}, Batch: {}, Loss: {}'.format(epoch, i, loss))
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                
+                # logging
+                log_step += 1
+                wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
+
+            # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+            model.eval()
+            with torch.no_grad():
+                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['ground_truth'].to(self.device)) for batch in valid_loader]
+            valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
+            self.scheduler.step(valid_loss)
+            
+            # Base logging
+            print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
+            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
+
+            # prediction for visual reference
+            if self.log_with_visualization:
+                self._log_an_image(model, valid_loader, epoch, log_step)
+
+            # checkpoint
+            self._save_checkpoint(model, epoch)
+
     def _start_experiment(self, model):
         self.experiment.init_run(self.setup)
 
@@ -129,58 +170,6 @@ class Trainer():
         else:
             print('Trainer::Warning::no learning scheduling set')
 
-    def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
-        """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
-        model.to(self.device)
-        log_step = wb.run.step - 1
-        for epoch in range (start_epoch, wb.config.epochs):
-            model.train()
-            for i, batch in enumerate(train_loader):
-                features, params = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
-                
-                #with torch.autograd.detect_anomaly():
-                preds = model(features)
-                loss = self.regression_loss(preds, params)
-                #print ('Epoch: {}, Batch: {}, Loss: {}'.format(epoch, i, loss))
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-                
-                # logging
-                log_step += 1
-                wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
-
-            # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
-            model.eval()
-            with torch.no_grad():
-                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['ground_truth'].to(self.device)) for batch in valid_loader]
-            valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
-            self.scheduler.step(valid_loss)
-            
-            # Base logging
-            print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
-            wb.log({
-                'epoch': epoch, 
-                'valid_loss': valid_loss, 
-                'learning_rate': self.optimizer.param_groups[0]['lr'],
-                }, step=log_step)
-
-            # prediction for visual reference
-            if self.log_with_visualization:
-                for batch in valid_loader:
-                    Path(wb.run.dir) / 'intermediate_preds'
-                    self.datawraper.dataset.save_prediction_batch(model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
-                    name = batch['name'][0]  # just one to see the dynamics in wandb ui
-                    wb.log({
-                        name: wb.Image(str(self.folder_for_preds / name / (name + '_predicted__pattern.png')), ),
-                        'epoch': epoch,
-                    }, 
-                    step=log_step)
-                    break  # One is enough
-
-            # checkpoint
-            self._save_checkpoint(model, epoch)
-
     def _restore_run(self, model):
         """Restore the training process from the point it stopped at. 
             Assuming 
@@ -207,6 +196,16 @@ class Trainer():
 
         # new epoch id
         return checkpoint['epoch'] + 1
+
+    def _log_an_image(self, model, loader, epoch, log_step):
+        """Log image of one example prediction to wandb.
+            If the loader does not shuffle batches, logged image is the same on every step"""
+        for batch in loader:
+            img_files = self.datawraper.dataset.save_prediction_batch(
+                model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
+            
+            wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+            break  # One is enough
 
     def _save_checkpoint(self, model, epoch):
         """Save checkpoint to be used to resume training"""
