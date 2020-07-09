@@ -171,7 +171,7 @@ class SampleToTensor(object):
 
 class BaseDataset(Dataset):
     """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, start_config={}):
+    def __init__(self, root_dir, start_config={}, transforms=[]):
         """Kind of Universal init for my datasets"""
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
@@ -184,7 +184,7 @@ class BaseDataset(Dataset):
         self._clean_datapoint_list()
 
         # Use default tensor transform + the ones from input
-        self.transform = SampleToTensor()
+        self.transforms = [SampleToTensor()] + transforms
 
         # in\out sizes
         elem = self[0]
@@ -229,8 +229,9 @@ class BaseDataset(Dataset):
         
         sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
         
-        if self.transform is not None:
-            sample = self.transform(sample)
+        # apply transfomations
+        for transform in self.transforms:
+            sample = transform(sample)
         
         return sample
 
@@ -263,12 +264,13 @@ class BaseDataset(Dataset):
         """Update object inner state after config values have changed"""
         pass
 
+
 class GarmentParamsDataset(BaseDataset):
     """
     For loading the custom generated data & predicting generated parameters
     """
     
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}):
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -282,7 +284,7 @@ class GarmentParamsDataset(BaseDataset):
         if 'mesh_samples' not in start_config:  
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
-        super().__init__(root_dir, start_config)
+        super().__init__(root_dir, start_config, transforms=transforms)
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -366,8 +368,8 @@ class GarmentParamsDataset(BaseDataset):
    
 
 class Garment3DParamsDataset(GarmentParamsDataset):
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}):
-        super().__init__(root_dir, start_config)
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+        super().__init__(root_dir, start_config, transforms=transforms)
     
     # the only difference with parent class in the shape of the features
     def _get_features(self, datapoint_name, folder_elements):
@@ -380,7 +382,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={}):
+    def __init__(self, root_dir, start_config={}, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -393,7 +395,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         self.features_filename = 'visfea.mat'
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
-        super().__init__(root_dir, start_config)
+        super().__init__(root_dir, start_config, transforms=transforms)
         
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder"""

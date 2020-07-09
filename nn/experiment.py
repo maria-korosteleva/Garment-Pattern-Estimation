@@ -147,7 +147,7 @@ class WandbRunWrappper(object):
             artifact_path = self.checkpoint_artifactname(version=version)
             print('Experiment::Requesting checkpoint artifacts {}'.format(artifact_path))
 
-            artifact = wb.run.use_artifact(artifact_path)
+            artifact = wb.run.use_artifact(artifact_path)  # only work with active runs for now
             filepath = artifact.download(str(to_path))
     
             # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208

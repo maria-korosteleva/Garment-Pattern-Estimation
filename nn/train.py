@@ -12,8 +12,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='checkpoints', 
-    run_id='3edy0hz0', 
+    run_name='transforms', 
+    run_id=None, 
     no_sync=False) 
 
 # train
