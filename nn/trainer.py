@@ -30,7 +30,10 @@ class Trainer():
             loss='MSELoss',
             optimizer='Adam',
             lr_scheduling=True, 
-            early_stopping='learning_rate'
+            early_stopping={
+                'window': 0.3,
+                'patience': 10
+            }
         )
 
         if dataset is not None:
@@ -74,6 +77,7 @@ class Trainer():
         self._add_optimizer(model)
         self._add_loss()
         self._add_scheduler()
+        self.es_tracking = []  # early stopping init
 
         start_epoch = self._start_experiment(model)
         print('Trainer::NN training Using device: {}'.format(self.device))
@@ -128,6 +132,11 @@ class Trainer():
             # checkpoint
             self._save_checkpoint(model, epoch)
 
+            # check for early stoping
+            if self._early_stopping(model, loss, valid_loss):
+                print('Trainer::Stopped training early')
+                break
+
     def _start_experiment(self, model):
         self.experiment.init_run(self.setup)
 
@@ -166,7 +175,8 @@ class Trainer():
     def _add_scheduler(self):
         if ('lr_scheduling' in self.setup
                 and self.setup['lr_scheduling']):
-            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=1)
+            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, mode='min', factor=0.1, patience=1, verbose=True)
         else:
             print('Trainer::Warning::no learning scheduling set')
 
@@ -197,6 +207,29 @@ class Trainer():
         # new epoch id
         return checkpoint['epoch'] + 1
 
+    def _early_stopping(self, model, last_loss, last_tracking_loss):
+        """Check if conditions are met to stop training. Returns a message with a reason if met
+            Early stopping allows to save compute time"""
+
+        # loss goes into nans
+        if torch.isnan(last_loss):
+            print('Trainer::EarlyStopping::Detected nan training losses')
+            self.experiment.add_statistic('stopped early', 'Nan in losses')
+            return True
+
+        # Target metric is not improving for some time
+        self.es_tracking.append(last_tracking_loss.item())
+        if len(self.es_tracking) > (wb.config.early_stopping['patience'] + 1):  # number of last calls to consider plus current -> at least two
+            self.es_tracking.pop(0)
+            # if all values fit into a window, they don't change much
+            if abs(max(self.es_tracking) - min(self.es_tracking)) < wb.config.early_stopping['window']:
+                print('Trainer::EarlyStopping::Metric have not changed for {} epochs'.format(wb.config.early_stopping['patience']))
+                self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.early_stopping['patience']))
+                return True
+        # do not check untill wb.config.early_stopping.patience # of calls are gathered
+        
+        return False
+
     def _log_an_image(self, model, loader, epoch, log_step):
         """Log image of one example prediction to wandb.
             If the loader does not shuffle batches, logged image is the same on every step"""
@@ -204,6 +237,7 @@ class Trainer():
             img_files = self.datawraper.dataset.save_prediction_batch(
                 model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
             
+            print(img_files[0])
             wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
             break  # One is enough
 
