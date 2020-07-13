@@ -346,11 +346,12 @@ class GarmentParamsDataset(BaseDataset):
         num_samples = self.config['mesh_samples']
 
         barycentric_samples, face_ids = igl.random_points_on_mesh(num_samples, verts, faces)
+        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
 
         # convert to normal coordinates
         points = np.empty(barycentric_samples.shape)
         for i in range(len(face_ids)):
-            face = faces[face_ids[i] - 1]
+            face = faces[face_ids[i]]
             barycentric_coords = barycentric_samples[i]
             face_verts = verts[face]
             points[i] = np.dot(barycentric_coords, face_verts)
