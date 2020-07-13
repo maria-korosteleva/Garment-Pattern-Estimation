@@ -11,8 +11,8 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='early_stopping', 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='memory-with-viz', 
     run_id=None, 
     no_sync=False) 
 
@@ -22,7 +22,7 @@ dataset = data.Garment3DParamsDataset(Path(system_info['output']) / dataset_fold
 # dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
-                  with_visualization=False)  # only turn on on custom garment data
+                  with_visualization=True)  # only turn on on custom garment data
 dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()

@@ -133,7 +133,7 @@ class Trainer():
             self._save_checkpoint(model, epoch)
 
             # check for early stoping
-            if self._early_stopping(model, loss, valid_loss):
+            if self._early_stopping(loss, valid_loss):
                 print('Trainer::Stopped training early')
                 break
 
@@ -207,7 +207,7 @@ class Trainer():
         # new epoch id
         return checkpoint['epoch'] + 1
 
-    def _early_stopping(self, model, last_loss, last_tracking_loss):
+    def _early_stopping(self, last_loss, last_tracking_loss):
         """Check if conditions are met to stop training. Returns a message with a reason if met
             Early stopping allows to save compute time"""
 
@@ -233,13 +233,14 @@ class Trainer():
     def _log_an_image(self, model, loader, epoch, log_step):
         """Log image of one example prediction to wandb.
             If the loader does not shuffle batches, logged image is the same on every step"""
-        for batch in loader:
-            img_files = self.datawraper.dataset.save_prediction_batch(
-                model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
-            
-            print(img_files[0])
-            wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
-            break  # One is enough
+        with torch.no_grad():
+            for batch in loader:
+                img_files = self.datawraper.dataset.save_prediction_batch(
+                    model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
+                
+                print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
+                wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+                break  # One is enough
 
     def _save_checkpoint(self, model, epoch):
         """Save checkpoint to be used to resume training"""
