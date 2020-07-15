@@ -265,12 +265,10 @@ class BaseDataset(Dataset):
         pass
 
 
-class GarmentParamsDataset(BaseDataset):
-    """
-    For loading the custom generated data & predicting generated parameters
-    """
-    
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+class GarmentBaseDataset(BaseDataset):
+    """Base class to work with data from custom garment datasets"""
+        
+    def __init__(self, root_dir, start_config={}, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -279,11 +277,8 @@ class GarmentParamsDataset(BaseDataset):
         """
         self.dataset_props = Properties(Path(root_dir) / 'dataset_properties.json')
         if not self.dataset_props['to_subfolders']:
-            raise NotImplementedError('Working with datasets with all satapopints ')
+            raise NotImplementedError('Working with datasets with all datapopints ')
         
-        if 'mesh_samples' not in start_config:  
-            start_config['mesh_samples'] = 1000  # some default to ensure it's set
-
         super().__init__(root_dir, start_config, transforms=transforms)
      
     def save_to_wandb(self, experiment):
@@ -291,28 +286,6 @@ class GarmentParamsDataset(BaseDataset):
         super().save_to_wandb(experiment)
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
-
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
-            Returns list of paths to files with prediction visualizations"""
-
-        prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
-            prediction = prediction.tolist()
-            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
-
-            # apply new parameters
-            pattern.apply_param_list(prediction)
-            # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
     
     # ------ Data-specific basic functions --------
     def _clean_datapoint_list(self):
@@ -329,12 +302,6 @@ class GarmentParamsDataset(BaseDataset):
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
 
-    def _get_features(self, datapoint_name, folder_elements):
-        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        points = self._sample_points(datapoint_name, folder_elements)
-
-        return points.ravel()  # flat vector as a feature
-        
     def _sample_points(self, datapoint_name, folder_elements):
         """Make a sample from the 3d surface of a given datapoint"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
@@ -362,6 +329,55 @@ class GarmentParamsDataset(BaseDataset):
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
+
+class GarmentParamsDataset(GarmentBaseDataset):
+    """
+    For loading the custom generated data:
+        * features: Coordinates of 3D mesh sample points flattened into vector
+        * Ground_truth: parameters used to generate a garment
+    """
+    
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+        """
+        Args:
+            root_dir (string): Directory with all examples as subfolders
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        if 'mesh_samples' not in start_config:  
+            start_config['mesh_samples'] = 1000  # some default to ensure it's set
+
+        super().__init__(root_dir, start_config, transforms=transforms)
+     
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations"""
+
+        prediction_imgs = []
+        for prediction, name in zip(predictions, datanames):
+            prediction = prediction.tolist()
+            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
+
+            # apply new parameters
+            pattern.apply_param_list(prediction)
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+        return prediction_imgs
+    
+    # ------ Data-specific basic functions --------
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        points = self._sample_points(datapoint_name, folder_elements)
+
+        return points.ravel()  # flat vector as a feature
+        
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Pattern parameters from a given datapoint subfolder"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -374,6 +390,10 @@ class GarmentParamsDataset(BaseDataset):
    
 
 class Garment3DParamsDataset(GarmentParamsDataset):
+    """For loading the custom generated data:
+        * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
+        * Ground_truth: parameters used to generate a garment
+    """
     def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
         super().__init__(root_dir, start_config, transforms=transforms)
     
@@ -381,6 +401,55 @@ class Garment3DParamsDataset(GarmentParamsDataset):
     def _get_features(self, datapoint_name, folder_elements):
         points = self._sample_points(datapoint_name, folder_elements)
         return points  # return in 3D
+
+
+class GarmentPanelDataset(GarmentBaseDataset):
+    """Experimental loading of custom generated data to be used in AE:
+        * features: a 'front' panel edges represented as a sequence
+        * ground_truth is not used
+
+    """
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+        super().__init__(root_dir, start_config, transforms=transforms)
+    
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations"""
+
+        prediction_imgs = []
+        for prediction, name in zip(predictions, datanames):
+            prediction = prediction.tolist()
+            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
+
+            # TODO apply new edge info
+
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+        return prediction_imgs
+    
+    # ------ Data-specific basic functions --------
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = ParametrizedPattern(self.root_path / datapoint_name / spec_list[0])
+
+        return np.array(pattern.param_values_list())  # TODO edge sequence
+        
+    def _get_ground_truth(self, datapoint_name, folder_elements):
+        """Pattern parameters from a given datapoint subfolder"""
+        return None
+   
+
 
 
 class ParametrizedShirtDataSet(BaseDataset):
