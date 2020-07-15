@@ -22,6 +22,7 @@ if not experiment.is_finished():
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+data_config.update({'num_verts': 500})
 dataset = data.ParametrizedShirtDataSet(datapath, data_config)
 # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, data_config)

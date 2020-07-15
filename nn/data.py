@@ -388,7 +388,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={}, transforms=[]):
+    def __init__(self, root_dir, start_config={'num_verts': 'all'}, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -430,7 +430,10 @@ class ParametrizedShirtDataSet(BaseDataset):
         
         verts, _ = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
         
-        return verts[:500].ravel()   # [:500]
+        if self.config['num_verts'] == 'all':
+            return verts.ravel()
+        
+        return verts[:self.config['num_verts']].ravel()
         
     def _get_ground_truth(self, datapoint_name, folder_elements=None):
         """9 pattern size parameters from a given datapoint subfolder"""
