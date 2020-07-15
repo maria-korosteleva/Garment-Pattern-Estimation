@@ -430,7 +430,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         
         verts, _ = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
         
-        return verts.ravel()   # [:500]
+        return verts[:500].ravel()   # [:500]
         
     def _get_ground_truth(self, datapoint_name, folder_elements=None):
         """9 pattern size parameters from a given datapoint subfolder"""

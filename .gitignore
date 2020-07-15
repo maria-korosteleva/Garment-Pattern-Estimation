@@ -3,6 +3,7 @@
 
 # Weights and Biases logs -- no need to save
 wandb
+artifacts
 
 # VSCode settings
 *.code-workspace

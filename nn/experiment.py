@@ -138,23 +138,22 @@ class WandbRunWrappper(object):
         # raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
 
     # ----- working with files -------
-    def load_checkpoint_file(self, to_path=Path('./wandb/'), version=None):
+    def load_checkpoint_file(self, to_path=None, version=None):
         """Load checkpoint file for given epoch from the cloud"""
-        if not self.run_id or not self.initialized:
-            raise RuntimeError('WbRunWrapper:Error:Need to have active run and know run id to restore checkpoint from the could')
-            # TODO relax requirements after fix of https://github.com/wandb/client/issues/1147
         try:
-            artifact_path = self.checkpoint_artifactname(version=version)
-            print('Experiment::Requesting checkpoint artifacts {}'.format(artifact_path))
+            artifact_name = self.checkpoint_artifactname(version=version)
+            print('Experiment::Requesting checkpoint artifacts: {}'.format(artifact_name))
 
-            artifact = wb.run.use_artifact(artifact_path)  # only work with active runs for now
-            filepath = artifact.download(str(to_path))
+            api = wb.Api({'project': self.project})
+            artifact = api.artifact(name=artifact_name)
+            filepath = artifact.download(str(to_path) if to_path else None)
+            print('Experiment::Checkpoint saved to: {}'.format(filepath))
     
             # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
             checkpoint = torch.load(str(Path(filepath) / self.checkpoint_filename()))
             return checkpoint
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
-            print('WbRunWrapper::Error::checkpoint from version {} is corrupted or lost: {}'.format(version if version else 'latest', e))
+            print('WbRunWrapper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
             raise e
     
     def load_final_model(self, to_path=Path('.')):
