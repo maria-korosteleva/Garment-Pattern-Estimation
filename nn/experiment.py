@@ -69,6 +69,11 @@ class WandbRunWrappper(object):
         run = self._run_object()
         return run.config['data_split'], run.config['batch_size'], run.config['dataset']
 
+    def NN_config(self):
+        """Run configuration params of NeuralNetwork model"""
+        run = self._run_object()
+        return run.config['NN']
+
     def add_statistic(self, tag, info):
         """Add info the run summary (e.g. stats on test set)"""
         # different methods for on-going & finished runs
@@ -113,9 +118,9 @@ class WandbRunWrappper(object):
         """Produce filename for the checkpoint of given epoch"""
         return '{}.pth'.format(self.checkpoint_filetag)
 
-    def checkpoint_artifactname(self, with_version=True, version=None):
-        """Produce filename for checkpoint wandb artifact for current run"""
-        basename = self.run_name + '_' + self.run_id + '_' + self.checkpoint_filetag
+    def artifactname(self, tag, with_version=True, version=None):
+        """Produce name for wandb artifact for current run with fiven tag"""
+        basename = self.run_name + '_' + self.run_id + '_' + tag
         version_tag = ':v' + str(version) if version is not None else ':latest'
 
         return basename + version_tag if with_version else basename
@@ -123,7 +128,7 @@ class WandbRunWrappper(object):
     def final_filename(self):
         """Produce filename for the final model file (assuming PyTorch)"""
         return self.final_filetag + '.pth'
-    
+
     def cloud_path(self):
         """Return virtual path to the current run on wandb could
             Implemented as a function to allow dynamic update of components with less bugs =)
@@ -140,63 +145,64 @@ class WandbRunWrappper(object):
     # ----- working with files -------
     def load_checkpoint_file(self, to_path=None, version=None):
         """Load checkpoint file for given epoch from the cloud"""
+        if not self.run_id:
+            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore checkpoint from the could')
         try:
-            artifact_name = self.checkpoint_artifactname(version=version)
-            print('Experiment::Requesting checkpoint artifacts: {}'.format(artifact_name))
+            art_path = self._load_artifact(self.artifactname(self.checkpoint_filetag, version=version))
+            return torch.load(str(Path(art_path) / self.checkpoint_filename()))
 
-            api = wb.Api({'project': self.project})
-            artifact = api.artifact(name=artifact_name)
-            filepath = artifact.download(str(to_path) if to_path else None)
-            print('Experiment::Checkpoint saved to: {}'.format(filepath))
-    
-            # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
-            checkpoint = torch.load(str(Path(filepath) / self.checkpoint_filename()))
-            return checkpoint
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
             print('WbRunWrapper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
             raise e
     
-    def load_final_model(self, to_path=Path('.')):
+    def load_final_model(self, to_path=None):
         """Load final model parameters file from the cloud if it exists"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
         try:
-            if self.initialized:  # use run directory
-                wb.restore(self.final_filename(), run_path=self.cloud_path())
-                to_path = self.local_path() 
-            else:
-                wb.restore(self.final_filename(), run_path=self.cloud_path(), replace=True, root=to_path)
-                # TODO think about deleting loaded file
-            model_info = torch.load(to_path / self.final_filename())
-            return model_info
+            art_path = self._load_artifact(self.artifactname(self.final_filetag), to_path=to_path)
+            return torch.load(str(Path(art_path) / self.final_filename()))
 
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
     
-    def save(self, state, checkpoint=False, final=False, filename=''):
+    def save(self, state, save_name='checkpoint'):
         """Save given state dict as torch checkpoint to local run dir
-            epoch/final/filename parameters control saving names (multiple could be used):
-            * If epoch parameter is given, state is saved as checkpoint file for given epoch
-            * If final is true, state is saved as final model file
-            * if filename is given, state is simply saved with ginev filename"""
+            save_name parameter controls saving names (multiple could be used):
+            * 'checkpoint' -> state is saved as a new checkpoint file
+            * 'final' -> state is saved as final model file
+            * all other options -> type is interpreted as filename, and state is simply saved with ginen filename"""
 
         if not self.initialized:
             raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
 
-        # checkpoints require versioning -> use artifacts
-        if checkpoint:
-            artifact = wb.Artifact(self.checkpoint_artifactname(with_version=False), type='checkpoint')
-            torch.save(state, self.local_path() / self.checkpoint_filename())
-            artifact.add_file(str(self.local_path() / self.checkpoint_filename()))
-            wb.run.log_artifact(artifact)
+        # Using artifacts to store important files for this run
+        if save_name == 'checkpoint':
+            artifact = wb.Artifact(self.artifactname(self.checkpoint_filetag, with_version=False), type='checkpoint')
+            filename = self.checkpoint_filename()
+        elif save_name == 'final':
+            artifact = wb.Artifact(self.artifactname(self.final_filetag, with_version=False), type='result')
+            filename = self.final_filename()
+        else:
+            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='other')
+            filename = save_name
 
-        # Not using artifacts for cases that do not require versioning
-        if final:
-            torch.save(state, self.local_path() / self.final_filename())
-        if filename:
-            torch.save(state, self.local_path() / filename)
+        torch.save(state, self.local_path() / filename)
+        artifact.add_file(str(self.local_path() / filename))
+        wb.run.log_artifact(artifact)
 
     # ------- utils -------
+    def _load_artifact(self, artifact_name, to_path=None):
+        """Download a requested artifact withing current project. Return loaded path"""
+        print('Experiment::Requesting artifacts: {}'.format(artifact_name))
+
+        api = wb.Api({'project': self.project})
+        artifact = api.artifact(name=artifact_name)
+        filepath = artifact.download(str(to_path) if to_path else None)
+        print('Experiment::Artifact saved to: {}'.format(filepath))
+
+        return filepath
+
     def _run_object(self):
         """ Shortcut for getting reference to wandb api run object. 
             To uniformly access both ongoing & finished runs"""

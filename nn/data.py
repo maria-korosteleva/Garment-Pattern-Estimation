@@ -192,7 +192,7 @@ class BaseDataset(Dataset):
         # sanity checks
         if ('feature_size' in self.config and feature_size != self.config['feature_size']
                 or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
-            raise RuntimeError('BaseDataset:Error:feature shape {} or ground thruth shape {} from loaded config do not match calculated values: {}, {}'.format(
+            raise RuntimeError('BaseDataset::Error::feature shape ({}) or ground truth shape ({}) from loaded config do not match calculated values: {}, {}'.format(
                 self.config['feature_size'],  self.config['ground_truth_size'], feature_size, gt_size))
 
         self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size

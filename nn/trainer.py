@@ -89,7 +89,7 @@ class Trainer():
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
-        self.experiment.save(model.state_dict(), final=True)
+        self.experiment.save(model.state_dict(), save_name='final')
         print ("Trainer::Finished training")
 
     # ---- Private -----
@@ -251,6 +251,6 @@ class Trainer():
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict()
             },
-            checkpoint=True
+            save_name='checkpoint'
         )
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training

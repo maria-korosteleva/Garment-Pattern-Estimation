@@ -12,14 +12,14 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='memory-with-viz', 
-    run_id=None, 
+    run_name='artifacts', 
+    run_id='fr3rlv3c', 
     no_sync=False) 
 
 # train
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, {'mesh_samples': 2000})
 dataset = data.Garment3DParamsDataset(Path(system_info['output']) / dataset_folder, {'mesh_samples': 2000})
-# dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest')
+# dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
                   with_visualization=True)  # only turn on on custom garment data
@@ -42,8 +42,11 @@ experiment.add_statistic('test', final_metrics)
 
 # save predictions
 prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-experiment.add_statistic('predictions_folder', prediction_path.name)
-
 print('Predictions saved to {}'.format(prediction_path))
 
-# TODO upload as artifact
+# reflect predictions info in expetiment
+experiment.add_statistic('predictions_folder', prediction_path.name)
+experiment.add_artifact(prediction_path, dataset_wrapper.dataset.name, 'result')
+
+
+

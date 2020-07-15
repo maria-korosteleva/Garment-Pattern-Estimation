@@ -12,8 +12,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='shirts-artifacts-resume', 
-    run_id='2uhu1z1m')  # finished experiment
+    run_name='artifacts', 
+    run_id='fr3rlv3c')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -22,20 +22,22 @@ if not experiment.is_finished():
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
-data_config.update({'num_verts': 500})
-dataset = data.ParametrizedShirtDataSet(datapath, data_config)
-# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+# data_config.update({'num_verts': 500})
+# dataset = data.ParametrizedShirtDataSet(datapath, data_config)
+dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, data_config)
+dataset = data.Garment3DParamsDataset(Path(system_info['output']) / dataset_folder, data_config)
 
 print(dataset.config)
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+# model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-# model.load_state_dict(experiment.load_final_model(to_path=Path('./wandb')))
-model.load_state_dict(experiment.load_checkpoint_file(version=0)['model_state_dict'])
+model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], experiment.NN_config())
+# model.load_state_dict(experiment.load_final_model())
+model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
 
 # ------- Evaluate --------
 # valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
@@ -50,4 +52,4 @@ prediction_path = datawrapper.predict(model, save_to=Path(system_info['output'])
 
 print('Saved to {}'.format(prediction_path))
 
-# experiment.add_artifact(prediction_path, datawrapper.dataset.name, 'result')
+experiment.add_artifact(prediction_path, datawrapper.dataset.name, 'result')
