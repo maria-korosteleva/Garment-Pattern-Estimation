@@ -13,7 +13,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern.core import ParametrizedPattern
+from pattern.core import ParametrizedPattern, BasicPattern
 from pattern.wrappers import VisPattern
 
 # ---------------------- Main Wrapper ------------------
@@ -158,11 +158,11 @@ class SampleToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     
     def __call__(self, sample):
-        features, params = sample['features'], sample['ground_truth']
+        features, gt = sample['features'], sample['ground_truth']
         
         return {
-            'features': torch.from_numpy(features).float(), 
-            'ground_truth': torch.from_numpy(params).float(), 
+            'features': torch.from_numpy(features).float() if features is not None else torch.Tensor(), 
+            'ground_truth': torch.from_numpy(gt).float() if gt is not None else torch.Tensor(), 
             'name': sample['name']
         }
 
@@ -409,8 +409,9 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * ground_truth is not used
 
     """
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+    def __init__(self, root_dir, start_config={'panel_name': 'front'}, transforms=[]):
         super().__init__(root_dir, start_config, transforms=transforms)
+        self.config['element_size'] = self[0]['features'].shape[1]
     
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
@@ -418,10 +419,15 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
         prediction_imgs = []
         for prediction, name in zip(predictions, datanames):
-            prediction = prediction.tolist()
+            prediction = prediction.cpu().numpy()
             pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
 
-            # TODO apply new edge info
+            # apply new edge info
+            try: 
+                pattern.panel_from_sequence(self.config['panel_name'], prediction)
+            except RuntimeError as e:
+                print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
+                pass
 
             # save
             final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
@@ -441,15 +447,13 @@ class GarmentPanelDataset(GarmentBaseDataset):
         if not spec_list:
             raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
         
-        pattern = ParametrizedPattern(self.root_path / datapoint_name / spec_list[0])
+        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
 
-        return np.array(pattern.param_values_list())  # TODO edge sequence
+        return pattern.panel_as_sequence(self.config['panel_name'])
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
-   
-
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -523,11 +527,11 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = GarmentParamsDataset(data_location, { 'mesh_samples': 10000 })
+    dataset = GarmentPanelDataset(data_location)
 
-    print(len(dataset))
-    # print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
-    print(dataset[0]['ground_truth'].shape)
+    print(len(dataset), dataset.config)
+    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
+    # print(dataset[0]['ground_truth'].shape)
     # print(dataset[0]['features'])
 
     # loader = DataLoader(dataset, 10, shuffle=True)

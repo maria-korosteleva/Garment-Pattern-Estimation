@@ -91,7 +91,7 @@ def MLP(channels, batch_norm=True):
     ])
 
 
-class GarmentParamsPoint(torch.nn.Module):
+class GarmentParamsPoint(nn.Module):
     """PointNet++ processing of input geometry to predict parameters
         Note that architecture is agnostic of number of input points"""
     def __init__(self, out_size, config={'r1': 0.2, 'r2': 0.4}):
@@ -129,11 +129,76 @@ class GarmentParamsPoint(torch.nn.Module):
         return x
 
 
+# ------------- Pattern representation ----
+
+class GarmentPanelsAE(nn.Module):
+    """Model for sequential encoding & decoding of garment panels
+        References: 
+        * https://blog.floydhub.com/a-beginners-guide-on-recurrent-neural-networks-with-pytorch/
+        * for seq2seq decisions https://machinelearningmastery.com/encoder-decoder-long-short-term-memory-networks/
+    """
+    def __init__(self, in_elem_len, max_seq_len, config={}):
+        super().__init__()
+
+        # defaults
+        self.config = {'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3}
+        self.config.update(config)
+
+        self.max_seq_len = max_seq_len
+
+        # encode
+        self.seq_encoder = nn.LSTM(
+            in_elem_len, 
+            self.config['hidden_dim_enc'], self.config['n_layers'], 
+            batch_first=True)
+
+        # decode
+        self.seq_decoder = nn.LSTM(
+            self.config['hidden_dim_enc'], 
+            self.config['hidden_dim_dec'], self.config['n_layers'], 
+            batch_first=True)
+
+        # post-process
+        self.lin = nn.Linear(self.config['hidden_dim_dec'], in_elem_len)
+
+    def forward(self, x):
+        self.device = x.device
+        batch_size = x.size(0)
+        
+        # --- encode --- 
+        hidden_init, cell_init = self.init_hidden(batch_size), self.init_hidden(batch_size)
+        out, (hidden, _) = self.seq_encoder(x, (hidden_init, cell_init))
+        # final encoding is the last output == hidden of last layer 
+        encoding = hidden[-1]
+
+        # --- decode ---
+        # propagate encoding for needed seq_len
+        dec_input = encoding.unsqueeze(1).repeat(1, self.max_seq_len, 1)  # along sequence dimention
+        # init memory with zeros (not with encoder state) for future indeendent use of decoder 
+        dec_hidden_init, dec_cell_init = self.init_hidden(batch_size), self.init_hidden(batch_size)
+        out, hidden = self.seq_decoder(dec_input, (dec_hidden_init, dec_cell_init))
+        
+        # --- back to original format --- 
+        # Reshaping the outputs such that it can be fit into the fully connected layer
+        out = out.contiguous().view(-1, self.config['hidden_dim_dec'])
+        out = self.lin(out)
+        # back to sequence
+        out = out.contiguous().view(batch_size, self.max_seq_len, -1)
+        
+        return out
+
+    def init_hidden(self, batch_size):
+        # This method generates the first hidden state of zeros which we'll use in the forward pass
+        # We'll send the tensor holding the hidden state to the device we specified earlier as well
+        hidden = torch.zeros(self.config['n_layers'], batch_size, self.config['hidden_dim_enc'])
+        return hidden.to(self.device)
+
+
 if __name__ == "__main__":
-    net = GarmentParamsPoint(10)
-    # print(net)
+    a = torch.arange(1, 17, dtype=torch.float)
+    batch = a.view(2, -1, 2)  # ~ 2 examples in batch
 
-    a = torch.arange(1, 31, dtype=torch.float)
-    batch = a.view(2, -1, 3)  # ~ 2 examples, 5 3D points each
+    net = GarmentPanelsAE(batch.shape[2], batch.shape[1])
 
+    print('In batch shape: {}'.format(batch.shape))
     print(net(batch))  # should have 2 x 10 shape -- per example prediction

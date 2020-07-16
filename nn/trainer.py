@@ -24,7 +24,7 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=50,
+            epochs=500,
             batch_size=32,
             learning_rate=0.001,
             loss='MSELoss',
@@ -97,15 +97,18 @@ class Trainer():
         """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
         model.to(self.device)
         log_step = wb.run.step - 1
+        
         for epoch in range (start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
-                features, params = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
+                features, gt = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
                 
                 #with torch.autograd.detect_anomaly():
                 preds = model(features)
-                loss = self.regression_loss(preds, params)
-                #print ('Epoch: {}, Batch: {}, Loss: {}'.format(epoch, i, loss))
+                if gt.nelement() != 0:  # usual supervised case
+                    loss = self.regression_loss(preds, gt)
+                else:  # no gt -> apply reconstruction loss
+                    loss = self.regression_loss(preds, features) 
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -117,7 +120,8 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['ground_truth'].to(self.device)) for batch in valid_loader]
+                # TODO Changed for reconstruction loss!!
+                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['features'].to(self.device)) for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
             

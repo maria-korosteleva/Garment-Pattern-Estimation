@@ -126,7 +126,7 @@ class BasicPattern(object):
 
         return np.stack(edge_sequence, axis=0)
 
-    def set_panel_from_sequence(self, panel_name, edge_sequence):
+    def panel_from_sequence(self, panel_name, edge_sequence):
         """Set panel vertex positions & edge dictionaries from given edge sequence"""
         if panel_name not in self.pattern['panels']:
             raise ValueError('BasicPattern::requested update for non-existent ')
@@ -143,9 +143,13 @@ class BasicPattern(object):
         # last edge is a special case
         edge_info = edge_sequence[-1]
         fin_vert = vertices[-1] + edge_info[:2]
-        if not all(np.isclose(fin_vert, 0)):
-            raise RuntimeError('BasicPattern::Error::Edge sequence do not return to origin')
-        edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
+        if all(np.isclose(fin_vert, 0)):
+            edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
+        else:
+            # TODO raise RuntimeError('BasicPattern::Error::Edge sequence do not return to origin')
+            print('BasicPattern::Warning::Edge sequence do not return to origin. Creating extra vertex')
+            vertices = np.vstack([vertices, fin_vert])
+            edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
 
         # update panel itself
         panel = self.pattern['panels'][panel_name]
@@ -174,7 +178,6 @@ class BasicPattern(object):
         if not all(np.isclose(curvature, 0)):  # curvature part
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
-
 
     # --------- Pattern operations ----------
     def _normalize_template(self):
@@ -743,7 +746,7 @@ if __name__ == "__main__":
         [ -3.58333333, -15.,          0.,          0.,        ],
         [-10.75,       -45.,           0.,           0.        ]]
     )
-    pattern.set_panel_from_sequence(panel_to_conv, panel_representation)
+    pattern.panel_from_sequence(panel_to_conv, panel_representation)
 
     pattern.name = 'skirt_direct_upd'
     pattern.serialize(system_config['output'], to_subfolder=True, tag='direct_upd')
