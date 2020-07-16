@@ -220,19 +220,20 @@ if __name__ == "__main__":
     timestamp = int(time.time())
     random.seed(timestamp)
 
-    system_config = customconfig.Properties('../system.json')
+    system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = VisPattern(os.path.join(base_path, 'data_1000_tee_200527-14-50-42', 'tee_DIVLQNKVUJ', 'specification.json'))
-    newpattern = RandomPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    # newpattern = RandomPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
 
     # log to file
-    log_folder = 'intersect_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    log_folder = 'direct_upd_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
     log_folder = os.path.join(base_path, log_folder)
     os.makedirs(log_folder)
 
     pattern.serialize(log_folder, to_subfolder=False)
-    newpattern.serialize(log_folder, to_subfolder=False)
+    # newpattern.serialize(log_folder, to_subfolder=False)
 
     # log random seed
     with open(log_folder + '/random_seed.txt', 'w') as f_rand:

@@ -78,14 +78,6 @@ class BasicPattern(object):
         """returns True if any of the pattern panels are self-intersecting"""
         return any(map(self._is_panel_self_intersecting, self.pattern['panels']))
 
-    def _restore(self, backup_copy):
-        """Restores spec structure from given backup copy 
-            Makes a full copy of backup to avoid accidential corruption of backup
-        """
-        self.spec = copy.deepcopy(backup_copy)
-        self.pattern = self.spec['pattern']
-        self.properties = self.spec['properties']  # mandatory part
-
     @staticmethod
     def name_from_path(pattern_file):
         name = os.path.splitext(os.path.basename(pattern_file))[0]
@@ -93,6 +85,96 @@ class BasicPattern(object):
             path = os.path.dirname(pattern_file)
             name = os.path.basename(os.path.normpath(path))
         return name
+
+    # --------- Special representations -----
+    def panel_as_sequence(self, panel_name):
+        """Represent panel as sequence of edges with each edge as vector of fixed length.
+           * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
+           * Edges are returned in additive manner: 
+                each edge as a vector that needs to be added to previous edges to get a 2D coordinate of end vertex
+        """
+        panel = self.pattern['panels'][panel_name]
+        vertices = np.array(panel['vertices'])
+
+        # ---- offset vertices to have one vertex at (0, 0) -- deterministically ----
+        # bounding box low-left to origin
+        left_corner = np.min(vertices, axis=0)
+        vertices = vertices - left_corner
+
+        # ids of verts sitting on Ox
+        full_range = np.arange(vertices.shape[0])
+        on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
+
+        # choose the one closest to x
+        origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
+        origin_id = on_ox_ids[origin_candidate]
+        # Chosen vertex to origin
+        vertices = vertices - vertices[origin_id]
+
+        # Edge that starts at origin
+        first_edge = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
+        first_edge = first_edge[0]
+
+        # iterate over edges starting from the chosen origin
+        # https://stackoverflow.com/questions/2150108/efficient-way-to-rotate-a-list-in-python
+        rotated_edges = panel['edges'][first_edge:] + panel['edges'][:first_edge]
+        edge_sequence = []
+        for edge in rotated_edges:
+            edge_sequence.append(self._edge_as_vector(vertices, edge))
+
+        # TODO add 3D placement convertion 
+
+        return np.stack(edge_sequence, axis=0)
+
+    def set_panel_from_sequence(self, panel_name, edge_sequence):
+        """Set panel vertex positions & edge dictionaries from given edge sequence"""
+        if panel_name not in self.pattern['panels']:
+            raise ValueError('BasicPattern::requested update for non-existent ')
+
+        # Convert representation
+        vertices = np.array([[0, 0]])  # first vertex is always at origin
+        edges = []
+        for idx in range(len(edge_sequence) - 1):
+            edge_info = edge_sequence[idx]
+            next_vert = vertices[idx] + edge_info[:2]
+            vertices = np.vstack([vertices, next_vert])
+            edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
+
+        # last edge is a special case
+        edge_info = edge_sequence[-1]
+        fin_vert = vertices[-1] + edge_info[:2]
+        if not all(np.isclose(fin_vert, 0)):
+            raise RuntimeError('BasicPattern::Error::Edge sequence do not return to origin')
+        edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
+
+        # update panel itself
+        panel = self.pattern['panels'][panel_name]
+        panel['vertices'] = vertices.tolist()
+        panel['edges'] = edges
+
+        print('BasicPattern::Warning::Edge and vertex info updated for panel {}. Parameters, stitches, and 3D placement might be broken'.format(panel_name))
+
+    def _edge_as_vector(self, vertices, edge_dict):
+        """Represent edge as vector of fixed length: 
+            * First 2 elements: Vector endpoint. 
+                Original edge endvertex positions can be restored if edge vector is added to the start point,
+                which in turn could be obtained from previous edges in the panel loop
+            * Next 2 elements: Curvature values 
+                Given in relative coordinates. With zeros if edge is not curved 
+        """
+        edge_verts = vertices[edge_dict['endpoints']]
+        edge_vector = edge_verts[1] - edge_verts[0]
+        curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
+
+        return np.concatenate([edge_vector, curvature])
+
+    def _edge_dict(self, vstart, vend, curvature):
+        """Convert given info into the proper edge dictionary representation"""
+        edge_dict = {'endpoints': [vstart, vend]}
+        if not all(np.isclose(curvature, 0)):  # curvature part
+            edge_dict['curvature'] = curvature.tolist()
+        return edge_dict
+
 
     # --------- Pattern operations ----------
     def _normalize_template(self):
@@ -215,6 +297,14 @@ class BasicPattern(object):
             np.array(panel['vertices'][v_id_end])
         
         return np.linalg.norm(v_end - v_start)
+
+    def _restore(self, backup_copy):
+        """Restores spec structure from given backup copy 
+            Makes a full copy of backup to avoid accidential corruption of backup
+        """
+        self.spec = copy.deepcopy(backup_copy)
+        self.pattern = self.spec['pattern']
+        self.properties = self.spec['properties']  # mandatory part
 
     # -------- Checks ------------
     def _is_panel_self_intersecting(self, panel_name):
@@ -630,3 +720,30 @@ class ParametrizedPattern(BasicPattern):
                 self.parameters[parameter]['value'] = values
             else:  # simple 1-value parameter
                 self.parameters[parameter]['value'] = self._new_value(param_ranges)
+
+
+# ---------- test -------------
+if __name__ == "__main__":
+    import customconfig
+    from pattern.wrappers import VisPattern
+
+    system_config = customconfig.Properties('./system.json')
+    base_path = system_config['output']
+    pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+
+    panel_to_conv = 'front'
+    panel_representation = pattern.panel_as_sequence(panel_to_conv)
+    print(panel_representation)
+    panel_representation = np.array(
+        [[ 62.66666667,   0.,           0.5,         -0.1,       ],
+        [-10.75,        45.,           0.,           0.,        ],
+        [ -3.58333333,  15.,           0.,           0.,        ],
+        [-34.,           0.,           0.5,          0.1,      ],
+        [ -3.58333333, -15.,          0.,          0.,        ],
+        [-10.75,       -45.,           0.,           0.        ]]
+    )
+    pattern.set_panel_from_sequence(panel_to_conv, panel_representation)
+
+    pattern.name = 'skirt_direct_upd'
+    pattern.serialize(system_config['output'], to_subfolder=True, tag='direct_upd')

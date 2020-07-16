@@ -446,7 +446,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         return np.array(pattern.param_values_list())  # TODO edge sequence
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
-        """Pattern parameters from a given datapoint subfolder"""
+        """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
    
 
