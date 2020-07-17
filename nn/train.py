@@ -11,16 +11,16 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='panelAE', 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='loss-refactor', 
     run_id=None, 
     no_sync=False) 
 
 # train
-# dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
+dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, {'mesh_samples': 2000})
 # dataset = data.Garment3DParamsDataset(Path(system_info['output']) / dataset_folder, {'mesh_samples': 2000})
-dataset = data.GarmentPanelDataset(Path(system_info['output']) / dataset_folder, {'panel_name': 'front'})
+# dataset = data.GarmentPanelDataset(Path(system_info['output']) / dataset_folder, {'panel_name': 'front'})
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
@@ -28,10 +28,10 @@ trainer = Trainer(experiment, dataset,
 dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
-# model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
-model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], {})
+# model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], {})
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration
@@ -45,12 +45,9 @@ print ('Test metrics: {}'.format(final_metrics))
 experiment.add_statistic('test', final_metrics)
 
 # save predictions
-prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['train'])  # , 'validation', 'test'
 print('Predictions saved to {}'.format(prediction_path))
 
 # reflect predictions info in expetiment
 experiment.add_statistic('predictions_folder', prediction_path.name)
 experiment.add_artifact(prediction_path, dataset_wrapper.dataset.name, 'result')
-
-
-

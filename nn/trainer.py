@@ -24,10 +24,9 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=500,
+            epochs=2000,
             batch_size=32,
             learning_rate=0.001,
-            loss='MSELoss',
             optimizer='Adam',
             lr_scheduling=True, 
             early_stopping={
@@ -75,7 +74,6 @@ class Trainer():
         self.device = self.setup['device']
     
         self._add_optimizer(model)
-        self._add_loss()
         self._add_scheduler()
         self.es_tracking = []  # early stopping init
 
@@ -104,11 +102,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
                 
                 #with torch.autograd.detect_anomaly():
-                preds = model(features)
-                if gt.nelement() != 0:  # usual supervised case
-                    loss = self.regression_loss(preds, gt)
-                else:  # no gt -> apply reconstruction loss
-                    loss = self.regression_loss(preds, features) 
+                loss = model.loss(features, gt)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -120,8 +114,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                # TODO Changed for reconstruction loss!!
-                losses = [self.regression_loss(model(batch['features'].to(self.device)), batch['features'].to(self.device)) for batch in valid_loader]
+                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'].to(self.device)) for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
             
@@ -169,12 +162,6 @@ class Trainer():
             print('Trainer::Using Adam optimizer')
             model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'])
-        
-    def _add_loss(self):
-        if self.setup['loss'] == 'MSELoss':
-            # future 'else'
-            print('Trainer::Warning::Using default MSELoss loss')
-            self.regression_loss = nn.MSELoss()
 
     def _add_scheduler(self):
         if ('lr_scheduling' in self.setup

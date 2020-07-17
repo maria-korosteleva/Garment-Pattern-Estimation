@@ -3,7 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as geometric
 
-class ShirtfeaturesMLP(nn.Module):
+class BaseModule(nn.Module):
+    """Base interface for neural nets"""
+    def __init__(self):
+        super().__init__()
+        self.config = {'loss': 'MSELoss'}
+        self.regression_loss = nn.MSELoss()
+    
+    def loss(self, features, ground_truth):
+        """Default loss for my neural networks. Takes pne batch of data"""
+        preds = self(features)
+        return self.regression_loss(preds, ground_truth)
+
+
+class ShirtfeaturesMLP(BaseModule):
     """MLP for training on shirts dataset. Assumes 100 features parameters used"""
     
     def __init__(self, in_size, out_size):
@@ -26,7 +39,7 @@ class ShirtfeaturesMLP(nn.Module):
         return self.sequence(x_batch)
 
 
-class GarmentParamsMLP(nn.Module):
+class GarmentParamsMLP(BaseModule):
     """MLP for training on shirts dataset. Assumes 100 features parameters used"""
     
     def __init__(self, in_size, out_size):
@@ -91,7 +104,7 @@ def MLP(channels, batch_norm=True):
     ])
 
 
-class GarmentParamsPoint(nn.Module):
+class GarmentParamsPoint(BaseModule):
     """PointNet++ processing of input geometry to predict parameters
         Note that architecture is agnostic of number of input points"""
     def __init__(self, out_size, config={'r1': 0.2, 'r2': 0.4}):
@@ -131,7 +144,7 @@ class GarmentParamsPoint(nn.Module):
 
 # ------------- Pattern representation ----
 
-class GarmentPanelsAE(nn.Module):
+class GarmentPanelsAE(BaseModule):
     """Model for sequential encoding & decoding of garment panels
         References: 
         * https://blog.floydhub.com/a-beginners-guide-on-recurrent-neural-networks-with-pytorch/
@@ -143,6 +156,9 @@ class GarmentPanelsAE(nn.Module):
         # defaults
         self.config = {'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3}
         self.config.update(config)
+
+        # loss info
+        self.config['loss'] = 'MSE Reconstruction'
 
         self.max_seq_len = max_seq_len
 
@@ -192,6 +208,11 @@ class GarmentPanelsAE(nn.Module):
         # We'll send the tensor holding the hidden state to the device we specified earlier as well
         hidden = torch.zeros(self.config['n_layers'], batch_size, self.config['hidden_dim_enc'])
         return hidden.to(self.device)
+
+    def loss(self, features, ground_truth):
+        """Override base class loss calculation to use reconstruction loss"""
+        preds = self(features)
+        return self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
 
 
 if __name__ == "__main__":
