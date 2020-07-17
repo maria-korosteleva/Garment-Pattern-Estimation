@@ -101,7 +101,7 @@ class WandbRunWrappper(object):
         if path.is_file():
             artifact.add_file(str(path))
         else:
-            artifact.add_dir(str(child))
+            artifact.add_dir(str(path))
                     
         run.log_artifact(artifact)
 
