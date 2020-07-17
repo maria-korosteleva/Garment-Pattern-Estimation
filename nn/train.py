@@ -11,8 +11,8 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Test-Garments-Reconstruction', 
-    run_name='panelAE-try', 
+    project_name='Garments-Reconstruction', 
+    run_name='panelAE', 
     run_id=None, 
     no_sync=False) 
 

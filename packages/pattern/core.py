@@ -147,7 +147,8 @@ class BasicPattern(object):
             edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
         else:
             # TODO raise RuntimeError('BasicPattern::Error::Edge sequence do not return to origin')
-            print('BasicPattern::Warning::Edge sequence do not return to origin. Creating extra vertex')
+            print('BasicPattern::Warning::{} with panel {}::Edge sequence do not return to origin. '
+                ' Creating extra vertex'.format(self.name, panel_name))
             vertices = np.vstack([vertices, fin_vert])
             edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
 
@@ -156,7 +157,7 @@ class BasicPattern(object):
         panel['vertices'] = vertices.tolist()
         panel['edges'] = edges
 
-        print('BasicPattern::Warning::Edge and vertex info updated for panel {}. Parameters, stitches, and 3D placement might be broken'.format(panel_name))
+        print('BasicPattern::Warning::{}::Edge and vertex info updated for panel {}. Parameters, stitches, and 3D placement might be broken'.format(self.name, panel_name))
 
     def _edge_as_vector(self, vertices, edge_dict):
         """Represent edge as vector of fixed length: 
