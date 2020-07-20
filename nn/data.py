@@ -124,6 +124,32 @@ class DatasetWrapper(object):
         # data info
         self.dataset.save_to_wandb(experiment)
 
+    # ---------- Normalization ----------------
+    def mean_std(self, loader):
+        """Calculate mean & std of the data for a given loader"""
+
+        stats = { 
+        'batch_sums': [], 
+        'batch_sq_sums': []}
+    
+        for data in loader:
+            batch_sum = data['features'].sum(0)
+            stats['batch_sums'].append(batch_sum)
+
+        mean_features = sum(stats['batch_sums']) / len(dataloader)
+        
+        for data in dataloader:
+            batch_sum_sq = (data['features'] - mean_features.view(1, len(mean_features)))**2
+            stats['batch_sq_sums'].append(batch_sum_sq.sum(0))
+                            
+        std_features = torch.sqrt(sum(stats['batch_sq_sums']) / len(dataloader))
+        
+        return mean_features, std_features
+
+    def use_normalization(self):
+        """Apply data normalization based on stats from training set"""
+        self.dataset.use_normalization(self.training)
+
     # --------- Managing predictions on this data ---------
     def predict(self, model, save_to, sections=['test'], single_batch=False):
         """Save model predictions on the given dataset section"""
@@ -201,10 +227,6 @@ class BaseDataset(Dataset):
         """Save data cofiguration to current expetiment run"""
         experiment.add_config('dataset', self.config)
 
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder"""
-        pass
-
     def update_transform(self, transform):
         """apply new transform when loading the data"""
         raise NotImplementedError('BaseDataset:Error:current transform support is poor')
@@ -246,7 +268,17 @@ class BaseDataset(Dataset):
         self.config['name'] = self.name
         self._update_on_config_change()
 
-    # -------- Data-specific basic functions --------
+    # -------- Data-specific functions --------
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder"""
+        pass
+
+    def use_normalization(self, training):
+        """Use element normalization based on stats from the training subset.
+            Dataset is the object most aware of the datapoint structure hence it's the place to calculate & use the normalization.
+            Normalization is not implemented as Transform because it might need to be customized for a data & reapplied on saving & visualizing predictions """
+        print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
+
     def _clean_datapoint_list(self):
         """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
         # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
@@ -263,7 +295,7 @@ class BaseDataset(Dataset):
     def _update_on_config_change(self):
         """Update object inner state after config values have changed"""
         pass
-
+    
 
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
@@ -420,6 +452,9 @@ class GarmentPanelDataset(GarmentBaseDataset):
         prediction_imgs = []
         for prediction, name in zip(predictions, datanames):
             prediction = prediction.cpu().numpy()
+            if 'use_norm' in self.config:
+                prediction = prediction * self.config['use_norm']['std'] + self.config['use_norm']['mean']
+
             pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
 
             # apply new edge info
@@ -440,7 +475,28 @@ class GarmentPanelDataset(GarmentBaseDataset):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
     
-    # ------ Data-specific basic functions --------
+    def use_normalization(self, training):
+        """Use mean&std for normalization of output features & restoring input predictions.
+            Accepts training subset as input -- the stats are only based on training subsection of the data
+        """
+        print('GarmentPanelDataset::Using data normalization')
+
+        # per sequence element means
+        feature_mean = torch.zeros_like(training[0]['features'][0])
+        for elem in training:
+            feature_mean += elem['features'].mean(axis=0)
+        feature_mean = feature_mean / len(training)
+
+        # per sequence element stds
+        feature_stds = torch.zeros_like(feature_mean)
+        total_len = 0
+        for elem in training:
+            feature_stds += ((elem['features'] - feature_mean) ** 2).sum(0)
+            total_len += elem['features'].shape[0]
+        feature_stds = torch.sqrt(feature_stds / total_len)
+
+        self.config['use_norm'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -449,7 +505,12 @@ class GarmentPanelDataset(GarmentBaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
 
-        return pattern.panel_as_sequence(self.config['panel_name'])
+        sequence = pattern.panel_as_sequence(self.config['panel_name'])
+
+        if 'use_norm' in self.config:
+            sequence = (sequence - self.config['use_norm']['mean']) / self.config['use_norm']['std']
+
+        return sequence
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """The dataset targets AutoEncoding tasks -- no need for features"""
@@ -531,7 +592,12 @@ if __name__ == "__main__":
 
     print(len(dataset), dataset.config)
     print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
-    # print(dataset[0]['ground_truth'].shape)
-    # print(dataset[0]['features'])
 
-    # loader = DataLoader(dataset, 10, shuffle=True)
+    print(dataset[5]['features'])
+
+    datawrapper = DatasetWrapper(dataset)
+    datawrapper.new_split(10, 10, 300)
+
+    datawrapper.use_normalizatoin()
+
+    print(dataset[5]['features'])

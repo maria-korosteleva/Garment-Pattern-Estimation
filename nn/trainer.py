@@ -13,11 +13,12 @@ import wandb as wb
 import data as data
 
 class Trainer():
-    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, split_seed=None, with_visualization=False):
+    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, split_seed=None, with_norm=True, with_visualization=False):
         """Initialize training and dataset split (if given)
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
         self.datawraper = None
+        self.use_data_normalization = True
         self.log_with_visualization = with_visualization
         
         # default training setup
@@ -33,7 +34,7 @@ class Trainer():
                 'factor': 0.5
             },
             early_stopping={
-                'window': 0.3,
+                'window': 0.001,
                 'patience': 50
             }
         )
@@ -65,6 +66,10 @@ class Trainer():
         self.datawraper = data.DatasetWrapper(dataset)
         self.datawraper.new_split(valid_percent, test_percent, random_seed)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
+
+        # ---- NEW! -----
+        if self.use_data_normalization:
+            self.datawraper.use_normalization()
 
         return self.datawraper
 

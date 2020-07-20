@@ -6,14 +6,14 @@ from trainer import Trainer
 from experiment import WandbRunWrappper
 
 # init
-# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+# dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='panelAE-tee-soft', 
+    run_name='panelAE-skirts-norm', 
     run_id=None, 
     no_sync=False) 
 
@@ -25,6 +25,7 @@ dataset = data.GarmentPanelDataset(Path(system_info['output']) / dataset_folder,
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
+                  with_norm=True,
                   with_visualization=False)  # only turn on on custom garment data
 dataset_wrapper = trainer.datawraper
 # model
