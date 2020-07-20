@@ -141,6 +141,7 @@ class BasicPattern(object):
             edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
 
         # last edge is a special case
+        idx = len(vertices) - 1
         edge_info = edge_sequence[-1]
         fin_vert = vertices[-1] + edge_info[:2]
         if all(np.isclose(fin_vert, 0)):

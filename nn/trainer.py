@@ -28,10 +28,13 @@ class Trainer():
             batch_size=32,
             learning_rate=0.001,
             optimizer='Adam',
-            lr_scheduling=True, 
+            lr_scheduling={
+                'patience': 10,
+                'factor': 0.5
+            },
             early_stopping={
                 'window': 0.3,
-                'patience': 10
+                'patience': 50
             }
         )
 
@@ -164,10 +167,9 @@ class Trainer():
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'])
 
     def _add_scheduler(self):
-        if ('lr_scheduling' in self.setup
-                and self.setup['lr_scheduling']):
+        if 'lr_scheduling' in self.setup:
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer, mode='min', factor=0.1, patience=1, verbose=True)
+                self.optimizer, mode='min', factor=self.setup['lr_scheduling']['factor'], patience=self.setup['lr_scheduling']['patience'], verbose=True)
         else:
             print('Trainer::Warning::no learning scheduling set')
 
