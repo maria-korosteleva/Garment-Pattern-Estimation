@@ -154,11 +154,11 @@ class GarmentPanelsAE(BaseModule):
         super().__init__()
 
         # defaults
-        self.config = {'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3}
+        self.config = {'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 1}
         self.config.update(config)
 
         # loss info
-        self.config['loss'] = 'MSE Reconstruction'
+        self.config['loss'] = 'MSE Reconstruction with loop'
 
         self.max_seq_len = max_seq_len
 
@@ -212,14 +212,31 @@ class GarmentPanelsAE(BaseModule):
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
         preds = self(features)
-        return self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
+
+        # Base reconstruction loss
+        reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
+
+        # ensuring edges within panel loop & return to origin
+        panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
+        panel_square_sums = panel_coords_sum ** 2  # per sum square
+
+        # batch mean of squared norms of per-panel final points:
+        loop_loss = panel_square_sums.sum() / panel_square_sums.shape[0]
+
+        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
 
 
 if __name__ == "__main__":
-    a = torch.arange(1, 17, dtype=torch.float)
-    batch = a.view(2, -1, 2)  # ~ 2 examples in batch
+
+    torch.manual_seed(125)
+
+    a = torch.arange(1, 25, dtype=torch.float)
+    batch = a.view(2, -1, 3)  # ~ 2 examples in batch
 
     net = GarmentPanelsAE(batch.shape[2], batch.shape[1])
 
     print('In batch shape: {}'.format(batch.shape))
     print(net(batch))  # should have 2 x 10 shape -- per example prediction
+    loss = net.loss(batch, None)
+    print(loss)
+    loss.backward()  # check it doesn't fail

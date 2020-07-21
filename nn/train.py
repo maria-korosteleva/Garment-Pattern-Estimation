@@ -6,14 +6,14 @@ from trainer import Trainer
 from experiment import WandbRunWrappper
 
 # init
-dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-# dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='panelAE-skirts-norm', 
+    run_name='panelAE-tee-loop', 
     run_id=None, 
     no_sync=False) 
 
@@ -33,7 +33,7 @@ trainer.init_randomizer()
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
-model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], {})
+model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], {'loop_loss_weight': 0.1})
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration
