@@ -107,10 +107,11 @@ def MLP(channels, batch_norm=True):
 class GarmentParamsPoint(BaseModule):
     """PointNet++ processing of input geometry to predict parameters
         Note that architecture is agnostic of number of input points"""
-    def __init__(self, out_size, config={'r1': 0.2, 'r2': 0.4}):
+    def __init__(self, out_size, config={}):
         super().__init__()
 
-        self.config = config
+        self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
+        self.config.update(config)  # from input
 
         self.sa1_module = SetAbstractionModule(0.5, config['r1'], MLP([3, 64, 64, 128]))
         self.sa2_module = SetAbstractionModule(0.25, config['r2'], MLP([128 + 3, 128, 128, 256]))
@@ -153,12 +154,15 @@ class GarmentPanelsAE(BaseModule):
     def __init__(self, in_elem_len, max_seq_len, config={}):
         super().__init__()
 
-        # defaults
-        self.config = {'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 1}
-        self.config.update(config)
+        # defaults for this net
+        self.config.update({'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 0.1})
+        # update with input settings
+        self.config.update(config) 
 
-        # loss info
+        # additional info
         self.config['loss'] = 'MSE Reconstruction with loop'
+        self.config['hidden_init'] = 'kaiming_normal_'
+        self.config['init'] = 'kaiming_normal_'
 
         self.max_seq_len = max_seq_len
 
@@ -177,12 +181,24 @@ class GarmentPanelsAE(BaseModule):
         # post-process
         self.lin = nn.Linear(self.config['hidden_dim_dec'], in_elem_len)
 
+        # init values
+        for name, param in self.seq_encoder.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param) # , gain=nn.init.calculate_gain('tanh'))
+            # leave default init for bias
+        for name, param in self.seq_decoder.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param) #, gain=nn.init.calculate_gain('tanh'))
+            # leave default init for bias
+        # default init for linear layer
+
     def forward(self, x):
         self.device = x.device
         batch_size = x.size(0)
         
         # --- encode --- 
-        hidden_init, cell_init = self.init_hidden(batch_size), self.init_hidden(batch_size)
+        hidden_init = self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_enc'])
+        cell_init =  self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_enc'])
         out, (hidden, _) = self.seq_encoder(x, (hidden_init, cell_init))
         # final encoding is the last output == hidden of last layer 
         encoding = hidden[-1]
@@ -191,7 +207,8 @@ class GarmentPanelsAE(BaseModule):
         # propagate encoding for needed seq_len
         dec_input = encoding.unsqueeze(1).repeat(1, self.max_seq_len, 1)  # along sequence dimention
         # init memory with zeros (not with encoder state) for future indeendent use of decoder 
-        dec_hidden_init, dec_cell_init = self.init_hidden(batch_size), self.init_hidden(batch_size)
+        dec_hidden_init = self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_dec'])
+        dec_cell_init =  self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_dec'])
         out, hidden = self.seq_decoder(dec_input, (dec_hidden_init, dec_cell_init))
         
         # --- back to original format --- 
@@ -203,10 +220,11 @@ class GarmentPanelsAE(BaseModule):
         
         return out
 
-    def init_hidden(self, batch_size):
+    def init_hidden(self, batch_size, n_layers, dim):
         # This method generates the first hidden state of zeros which we'll use in the forward pass
         # We'll send the tensor holding the hidden state to the device we specified earlier as well
-        hidden = torch.zeros(self.config['n_layers'], batch_size, self.config['hidden_dim_enc'])
+        hidden = torch.Tensor(n_layers, batch_size, dim)
+        nn.init.kaiming_normal_(hidden)
         return hidden.to(self.device)
 
     def loss(self, features, ground_truth):
