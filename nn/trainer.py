@@ -29,12 +29,13 @@ class Trainer():
             batch_size=32,
             learning_rate=0.001,
             optimizer='Adam',
+            weight_decay=0,
             lr_scheduling={
                 'patience': 10,
                 'factor': 0.5
             },
             early_stopping={
-                'window': 0.001,
+                'window': 0.005,
                 'patience': 50
             }
         )
@@ -164,12 +165,12 @@ class Trainer():
         if self.setup['optimizer'] == 'SGD':
             # future 'else'
             print('Trainer::Using default SGD optimizer')
-            self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'])
+            self.optimizer = torch.optim.SGD(model.parameters(), lr=self.setup['learning_rate'], weight_decay=self.setup['weight_decay'])
         elif self.setup['optimizer'] == 'Adam':
             # future 'else'
             print('Trainer::Using Adam optimizer')
             model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
-            self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'])
+            self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'], weight_decay=self.setup['weight_decay'])
 
     def _add_scheduler(self):
         if 'lr_scheduling' in self.setup:
