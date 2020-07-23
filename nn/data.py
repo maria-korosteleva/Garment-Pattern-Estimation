@@ -154,7 +154,7 @@ class DatasetWrapper(object):
     def predict(self, model, save_to, sections=['test'], single_batch=False):
         """Save model predictions on the given dataset section"""
         # Main path
-        prediction_path = save_to / (self.dataset.name + '_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        prediction_path = save_to / ('nn_pred_' + self.dataset.name + datetime.now().strftime('%y%m%d-%H-%M-%S'))
         prediction_path.mkdir(parents=True, exist_ok=True)
 
         for section in sections:

@@ -28,7 +28,7 @@ datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 # dataset = data.GarmentParamsDataset(Path(system_info['output']) / dataset_folder, data_config)
 # dataset = data.Garment3DParamsDataset(Path(system_info['output']) / dataset_folder, data_config)
-dataset = data.GarmentPanelDataset(Path(system_info['output']) / data_config['name'], data_config)
+dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / data_config['name'], data_config)
 
 print(dataset.config)
 
