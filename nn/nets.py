@@ -162,7 +162,6 @@ class GarmentPanelsAE(BaseModule):
         # additional info
         self.config['loss'] = 'MSE Reconstruction with loop'
         self.config['hidden_init'] = 'kaiming_normal_'
-        self.config['init'] = 'kaiming_normal_'
 
         self.max_seq_len = max_seq_len
 
@@ -182,15 +181,7 @@ class GarmentPanelsAE(BaseModule):
         self.lin = nn.Linear(self.config['hidden_dim_dec'], in_elem_len)
 
         # init values
-        for name, param in self.seq_encoder.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param) # , gain=nn.init.calculate_gain('tanh'))
-            # leave default init for bias
-        for name, param in self.seq_decoder.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param) #, gain=nn.init.calculate_gain('tanh'))
-            # leave default init for bias
-        # default init for linear layer
+        self.init_net_params()
 
     def forward(self, x):
         self.device = x.device
@@ -219,6 +210,20 @@ class GarmentPanelsAE(BaseModule):
         out = out.contiguous().view(batch_size, self.max_seq_len, -1)
         
         return out
+
+    def init_net_params(self):
+        """Apply custom initialization to net parameters"""
+        self.config['init'] = 'kaiming_normal_'
+        for name, param in self.seq_encoder.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param)
+            # leave defaults for bias
+        for name, param in self.seq_decoder.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param)
+            # leave defaults for bias
+
+        # leave defaults for linear layer
 
     def init_hidden(self, batch_size, n_layers, dim):
         # This method generates the first hidden state of zeros which we'll use in the forward pass
