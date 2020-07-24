@@ -155,7 +155,7 @@ class GarmentPanelsAE(BaseModule):
         super().__init__()
 
         # defaults for this net
-        self.config.update({'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 0.1})
+        self.config.update({'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0.1})
         # update with input settings
         self.config.update(config) 
 
@@ -169,12 +169,14 @@ class GarmentPanelsAE(BaseModule):
         self.seq_encoder = nn.LSTM(
             in_elem_len, 
             self.config['hidden_dim_enc'], self.config['n_layers'], 
+            dropout=self.config['dropout'],
             batch_first=True)
 
         # decode
         self.seq_decoder = nn.LSTM(
             self.config['hidden_dim_enc'], 
             self.config['hidden_dim_dec'], self.config['n_layers'], 
+            dropout=self.config['dropout'],
             batch_first=True)
 
         # post-process
