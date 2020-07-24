@@ -197,8 +197,9 @@ class SampleToTensor(object):
 
 class BaseDataset(Dataset):
     """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, start_config={}, transforms=[]):
-        """Kind of Universal init for my datasets"""
+    def __init__(self, root_dir, start_config={}, caching=False, transforms=[]):
+        """Kind of Universal init for my datasets
+            if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
         self.root_path = Path(root_dir)
         self.name = self.root_path.name
         self.config = {}
@@ -208,20 +209,17 @@ class BaseDataset(Dataset):
         _, dirs, _ = next(os.walk(self.root_path))
         self.datapoints_names = dirs
         self._clean_datapoint_list()
+        self.cached = {}
+        self.caching_enabled = caching
+        if caching:
+            print('BaseDataset::Info::Storing all datapoints in memory')
 
         # Use default tensor transform + the ones from input
         self.transforms = [SampleToTensor()] + transforms
 
         # in\out sizes
-        elem = self[0]
-        feature_size, gt_size = elem['features'].shape[0], elem['ground_truth'].shape[0]
-        # sanity checks
-        if ('feature_size' in self.config and feature_size != self.config['feature_size']
-                or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
-            raise RuntimeError('BaseDataset::Error::feature shape ({}) or ground truth shape ({}) from loaded config do not match calculated values: {}, {}'.format(
-                self.config['feature_size'],  self.config['ground_truth_size'], feature_size, gt_size))
+        self._estimate_data_shape()
 
-        self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -244,6 +242,9 @@ class BaseDataset(Dataset):
             idx = idx.tolist()
             
         datapoint_name = self.datapoints_names[idx]
+        if datapoint_name in self.cached:  # might not be compatible with list indexing
+            return self.cached[datapoint_name]
+
         folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
 
         features = self._get_features(datapoint_name, folder_elements)
@@ -254,6 +255,9 @@ class BaseDataset(Dataset):
         # apply transfomations
         for transform in self.transforms:
             sample = transform(sample)
+
+        if self.caching_enabled:  # save read values 
+            self.cached[datapoint_name] = sample
         
         return sample
 
@@ -292,15 +296,27 @@ class BaseDataset(Dataset):
         """Ground thruth prediction for a datapoint"""
         return np.array([0])
 
+    def _estimate_data_shape(self):
+        """Get sizes/shapes of a datapoint for external references"""
+        elem = self[0]
+        feature_size, gt_size = elem['features'].shape[0], elem['ground_truth'].shape[0]
+        # sanity checks
+        if ('feature_size' in self.config and feature_size != self.config['feature_size']
+                or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
+            raise RuntimeError('BaseDataset::Error::feature shape ({}) or ground truth shape ({}) from loaded config do not match calculated values: {}, {}'.format(
+                self.config['feature_size'],  self.config['ground_truth_size'], feature_size, gt_size))
+
+        self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size
+
     def _update_on_config_change(self):
         """Update object inner state after config values have changed"""
         pass
-    
+
 
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
         
-    def __init__(self, root_dir, start_config={}, transforms=[]):
+    def __init__(self, root_dir, start_config={}, caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -311,7 +327,7 @@ class GarmentBaseDataset(BaseDataset):
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all datapopints ')
         
-        super().__init__(root_dir, start_config, transforms=transforms)
+        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -369,7 +385,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         * Ground_truth: parameters used to generate a garment
     """
     
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -379,7 +395,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         if 'mesh_samples' not in start_config:  
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
-        super().__init__(root_dir, start_config, transforms=transforms)
+        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
      
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
@@ -426,8 +442,8 @@ class Garment3DParamsDataset(GarmentParamsDataset):
         * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
         * Ground_truth: parameters used to generate a garment
     """
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, transforms=[]):
-        super().__init__(root_dir, start_config, transforms=transforms)
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
     
     # the only difference with parent class in the shape of the features
     def _get_features(self, datapoint_name, folder_elements):
@@ -441,8 +457,8 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * ground_truth is not used
 
     """
-    def __init__(self, root_dir, start_config={'panel_name': 'front'}, transforms=[]):
-        super().__init__(root_dir, start_config, transforms=transforms)
+    def __init__(self, root_dir, start_config={'panel_name': 'front'}, caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
     
     def save_prediction_batch(self, predictions, datanames, save_to):
@@ -522,7 +538,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={'num_verts': 'all'}, transforms=[]):
+    def __init__(self, root_dir, start_config={'num_verts': 'all'}, caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -535,7 +551,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         self.features_filename = 'visfea.mat'
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
-        super().__init__(root_dir, start_config, transforms=transforms)
+        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
         
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
