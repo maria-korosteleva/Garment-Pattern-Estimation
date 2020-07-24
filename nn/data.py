@@ -192,6 +192,18 @@ class SampleToTensor(object):
             'name': sample['name']
         }
 
+class FeatureNormalization():
+    """Normalize features of provided sample with given stats"""
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+    
+    def __call__(self, sample):
+        return {
+            'features': (sample['features'] - self.mean) / self.std,
+            'ground_truth': sample['ground_truth'],
+            'name': sample['name']
+        }
 
 # --------------------- Datasets -------------------------
 
@@ -220,7 +232,6 @@ class BaseDataset(Dataset):
         # in\out sizes
         self._estimate_data_shape()
 
-
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
         experiment.add_config('dataset', self.config)
@@ -243,22 +254,22 @@ class BaseDataset(Dataset):
             
         datapoint_name = self.datapoints_names[idx]
         if datapoint_name in self.cached:  # might not be compatible with list indexing
-            return self.cached[datapoint_name]
+            sample = self.cached[datapoint_name]
+        else:
+            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
 
-        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+            features = self._get_features(datapoint_name, folder_elements)
+            ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
+            
+            sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
 
-        features = self._get_features(datapoint_name, folder_elements)
-        ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
+            if self.caching_enabled:  # save read values 
+                self.cached[datapoint_name] = sample
         
-        sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
-        
-        # apply transfomations
+        # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
             sample = transform(sample)
 
-        if self.caching_enabled:  # save read values 
-            self.cached[datapoint_name] = sample
-        
         return sample
 
     def update_config(self, in_config):
@@ -513,6 +524,8 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
         self.config['use_norm'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
 
+        self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -522,9 +535,6 @@ class GarmentPanelDataset(GarmentBaseDataset):
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
 
         sequence = pattern.panel_as_sequence(self.config['panel_name'])
-
-        if 'use_norm' in self.config:
-            sequence = (sequence - self.config['use_norm']['mean']) / self.config['use_norm']['std']
 
         return sequence
         

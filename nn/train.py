@@ -12,8 +12,8 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='panelAE-skirts-drop', 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='panelAE-skirts-caching', 
     run_id=None, 
     no_sync=False) 
 
@@ -21,12 +21,15 @@ experiment = WandbRunWrappper(
 # dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
 # dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
 # dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
-dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / dataset_folder, {'panel_name': 'front'}, caching=False)
+dataset = data.GarmentPanelDataset(
+    Path(system_info['datasets_path']) / dataset_folder, 
+    {'panel_name': 'front'}, 
+    caching=True)
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
                   with_norm=True,
-                  with_visualization=True)  # only turn on on custom garment data
+                  with_visualization=False)  # only turn on on custom garment data
 dataset_wrapper = trainer.datawraper
 # model
 trainer.init_randomizer()
@@ -35,7 +38,7 @@ trainer.init_randomizer()
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
 model = nets.GarmentPanelsAE(
     dataset.config['element_size'], dataset.config['feature_size'], 
-    {'hidden_dim_enc': 15, 'hidden_dim_dec': 15, 'n_layers': 4, 'loop_loss_weight': 0.1, 'dropout': 0.2})
+    {'hidden_dim_enc': 15, 'hidden_dim_dec': 15, 'n_layers': 4, 'loop_loss_weight': 0.1, 'dropout': 0})
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration
