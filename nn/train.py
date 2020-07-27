@@ -6,14 +6,14 @@ from trainer import Trainer
 from experiment import WandbRunWrappper
 
 # init
-dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-# dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='panelAE-skirts-sep-caching', 
+    run_name='panelAE-tee-rand-padding', 
     run_id=None, 
     no_sync=False) 
 

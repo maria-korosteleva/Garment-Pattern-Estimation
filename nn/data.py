@@ -502,7 +502,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
             # apply new edge info
             try: 
-                pattern.panel_from_sequence(self.config['panel_name'], prediction)
+                pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction))
             except RuntimeError as e:
                 print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
                 pass
@@ -527,18 +527,20 @@ class GarmentPanelDataset(GarmentBaseDataset):
         # per sequence element means
         feature_mean = torch.zeros_like(training[0]['features'][0])
         for elem in training:
-            feature_mean += elem['features'].mean(axis=0)
+            feature_mean += self._unpad(elem['features']).mean(axis=0)
         feature_mean = feature_mean / len(training)
 
         # per sequence element stds
         feature_stds = torch.zeros_like(feature_mean)
         total_len = 0
         for elem in training:
-            feature_stds += ((elem['features'] - feature_mean) ** 2).sum(0)
+            feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
             total_len += elem['features'].shape[0]
         feature_stds = torch.sqrt(feature_stds / total_len)
 
         self.config['use_norm'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+
+        # print(self.config['use_norm'])
 
         self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
 
@@ -550,13 +552,23 @@ class GarmentPanelDataset(GarmentBaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
 
-        sequence = pattern.panel_as_sequence(self.config['panel_name'])
+        # sequence = pattern.panel_as_sequence(self.config['panel_name'])
+        # TODO reuse length to lessen calculations
+        pattern_nn = pattern.pattern_as_tensors()
 
-        return sequence
+        # return random panel from a pattern
+        return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
+
+    def _unpad(self, element):
+        """Return copy of in element without padding from given element -- edge sequence"""
+        # NOTE: might be some false removal of zero edges in the middle of the list.
+        bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=1.e-5)  # per-element comparison with zero
+        selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
+        return element[selection]
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -626,7 +638,8 @@ if __name__ == "__main__":
 
     # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
     system = Properties('./system.json')
-    dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
     data_location = Path(system['output']) / dataset_folder
 
@@ -640,6 +653,6 @@ if __name__ == "__main__":
     datawrapper = DatasetWrapper(dataset)
     datawrapper.new_split(10, 10, 300)
 
-    datawrapper.use_normalizatoin()
+    datawrapper.use_normalization()
 
     print(dataset[5]['features'])

@@ -87,7 +87,24 @@ class BasicPattern(object):
         return name
 
     # --------- Special representations -----
-    def panel_as_sequence(self, panel_name):
+    def pattern_as_tensors(self, pad_panels_to_len=None):
+        """Return pattern in 3D tensor (TODO plus aditional info) suitable for NN inputs/outputs"""
+        # TODO add on panel-level
+
+        # TODO get panel ordering
+
+        # Calculate max edge count among panels -- if not provided
+        # TODO move max len calculation to some other place? -- reduce calls?
+        max_len = pad_panels_to_len if pad_panels_to_len is not None else max(
+            [len(panel['edges']) for name, panel in self.pattern['panels'].items()])
+
+        panel_seqs = []
+        for panel_name in self.pattern['panels']:
+            panel_seqs.append(self.panel_as_sequence(panel_name, pad_to_len=max_len))
+        
+        return np.stack(panel_seqs)
+
+    def panel_as_sequence(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length.
            * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
            * Edges are returned in additive manner: 
@@ -122,6 +139,14 @@ class BasicPattern(object):
         for edge in rotated_edges:
             edge_sequence.append(self._edge_as_vector(vertices, edge))
 
+        # padding if requested
+        if pad_to_len is not None:
+            if len(edge_sequence) > pad_to_len:
+                raise ValueError('BasicPattern::{}::panel {} cannot fit into requested length: {} edges to fit into {}'.format(
+                    self.name, panel_name, len(edge_sequence), pad_to_len))
+            for _ in range(len(edge_sequence), pad_to_len):
+                edge_sequence.append(np.zeros_like(edge_sequence[0]))
+        
         # TODO add 3D placement convertion 
 
         return np.stack(edge_sequence, axis=0)
@@ -734,21 +759,23 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
-    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
 
-    panel_to_conv = 'front'
-    panel_representation = pattern.panel_as_sequence(panel_to_conv)
-    print(panel_representation)
-    panel_representation = np.array(
-        [[ 62.66666667,   0.,           0.5,         -0.1,       ],
-        [-10.75,        45.,           0.,           0.,        ],
-        [ -3.58333333,  15.,           0.,           0.,        ],
-        [-34.,           0.,           0.5,          0.1,      ],
-        [ -3.58333333, -15.,          0.,          0.,        ],
-        [-10.75,       -45.,           0.,           0.        ]]
-    )
-    pattern.panel_from_sequence(panel_to_conv, panel_representation)
+    print(pattern.pattern_as_tensors())
 
-    pattern.name = 'skirt_direct_upd'
-    pattern.serialize(system_config['output'], to_subfolder=True, tag='direct_upd')
+    # panel_to_conv = 'front'
+    # panel_representation = pattern.panel_as_sequence(panel_to_conv)
+    # print(panel_representation)
+    # panel_representation = np.array(
+    #     [[ 62.66666667,   0.,           0.5,         -0.1,       ],
+    #     [-10.75,        45.,           0.,           0.,        ],
+    #     [ -3.58333333,  15.,           0.,           0.,        ],
+    #     [-34.,           0.,           0.5,          0.1,      ],
+    #     [ -3.58333333, -15.,          0.,          0.,        ],
+    #     [-10.75,       -45.,           0.,           0.        ]]
+    # )
+    # pattern.panel_from_sequence(panel_to_conv, panel_representation)
+
+    # pattern.name = 'skirt_direct_upd'
+    # pattern.serialize(system_config['output'], to_subfolder=True, tag='direct_upd')
