@@ -13,7 +13,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='panelAE-skirts-caching', 
+    run_name='panelAE-skirts-sep-caching', 
     run_id=None, 
     no_sync=False) 
 
@@ -24,7 +24,7 @@ experiment = WandbRunWrappper(
 dataset = data.GarmentPanelDataset(
     Path(system_info['datasets_path']) / dataset_folder, 
     {'panel_name': 'front'}, 
-    caching=True)
+    gt_caching=True, feature_caching=True)
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
@@ -32,7 +32,7 @@ trainer = Trainer(experiment, dataset,
                   with_visualization=False)  # only turn on on custom garment data
 dataset_wrapper = trainer.datawraper
 # model
-trainer.init_randomizer()
+trainer.init_randomizer(100)
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})

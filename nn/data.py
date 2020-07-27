@@ -209,7 +209,7 @@ class FeatureNormalization():
 
 class BaseDataset(Dataset):
     """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, start_config={}, caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
         """Kind of Universal init for my datasets
             if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
         self.root_path = Path(root_dir)
@@ -222,9 +222,14 @@ class BaseDataset(Dataset):
         self.datapoints_names = dirs
         self._clean_datapoint_list()
         self.cached = {}
-        self.caching_enabled = caching
-        if caching:
-            print('BaseDataset::Info::Storing all datapoints in memory')
+        self.gt_cached = {}
+        self.gt_caching = gt_caching
+        if gt_caching:
+            print('BaseDataset::Info::Storing datapoints ground_truth info in memory')
+        self.feature_cached = {}
+        self.feature_caching = feature_caching
+        if feature_caching:
+            print('BaseDataset::Info::Storing datapoints feature info in memory')
 
         # Use default tensor transform + the ones from input
         self.transforms = [SampleToTensor()] + transforms
@@ -251,24 +256,35 @@ class BaseDataset(Dataset):
         
         if torch.is_tensor(idx):  # allow indexing by tensors
             idx = idx.tolist()
-            
+
+        folder_elements = None  
         datapoint_name = self.datapoints_names[idx]
-        if datapoint_name in self.cached:  # might not be compatible with list indexing
-            sample = self.cached[datapoint_name]
+
+        if datapoint_name in self.gt_cached:  # might not be compatible with list indexing
+            ground_truth = self.gt_cached[datapoint_name]
         else:
             folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-
-            features = self._get_features(datapoint_name, folder_elements)
             ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
-            
-            sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
-
-            if self.caching_enabled:  # save read values 
-                self.cached[datapoint_name] = sample
+            if self.gt_caching:
+                self.gt_cached[datapoint_name] = ground_truth
         
+        if datapoint_name in self.feature_cached:
+            features = self.feature_cached[datapoint_name]
+        else:
+            folder_elements = folder_elements if folder_elements is not None else [file.name for file in (self.root_path / datapoint_name).glob('*')]
+            features = self._get_features(datapoint_name, folder_elements)
+            
+            if self.feature_caching:  # save read values 
+                self.feature_cached[datapoint_name] = features
+        
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
+
         # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
             sample = transform(sample)
+
+        # if datapoint_name == 'skirt_4_panels_8TZHP6YTS1':
+        #    print(sample)
 
         return sample
 
@@ -327,7 +343,7 @@ class BaseDataset(Dataset):
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
         
-    def __init__(self, root_dir, start_config={}, caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -338,7 +354,7 @@ class GarmentBaseDataset(BaseDataset):
         if not self.dataset_props['to_subfolders']:
             raise NotImplementedError('Working with datasets with all datapopints ')
         
-        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -396,7 +412,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         * Ground_truth: parameters used to generate a garment
     """
     
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -406,7 +422,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         if 'mesh_samples' not in start_config:  
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
-        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
      
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
@@ -453,8 +469,8 @@ class Garment3DParamsDataset(GarmentParamsDataset):
         * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
         * Ground_truth: parameters used to generate a garment
     """
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
+    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
     
     # the only difference with parent class in the shape of the features
     def _get_features(self, datapoint_name, folder_elements):
@@ -468,8 +484,8 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * ground_truth is not used
 
     """
-    def __init__(self, root_dir, start_config={'panel_name': 'front'}, caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
+    def __init__(self, root_dir, start_config={'panel_name': 'front'}, gt_caching=False, feature_caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
     
     def save_prediction_batch(self, predictions, datanames, save_to):
@@ -548,7 +564,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={'num_verts': 'all'}, caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -561,7 +577,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         self.features_filename = 'visfea.mat'
         self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
 
-        super().__init__(root_dir, start_config, caching=caching, transforms=transforms)
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
