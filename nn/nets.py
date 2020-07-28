@@ -151,7 +151,7 @@ class GarmentPanelsAE(BaseModule):
         * https://blog.floydhub.com/a-beginners-guide-on-recurrent-neural-networks-with-pytorch/
         * for seq2seq decisions https://machinelearningmastery.com/encoder-decoder-long-short-term-memory-networks/
     """
-    def __init__(self, in_elem_len, max_seq_len, config={}):
+    def __init__(self, in_elem_len, max_seq_len, data_norm={}, config={}):
         super().__init__()
 
         # defaults for this net
@@ -164,6 +164,11 @@ class GarmentPanelsAE(BaseModule):
         self.config['hidden_init'] = 'kaiming_normal_'
 
         self.max_seq_len = max_seq_len
+
+        self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(in_elem_len)
+        if not torch.is_tensor(self.pad_tenzor):
+            self.pad_tenzor = torch.Tensor(self.pad_tenzor)
+        self.pad_tenzor = self.pad_tenzor.repeat(max_seq_len, 1)
 
         # encode
         self.seq_encoder = nn.LSTM(
@@ -242,7 +247,21 @@ class GarmentPanelsAE(BaseModule):
         reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
 
         # ensuring edges within panel loop & return to origin
-        panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
+        panel_coords_sum = torch.zeros((features.shape[0], 2))
+        panel_coords_sum = panel_coords_sum.to(device=features.device)
+        self.pad_tenzor = self.pad_tenzor.to(device=features.device)
+        for el_id in range(features.shape[0]):
+            # iterate over elements in batch
+            # loop loss per panel + we need to know each panel original length
+            panel = features[el_id]
+            # unpad
+            bool_matrix = torch.isclose(panel, self.pad_tenzor, atol=1.e-2)
+            seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
+
+            # update loss
+            panel_coords_sum[el_id] = preds[el_id][:seq_len, :2].sum(axis=0)
+
+        # panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
         panel_square_sums = panel_coords_sum ** 2  # per sum square
 
         # batch mean of squared norms of per-panel final points:
@@ -256,9 +275,10 @@ if __name__ == "__main__":
     torch.manual_seed(125)
 
     a = torch.arange(1, 25, dtype=torch.float)
+    dataset = a.view(-1, 3)
     batch = a.view(2, -1, 3)  # ~ 2 examples in batch
 
-    net = GarmentPanelsAE(batch.shape[2], batch.shape[1])
+    net = GarmentPanelsAE(batch.shape[2], batch.shape[1], {'mean': dataset.mean(), 'std': dataset.std()})
 
     print('In batch shape: {}'.format(batch.shape))
     print(net(batch))  # should have 2 x 10 shape -- per example prediction

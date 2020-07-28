@@ -527,16 +527,14 @@ class GarmentPanelDataset(GarmentBaseDataset):
         # per sequence element means
         feature_mean = torch.zeros_like(training[0]['features'][0])
         for elem in training:
-            # feature_mean += self._unpad(elem['features']).mean(axis=0)
-            feature_mean += elem['features'].mean(axis=0)
+            feature_mean += self._unpad(elem['features']).mean(axis=0)
         feature_mean = feature_mean / len(training)
 
         # per sequence element stds
         feature_stds = torch.zeros_like(feature_mean)
         total_len = 0
         for elem in training:
-            # feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
-            feature_stds += ((elem['features'] - feature_mean) ** 2).sum(0)
+            feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
             total_len += elem['features'].shape[0]
         feature_stds = torch.sqrt(feature_stds / total_len)
 

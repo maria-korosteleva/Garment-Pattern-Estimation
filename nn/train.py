@@ -13,7 +13,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='MultiPanelAE-tee-rand-flat-norm', 
+    run_name='MultiPanelAE-tee-rand-loop', 
     run_id=None, 
     no_sync=False) 
 
@@ -36,9 +36,10 @@ trainer.init_randomizer(100)
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
+
 model = nets.GarmentPanelsAE(
-    dataset.config['element_size'], dataset.config['feature_size'], 
-    {'hidden_dim_enc': 15, 'hidden_dim_dec': 15, 'n_layers': 4, 'loop_loss_weight': 0.1, 'dropout': 0})
+    dataset.config['element_size'], dataset.config['feature_size'], dataset.config['use_norm'],
+    {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 4, 'loop_loss_weight': 0.1, 'dropout': 0})
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration

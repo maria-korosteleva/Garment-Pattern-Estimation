@@ -95,8 +95,8 @@ class BasicPattern(object):
 
         # Calculate max edge count among panels -- if not provided
         # TODO move max len calculation to some other place? -- reduce calls?
-        max_len = pad_panels_to_len if pad_panels_to_len is not None else max(
-            [len(panel['edges']) for name, panel in self.pattern['panels'].items()])
+        panel_lens = [len(panel['edges']) for name, panel in self.pattern['panels'].items()]
+        max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         panel_seqs = []
         for panel_name in self.pattern['panels']:
