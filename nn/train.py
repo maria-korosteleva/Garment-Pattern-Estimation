@@ -13,7 +13,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='MultiPanelAE-tee-rand', 
+    run_name='MultiPanelAE-tee-rand-flat-norm', 
     run_id=None, 
     no_sync=False) 
 

@@ -199,19 +199,8 @@ class FeatureNormalization():
         self.std = std
     
     def __call__(self, sample):
-
-        element = sample['features']
-        if torch.is_tensor(element):        
-            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=1.e-5)  # per-element comparison with zero
-            selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
-        else:  # numpy
-            selection = ~np.all(np.isclose(element, 0, atol=1.e-5), axis=1)  # only non-zero rows
-
-        element[selection] = (element[selection] - self.mean) / self.std  # standardize non-zero rows
-
-
         return {
-            'features': element,
+            'features': (sample['features'] - self.mean) / self.std,
             'ground_truth': sample['ground_truth'],
             'name': sample['name']
         }
@@ -506,8 +495,6 @@ class GarmentPanelDataset(GarmentBaseDataset):
         prediction_imgs = []
         for prediction, name in zip(predictions, datanames):
             prediction = prediction.cpu().numpy()
-
-            prediction = self._unpad(prediction)  # before restoring from normalization
             if 'use_norm' in self.config:
                 prediction = prediction * self.config['use_norm']['std'] + self.config['use_norm']['mean']
 
@@ -515,7 +502,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
             # apply new edge info
             try: 
-                pattern.panel_from_sequence(self.config['panel_name'], prediction)
+                pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction))
             except RuntimeError as e:
                 print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
                 pass
@@ -540,14 +527,16 @@ class GarmentPanelDataset(GarmentBaseDataset):
         # per sequence element means
         feature_mean = torch.zeros_like(training[0]['features'][0])
         for elem in training:
-            feature_mean += self._unpad(elem['features']).mean(axis=0)
+            # feature_mean += self._unpad(elem['features']).mean(axis=0)
+            feature_mean += elem['features'].mean(axis=0)
         feature_mean = feature_mean / len(training)
 
         # per sequence element stds
         feature_stds = torch.zeros_like(feature_mean)
         total_len = 0
         for elem in training:
-            feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
+            # feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
+            feature_stds += ((elem['features'] - feature_mean) ** 2).sum(0)
             total_len += elem['features'].shape[0]
         feature_stds = torch.sqrt(feature_stds / total_len)
 
