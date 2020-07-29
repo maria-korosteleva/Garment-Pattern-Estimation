@@ -502,7 +502,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
             # apply new edge info
             try: 
-                pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction))
+                pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction, 1.5))   # we can set quite high tolerance! Normal edges are quite long
             except RuntimeError as e:
                 print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
                 pass
@@ -563,14 +563,14 @@ class GarmentPanelDataset(GarmentBaseDataset):
         """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
 
-    def _unpad(self, element):
+    def _unpad(self, element, tolerance=1.e-5):
         """Return copy of in element without padding from given element -- edge sequence"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
         if torch.is_tensor(element):        
-            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=1.e-5)  # per-element comparison with zero
+            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=tolerance)  # per-element comparison with zero
             selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
         else:  # numpy
-            selection = ~np.all(np.isclose(element, 0, atol=1.e-5), axis=1)  # only non-zero rows
+            selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
         return element[selection]
 
 
