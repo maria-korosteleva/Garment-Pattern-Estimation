@@ -38,8 +38,8 @@ trainer.init_randomizer(100)
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
 
 model = nets.GarmentPanelsAE(
-    dataset.config['element_size'], dataset.config['feature_size'], dataset.config['use_norm'],
-    {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 4, 'loop_loss_weight': 0.1, 'dropout': 0})
+    dataset.config['element_size'], dataset.config['feature_size'], dataset.config['standardize'],
+    {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0})
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration

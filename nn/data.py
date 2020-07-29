@@ -146,9 +146,9 @@ class DatasetWrapper(object):
         
         return mean_features, std_features
 
-    def use_normalization(self):
+    def standardize_data(self):
         """Apply data normalization based on stats from training set"""
-        self.dataset.use_normalization(self.training)
+        self.dataset.standardize(self.training)
 
     # --------- Managing predictions on this data ---------
     def predict(self, model, save_to, sections=['test'], single_batch=False):
@@ -304,7 +304,7 @@ class BaseDataset(Dataset):
         """Saves predicted params of the datapoint to the original data folder"""
         pass
 
-    def use_normalization(self, training):
+    def standardize(self, training):
         """Use element normalization based on stats from the training subset.
             Dataset is the object most aware of the datapoint structure hence it's the place to calculate & use the normalization.
             Normalization is not implemented as Transform because it might need to be customized for a data & reapplied on saving & visualizing predictions """
@@ -495,8 +495,8 @@ class GarmentPanelDataset(GarmentBaseDataset):
         prediction_imgs = []
         for prediction, name in zip(predictions, datanames):
             prediction = prediction.cpu().numpy()
-            if 'use_norm' in self.config:
-                prediction = prediction * self.config['use_norm']['std'] + self.config['use_norm']['mean']
+            if 'standardize' in self.config:
+                prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
 
             pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
 
@@ -518,7 +518,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
     
-    def use_normalization(self, training):
+    def standardize(self, training):
         """Use mean&std for normalization of output features & restoring input predictions.
             Accepts training subset as input -- the stats are only based on training subsection of the data
         """
@@ -538,9 +538,9 @@ class GarmentPanelDataset(GarmentBaseDataset):
             total_len += elem['features'].shape[0]
         feature_stds = torch.sqrt(feature_stds / total_len)
 
-        self.config['use_norm'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+        self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
 
-        # print(self.config['use_norm'])
+        # print(self.config['standardize'])
 
         self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
 
@@ -656,6 +656,6 @@ if __name__ == "__main__":
     datawrapper = DatasetWrapper(dataset)
     datawrapper.new_split(10, 10, 300)
 
-    datawrapper.use_normalization()
+    datawrapper.standardize_data()
 
     print(dataset[5]['features'])

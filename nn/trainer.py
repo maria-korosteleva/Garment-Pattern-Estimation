@@ -18,7 +18,7 @@ class Trainer():
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
         self.datawraper = None
-        self.use_data_normalization = True
+        self.standardize_data = True
         self.log_with_visualization = with_visualization
         
         # default training setup
@@ -68,9 +68,8 @@ class Trainer():
         self.datawraper.new_split(valid_percent, test_percent, random_seed)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
 
-        # ---- NEW! -----
-        if self.use_data_normalization:
-            self.datawraper.use_normalization()
+        if self.standardize_data:
+            self.datawraper.standardize_data()
 
         return self.datawraper
 
