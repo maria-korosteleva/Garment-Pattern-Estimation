@@ -89,17 +89,15 @@ class BasicPattern(object):
     # --------- Special representations -----
     def pattern_as_tensors(self, pad_panels_to_len=None):
         """Return pattern in 3D tensor (TODO plus aditional info) suitable for NN inputs/outputs"""
-        # TODO add on panel-level
-
-        # TODO get panel ordering
+        # get panel ordering
+        panel_order = self._get_panel_order(self.pattern['panels'].keys(), tolerance=5)
 
         # Calculate max edge count among panels -- if not provided
-        # TODO move max len calculation to some other place? -- reduce calls?
         panel_lens = [len(panel['edges']) for name, panel in self.pattern['panels'].items()]
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         panel_seqs = []
-        for panel_name in self.pattern['panels']:
+        for panel_name in panel_order:
             panel_seqs.append(self.panel_as_sequence(panel_name, pad_to_len=max_len))
         
         return np.stack(panel_seqs)
@@ -205,6 +203,36 @@ class BasicPattern(object):
         if not all(np.isclose(curvature, 0)):  # curvature part
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
+
+    def _get_panel_order(self, name_list, dim=0, tolerance=1):
+        """Ordering of the panels based on their 3D translation values.
+            * Using cm as units for tolerance
+            * Sorting X -> Y -> Z (left-right (looking from Z) then down-up then back-front)
+            * based on the fuzzysort suggestion here https://stackoverflow.com/a/24024801/11206726"""
+
+        # consider only translations of the requested panel names
+        reference = [self.pattern['panels'][panel_n]['translation'][dim] for panel_n in name_list]
+        sorted_couple = sorted(zip(reference, name_list))  # sorts according to the first list
+        sorted_reference, sorted_names = zip(*sorted_couple)
+        sorted_names = list(sorted_names)
+
+        if (dim + 1) < 3:  # 3D is max
+            # re-sort values by next dimention if they have similar values in current dimention
+            fuzzy_start = 0
+            for fuzzy_end in range(1, len(sorted_reference)):
+                if sorted_reference[fuzzy_end] - sorted_reference[fuzzy_start] >= tolerance:
+                    # the range of similar values is completed
+                    if fuzzy_end - fuzzy_start > 1:
+                        sorted_names[fuzzy_start:fuzzy_end] = self._get_panel_order(
+                            sorted_names[fuzzy_start:fuzzy_end], dim + 1, tolerance)
+                    fuzzy_start = fuzzy_end  # start counting similar values anew
+
+            # take care of the tail
+            if fuzzy_start != fuzzy_end:
+                sorted_names[fuzzy_start:] = self._get_panel_order(
+                    sorted_names[fuzzy_start:], dim + 1, tolerance)
+
+        return sorted_names
 
     # --------- Pattern operations ----------
     def _normalize_template(self):
@@ -759,10 +787,11 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
 
-    print(pattern.pattern_as_tensors())
+    pattern.pattern_as_tensors()
+    # print(pattern.pattern_as_tensors())
 
     # panel_to_conv = 'front'
     # panel_representation = pattern.panel_as_sequence(panel_to_conv)
