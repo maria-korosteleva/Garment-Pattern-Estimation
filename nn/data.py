@@ -554,7 +554,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
         # TODO reuse length to lessen calculations
-        pattern_nn = pattern.pattern_as_tensors()
+        pattern_nn = pattern.pattern_as_tensor()
 
         # return random panel from a pattern
         return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
