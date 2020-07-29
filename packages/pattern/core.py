@@ -496,6 +496,23 @@ class ParametrizedPattern(BasicPattern):
         super(ParametrizedPattern, self)._restore(backup_copy)
         self.parameters = self.spec['parameters']
     
+    # ------- Direct pattern update -------
+    def pattern_from_tensor(self, pattern_representation, padded=False):
+        """When direct update is applied to parametrized pattern, 
+            all the parameter settings become invalid"""
+        super().pattern_from_tensor(pattern_representation, padded)
+
+        # Invalidate parameter & constraints values
+        self._invalidate_all_values()
+
+    def panel_from_sequence(self, panel_name, edge_sequence, padded=False):
+        """When direct update is applied to parametrized pattern panels, 
+            all the parameter settings become invalid"""
+        super().panel_from_sequence(panel_name, edge_sequence, padded)
+        
+        # Invalidate parameter & constraints values
+        self._invalidate_all_values()
+
     # ---------- Parameters operations --------
 
     def _normalize_param_scaling(self):
@@ -760,6 +777,27 @@ class ParametrizedPattern(BasicPattern):
 
         return verts_ids, verts_coords, target_line, target_line.dot(verts_coords[-1] - verts_coords[0])
 
+    def _invalidate_all_values(self):
+        """Sets all values of params & constraints to None if not set already
+            Useful in direct updates of pattern panels"""
+
+        updated_once = False
+        for parameter in self.parameters:
+            if self.parameters[parameter]['value'] is not None:
+                self.parameters[parameter]['value'] = None
+                updated_once = True
+        
+        if 'constraints' in self.spec:
+            for constraint in self.spec['constraints']:
+                for edge_collection in self.spec['constraints'][constraint]['influence']:
+                    for edge in edge_collection['edge_list']:
+                        if edge['value'] is not None: 
+                            edge['value'] = None
+                            updated_once = True
+        if updated_once:
+            # only display worning if some new invalidation happened
+            print('ParametrizedPattern::Warning::Parameter (& constraints) values are invalidated')
+
     # ---------- Randomization -------------
     def _randomize_pattern(self):
         """Robustly randomize current pattern"""
@@ -821,8 +859,8 @@ if __name__ == "__main__":
 
     tensor[2][0][0] -= 10
 
-    tensor = tensor[:-1]
+    # tensor = tensor[:-1]
     pattern.pattern_from_tensor(tensor, padded=True)
 
-    pattern.name = 'tee_direct_upd2'
+    pattern.name += '_direct_upd5'
     pattern.serialize(system_config['output'], to_subfolder=True)
