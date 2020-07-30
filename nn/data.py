@@ -362,6 +362,26 @@ class GarmentBaseDataset(BaseDataset):
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
     
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations"""
+
+        prediction_imgs = []
+        for prediction, name in zip(predictions, datanames):
+
+            pattern = self._pred_to_pattern(prediction, name)
+
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+        return prediction_imgs
+
     # ------ Data-specific basic functions --------
     def _clean_datapoint_list(self):
         """Remove all elements marked as failure from the datapoint list"""
@@ -404,6 +424,9 @@ class GarmentBaseDataset(BaseDataset):
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        return None
 
 class GarmentParamsDataset(GarmentBaseDataset):
     """
@@ -423,28 +446,6 @@ class GarmentParamsDataset(GarmentBaseDataset):
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-     
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
-            Returns list of paths to files with prediction visualizations"""
-
-        prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
-            prediction = prediction.tolist()
-            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
-
-            # apply new parameters
-            pattern.apply_param_list(prediction)
-            # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
     
     # ------ Data-specific basic functions --------
     def _get_features(self, datapoint_name, folder_elements):
@@ -463,6 +464,16 @@ class GarmentParamsDataset(GarmentBaseDataset):
 
         return np.array(pattern.param_values_list())
    
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        prediction = prediction.tolist()
+        pattern = VisPattern(str(self.root_path / dataname / 'specification.json'), view_ids=False)  # with correct pattern name
+
+        # apply new parameters
+        pattern.apply_param_list(prediction)
+
+        return pattern
+
 
 class Garment3DParamsDataset(GarmentParamsDataset):
     """For loading the custom generated data:
@@ -488,36 +499,6 @@ class GarmentPanelDataset(GarmentBaseDataset):
     def __init__(self, root_dir, start_config={'panel_name': 'front'}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
-    
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
-            Returns list of paths to files with prediction visualizations"""
-
-        prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
-            prediction = prediction.cpu().numpy()
-            if 'standardize' in self.config:
-                prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
-
-            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
-
-            # apply new edge info
-            try: 
-                pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction, 1.5))   # we can set quite high tolerance! Normal edges are quite long
-            except RuntimeError as e:
-                print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
-                pass
-
-            # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
     
     def standardize(self, training):
         """Use mean&std for normalization of output features & restoring input predictions.
@@ -564,6 +545,23 @@ class GarmentPanelDataset(GarmentBaseDataset):
         """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
 
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        prediction = prediction.cpu().numpy()
+        if 'standardize' in self.config:
+            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
+
+        pattern = VisPattern(str(self.root_path / dataname / 'specification.json'), view_ids=False)  # with correct pattern name
+
+        # apply new edge info
+        try: 
+            pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction, 1.5))   # we can set quite high tolerance! Normal edges are quite long
+        except RuntimeError as e:
+            print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
+            pass
+
+        return pattern
+
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of in element without padding from given element -- edge sequence"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
@@ -583,36 +581,6 @@ class Garment2DPatternDataset(GarmentBaseDataset):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['panel_len'] = self[0]['features'].shape[1]
         self.config['element_size'] = self[0]['features'].shape[2]
-    
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
-            Returns list of paths to files with prediction visualizations"""
-
-        prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
-            prediction = prediction.cpu().numpy()
-            if 'standardize' in self.config:
-                prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
-
-            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
-
-            # apply new edge info
-            try: 
-                pattern.pattern_from_tensor(prediction, padded=True)   
-            except RuntimeError as e:
-                print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
-                pass
-
-            # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
     
     def standardize(self, training):
         """Use mean&std for normalization of output edge features & restoring input predictions.
@@ -655,6 +623,23 @@ class Garment2DPatternDataset(GarmentBaseDataset):
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """The dataset targets AutoEncoding tasks -- no need for features"""
         return None
+
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        prediction = prediction.cpu().numpy()
+        if 'standardize' in self.config:
+            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
+
+        pattern = VisPattern(str(self.root_path / dataname / 'specification.json'), view_ids=False)  # with correct pattern name
+
+        # apply new edge info
+        try: 
+            pattern.pattern_from_tensor(prediction, padded=True)   
+        except RuntimeError as e:
+            print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
+            pass
+
+        return pattern
 
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of in element without padding from given element -- edge sequence"""
