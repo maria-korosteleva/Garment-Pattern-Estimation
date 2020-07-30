@@ -13,7 +13,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='MultiPanelAE-tee-rand-fix', 
+    run_name='PatternAE-tee', 
     run_id=None, 
     no_sync=False) 
 
@@ -21,10 +21,11 @@ experiment = WandbRunWrappper(
 # dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
 # dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
 # dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
-dataset = data.GarmentPanelDataset(
-    Path(system_info['datasets_path']) / dataset_folder, 
-    {'panel_name': 'front'}, 
-    gt_caching=True, feature_caching=True)
+# dataset = data.GarmentPanelDataset(
+#     Path(system_info['datasets_path']) / dataset_folder, 
+#     {'panel_name': 'front'}, 
+#     gt_caching=True, feature_caching=True)
+dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, gt_caching=True, feature_caching=True)
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
@@ -36,10 +37,17 @@ trainer.init_randomizer(100)
 # model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], {'r1': 10, 'r2': 40})
-
-model = nets.GarmentPanelsAE(
-    dataset.config['element_size'], dataset.config['feature_size'], dataset.config['standardize'],
-    {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0})
+# model = nets.GarmentPanelsAE(
+#     dataset.config['element_size'], dataset.config['feature_size'], dataset.config['standardize'],
+#     {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0})
+model = nets.GarmentPatternAE(
+    dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'],
+    {
+        'panel_encoding_size': 25, 'panel_n_layers': 3, 
+        'pattern_encoding_size': 40, 'pattern_n_layers': 3, 
+        'loop_loss_weight': 0.1, 'dropout': 0
+    }
+)
 
 if hasattr(model, 'config'):
     trainer.update_config(NN=model.config)  # save NN configuration
