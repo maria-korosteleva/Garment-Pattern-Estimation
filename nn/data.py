@@ -535,8 +535,9 @@ class GarmentPanelDataset(GarmentBaseDataset):
         feature_stds = torch.zeros_like(feature_mean)
         total_len = 0
         for elem in training:
-            feature_stds += ((self._unpad(elem['features']) - feature_mean) ** 2).sum(0)
-            total_len += elem['features'].shape[0]
+            unpadded = self._unpad(elem['features'])
+            feature_stds += ((unpadded - feature_mean) ** 2).sum(0)
+            total_len += unpadded.shape[0]
         feature_stds = torch.sqrt(feature_stds / total_len)
 
         self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
