@@ -480,8 +480,9 @@ class Garment3DParamsDataset(GarmentParamsDataset):
 
 class GarmentPanelDataset(GarmentBaseDataset):
     """Experimental loading of custom generated data to be used in AE:
-        * features: a 'front' panel edges represented as a sequence
+        * features: a panel edges represented as a sequence. Panel is chosen randomly. 
         * ground_truth is not used
+        * When saving predictions, the predicted panel is always saved as panel with name provided in config 
 
     """
     def __init__(self, root_dir, start_config={'panel_name': 'front'}, gt_caching=False, feature_caching=False, transforms=[]):
@@ -553,11 +554,102 @@ class GarmentPanelDataset(GarmentBaseDataset):
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
 
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
-        # TODO reuse length to lessen calculations
         pattern_nn = pattern.pattern_as_tensor()
 
         # return random panel from a pattern
         return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
+        
+    def _get_ground_truth(self, datapoint_name, folder_elements):
+        """The dataset targets AutoEncoding tasks -- no need for features"""
+        return None
+
+    def _unpad(self, element, tolerance=1.e-5):
+        """Return copy of in element without padding from given element -- edge sequence"""
+        # NOTE: might be some false removal of zero edges in the middle of the list.
+        if torch.is_tensor(element):        
+            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=tolerance)  # per-element comparison with zero
+            selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
+        else:  # numpy
+            selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
+        return element[selection]
+
+
+class Garment2DPatternDataset(GarmentBaseDataset):
+    """Dataset definition for 2D pattern autoencoder
+        * features: a 'front' panel edges represented as a sequence
+        * ground_truth is not used"""
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+        self.config['panel_len'] = self[0]['features'].shape[1]
+        self.config['element_size'] = self[0]['features'].shape[2]
+    
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations"""
+
+        prediction_imgs = []
+        for prediction, name in zip(predictions, datanames):
+            prediction = prediction.cpu().numpy()
+            if 'standardize' in self.config:
+                prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
+
+            pattern = VisPattern(str(self.root_path / name / 'specification.json'), view_ids=False)  # with correct pattern name
+
+            # apply new edge info
+            try: 
+                pattern.pattern_from_tensor(prediction, padded=True)   
+            except RuntimeError as e:
+                print('GarmentPanelDataset::Warning::{}: {}'.format(name, e))
+                pass
+
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+        return prediction_imgs
+    
+    def standardize(self, training):
+        """Use mean&std for normalization of output edge features & restoring input predictions.
+            Accepts training subset as input -- the stats are only based on training subsection of the data
+        """
+        print('GarmentPanelDataset::Using data normalization')
+
+        # per sequence element means
+        feature_mean = torch.zeros_like(training[0]['features'][0][0])
+        for pattern in training: # 
+            for panel in pattern['features']:
+                feature_mean += self._unpad(panel).mean(axis=0)
+        feature_mean = feature_mean / (len(training) * self.config['feature_size']) 
+
+        # per sequence element stds
+        feature_stds = torch.zeros_like(feature_mean)
+        total_len = 0
+        for pattern in training:
+            for panel in pattern['features']:
+                unpadded_panel = self._unpad(panel)
+                feature_stds += ((unpadded_panel - feature_mean) ** 2).sum(0)
+                total_len += unpadded_panel.shape[0]
+        feature_stds = torch.sqrt(feature_stds / total_len)
+
+        self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+
+        # print(self.config['standardize'])
+
+        self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
+
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
+        return pattern.pattern_as_tensor()
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """The dataset targets AutoEncoding tasks -- no need for features"""
@@ -646,7 +738,7 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = GarmentPanelDataset(data_location)
+    dataset = Garment2DPatternDataset(data_location)
 
     print(len(dataset), dataset.config)
     print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
