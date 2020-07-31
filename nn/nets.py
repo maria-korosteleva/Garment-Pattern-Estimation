@@ -344,66 +344,51 @@ class GarmentPatternAE(BaseModule):
         self.init_submodule_params(self.pattern_decoder)
         # leave defaults for linear layers
 
-    def forward(self, x):
-        self.device = x.device
-        batch_size = x.size(0)
-        pattern_size = x.size(1)
+    def forward(self, patterns_batch):
+        self.device = patterns_batch.device
+        batch_size = patterns_batch.size(0)
+        pattern_size = patterns_batch.size(1)
+        num_panels = batch_size * pattern_size
 
-        # --- Encode ---
+        # --------------- Encode ----------------
         # ----- Panel-level -----
-        panel_encodings = torch.empty((batch_size, pattern_size, self.config['panel_encoding_size'])).to(device=self.device)
+        # flatten -- view simply as a list of panels to apply encoding per panel
+        all_panels = patterns_batch.contiguous().view(num_panels, patterns_batch.shape[-2], patterns_batch.shape[-1])
 
-        # print('Panel encodings shape {}'.format(panel_encodings.shape))
+        hidden_init = self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
+        cell_init =  self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
+        out, (hidden, _) = self.panel_encoder(all_panels, (hidden_init, cell_init))
+        # final encoding is the last output == hidden of last layer 
+        panel_encodings = hidden[-1]
         
-        for pattern_id in range(batch_size):
-            # Assuming panel is a mini-batch of panels
-            hidden_init = self.init_hidden(pattern_size, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-            cell_init =  self.init_hidden(pattern_size, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-            out, (hidden, _) = self.panel_encoder(x[pattern_id], (hidden_init, cell_init))
-            # final encoding is the last output == hidden of last layer 
-            
-            # print('per-pattern encoding shape {}'.format(hidden[-1].shape))
-            
-            panel_encodings[pattern_id] = hidden[-1]
-
         # ---- Pattern-level -----
+        panel_encodings = panel_encodings.contiguous().view(batch_size, pattern_size, -1)  # get back to patterns
         hidden_init = self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
         cell_init =  self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
         out, (hidden, _) = self.pattern_encoder(panel_encodings, (hidden_init, cell_init))
 
         pattern_encoding = hidden[-1]   # YAAAAY Pattern hidden representation!!
-        
-        # print('Encodings {}'.format(pattern_encoding.shape))
 
-        # --- Decode ---
+        # ------------------- Decode ---------------
         # ---- Pattern-level -----
         pattern_dec_input = pattern_encoding.unsqueeze(1).repeat(1, pattern_size, 1)  # along sequence dimention
         hidden_init = self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
         cell_init =  self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
         out, hidden = self.pattern_decoder(pattern_dec_input, (hidden_init, cell_init))
-        # --- Reshape to panel encodings size --- 
-        # Reshaping the outputs such that it can be fit into the fully connected layer
+        # Flatten: view as just a list of panel encodings to apply lin layer per panel
         out = out.contiguous().view(-1, self.config['pattern_encoding_size'])
-        out = self.pattern_lin(out)
-        # back to sequence
-        panel_to_dec = out.contiguous().view(batch_size, pattern_size, -1)
-
-        # print('Panel encodings shape on decode {}'.format(panel_to_dec.shape))
+        all_panels_encodings = self.pattern_lin(out)  # now we have coorect size for predicted panel encodings
 
         # ----- Panel-level -----
-        prediction = torch.empty_like(x).to(device=self.device)
-        
-        for pattern_id in range(batch_size):
-            dec_input = panel_to_dec[pattern_id].unsqueeze(1).repeat(1, self.max_panel_len, 1)  # along sequence dimention
-            hidden_init = self.init_hidden(pattern_size, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-            cell_init =  self.init_hidden(pattern_size, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-            out, hidden = self.panel_decoder(dec_input, (hidden_init, cell_init))
-            # --- back to panel edges --- 
-            # Reshaping the outputs such that it can be fit into the fully connected layer
-            out = out.contiguous().view(-1, self.config['panel_encoding_size'])
-            out = self.panel_lin(out)
-            # back to sequence
-            prediction[pattern_id] = out.contiguous().view(pattern_size, self.max_panel_len, -1)
+        dec_input = all_panels_encodings.unsqueeze(1).repeat(1, self.max_panel_len, 1)  # along sequence dimention
+        hidden_init = self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
+        cell_init =  self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
+        out, hidden = self.panel_decoder(dec_input, (hidden_init, cell_init))
+        # Falatten: as simple list of edges without panel\pattern grouping to apply lin layer per edge
+        out = out.contiguous().view(-1, self.config['panel_encoding_size'])
+        out = self.panel_lin(out)  # correct size for predicted edges
+        # back to patterns and panels
+        prediction = out.contiguous().view(batch_size, pattern_size, self.max_panel_len, -1)
         
         return prediction
 
