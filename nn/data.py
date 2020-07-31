@@ -630,7 +630,8 @@ class Garment2DPatternDataset(GarmentBaseDataset):
         if 'standardize' in self.config:
             prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
 
-        pattern = VisPattern(str(self.root_path / dataname / 'specification.json'), view_ids=False)  # with correct pattern name
+        pattern = VisPattern(view_ids=False)
+        pattern.name = dataname
 
         # apply new edge info
         try: 

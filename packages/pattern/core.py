@@ -12,11 +12,33 @@ import numpy as np
 import os
 import random
 
-standard_names = [
+standard_filenames = [
     'specification',  # e.g. used by dataset generation
     'template', 
     'prediction'
 ]
+
+pattern_spec_template = {
+    'pattern': {
+        'panels': {},
+        'stitches': []
+    },
+    'parameters': {},
+    'parameter_order': [],
+    'properties': {  # these are to be ensured when pattern content is updated directly
+        'curvature_coords': 'relative', 
+        'normalize_panel_translation': False, 
+        'units_in_meter': 100  # cm
+    }
+}
+
+panel_spec_template = {
+    'translation': [ 0, 0, 0 ],
+    'rotation': [ 0, 0, 0 ],
+    'vertices': [],
+    'edges': []
+}
+
 
 
 class BasicPattern(object):
@@ -34,18 +56,30 @@ class BasicPattern(object):
 
     # ------------ Interface -------------
 
-    def __init__(self, pattern_file):
-
-        self.spec_file = pattern_file
-        self.path = os.path.dirname(pattern_file)
-        self.name = BasicPattern.name_from_path(pattern_file)
+    def __init__(self, pattern_file=None):
         
-        self.reloadJSON()
+        self.spec_file = pattern_file
+        
+        if pattern_file is not None: # load pattern from file
+            self.path = os.path.dirname(pattern_file)
+            self.name = BasicPattern.name_from_path(pattern_file)
+            self.reloadJSON()
+        else: # create empty pattern
+            self.path = None
+            self.name = self.__class__.__name__
+            self.spec = copy.deepcopy(pattern_spec_template)
+            self.pattern = self.spec['pattern']
+            self.properties = self.spec['properties']  # mandatory part
 
     def reloadJSON(self):
         """(Re)loads pattern info from spec file. 
         Useful when spec is updated from outside"""
-        
+        if self.spec_file is None:
+            print('BasicPattern::Warning::{}::Pattern is not connected to any file. Reloadig from file request ignored.'.format(
+                self.name
+            ))
+            return
+
         with open(self.spec_file, 'r') as f_json:
             self.spec = json.load(f_json)
         self.pattern = self.spec['pattern']
@@ -81,7 +115,7 @@ class BasicPattern(object):
     @staticmethod
     def name_from_path(pattern_file):
         name = os.path.splitext(os.path.basename(pattern_file))[0]
-        if name in standard_names:  # use name of directory instead
+        if name in standard_filenames:  # use name of directory instead
             path = os.path.dirname(pattern_file)
             name = os.path.basename(os.path.normpath(path))
         return name
@@ -103,22 +137,15 @@ class BasicPattern(object):
         return np.stack(panel_seqs)
 
     def pattern_from_tensor(self, pattern_representation, padded=False):
-        """Update values of each panel of given pattern from representation. 
-            Assuming the order of the panel-arrays in representation is the same as 
-            in current pattern"""
+        """Create panels from given panel representation. 
+            Assuming that representation uses cm as units"""
         # TODO updating panels 3D placement?
         # TODO updating stitches?
-
-        panel_order = self.panel_order(self.pattern['panels'].keys())
-        if len(panel_order) != len(pattern_representation):
-            raise ValueError(
-                ('BasicPattern::Error::{}::number of panels does not match when' 
-                + ' converting from tensor ({}) to object ({}) representation').format(
-                    self.name, len(pattern_representation), len(panel_order)
-                ))
         
-        for idx, panel_name in enumerate(panel_order):
-            self.panel_from_sequence(panel_name, pattern_representation[idx], padded=padded)
+        # remove existing panels -- start anew
+        self.pattern['panels'] = {}
+        for idx in range(len(pattern_representation)):
+            self.panel_from_sequence('panel_' + str(idx), pattern_representation[idx], padded=padded)
 
     def panel_as_sequence(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length.
@@ -170,7 +197,8 @@ class BasicPattern(object):
     def panel_from_sequence(self, panel_name, edge_sequence, padded=False):
         """Set panel vertex positions & edge dictionaries from given edge sequence"""
         if panel_name not in self.pattern['panels']:
-            raise ValueError('BasicPattern::requested update for non-existent ')
+            # add new panel! =)
+            self.pattern['panels'][panel_name] = copy.deepcopy(panel_spec_template)
 
         if padded:
             # edge sequence might be ending with pad values
@@ -441,8 +469,10 @@ class ParametrizedPattern(BasicPattern):
         Extention to BasicPattern that can work with parametrized patterns
         Update pattern with new parameter values & randomize those parameters
     """
-    def __init__(self, pattern_file):
+    def __init__(self, pattern_file=None):
         super(ParametrizedPattern, self).__init__(pattern_file)
+        self.parameters = self.spec['parameters']
+
         self.parameter_defaults = {
             'length': 1,
             'additive_length': 0,
@@ -509,7 +539,7 @@ class ParametrizedPattern(BasicPattern):
         """When direct update is applied to parametrized pattern panels, 
             all the parameter settings become invalid"""
         super().panel_from_sequence(panel_name, edge_sequence, padded)
-        
+
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
 
@@ -851,16 +881,19 @@ if __name__ == "__main__":
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
     # pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
-    pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern = VisPattern()
 
-    tensor = pattern.pattern_as_tensor()
-    print(pattern.panel_order())
-    print(tensor)
+    print(pattern.spec)
 
-    tensor[2][0][0] -= 10
+    # tensor = pattern.pattern_as_tensor()
+    # print(pattern.panel_order())
+    # print(tensor)
 
-    # tensor = tensor[:-1]
-    pattern.pattern_from_tensor(tensor, padded=True)
+    # tensor[2][0][0] -= 10
 
-    pattern.name += '_direct_upd5'
+    # # tensor = tensor[:-1]
+    # pattern.pattern_from_tensor(tensor, padded=True)
+
+    pattern.name += '_save_try_1'
     pattern.serialize(system_config['output'], to_subfolder=True)

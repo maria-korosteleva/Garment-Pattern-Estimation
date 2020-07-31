@@ -12,8 +12,8 @@ dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='PatternAE-tee-capacity', 
+    project_name='Test-Garments-Reconstruction', 
+    run_name='PatternAE-tee-pred', 
     run_id=None, 
     no_sync=False) 
 
@@ -44,7 +44,7 @@ model = nets.GarmentPatternAE(
     dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'],
     {
         'panel_encoding_size': 25, 'panel_n_layers': 3, 
-        'pattern_encoding_size': 40, 'pattern_n_layers': 4, 
+        'pattern_encoding_size': 40, 'pattern_n_layers': 3, 
         'loop_loss_weight': 0.1, 'dropout': 0
     }
 )

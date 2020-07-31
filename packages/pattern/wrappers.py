@@ -33,7 +33,7 @@ class VisPattern(core.ParametrizedPattern):
 
     # ------------ Interface -------------
 
-    def __init__(self, pattern_file, view_ids=True):
+    def __init__(self, pattern_file=None, view_ids=True):
         super().__init__(pattern_file)
 
         # tnx to this all patterns produced from the same template will have the same 
@@ -60,6 +60,8 @@ class VisPattern(core.ParametrizedPattern):
         Estimates multiplicative factor to convert vertex units to pixel coordinates
         Heuritic approach, s.t. all the patterns from the same template are displayed similarly
         """
+        if not self.pattern['panels']:  # emppty pattern
+            return 1
         any_panel = next(iter(self.pattern['panels'].values()))
         vertices = np.asarray(any_panel['vertices'])
 
@@ -158,8 +160,10 @@ class VisPattern(core.ParametrizedPattern):
         dwg = svgwrite.Drawing(svg_filename, profile='tiny')
         base_offset = [60, 60]
         panel_offset_x = 0
-        heights = []
-        for panel in self.pattern['panels']:
+        heights = [0]  # s.t. it has some value if pattern is empty -- no panels
+
+        panel_order = self.panel_order()
+        for panel in panel_order:
             panel_offset_x, height = self._draw_a_panel(
                 dwg, panel,
                 offset=[panel_offset_x + base_offset[0], base_offset[1]]
@@ -196,6 +200,8 @@ class RandomPattern(VisPattern):
 
     # ------------ Interface -------------
     def __init__(self, template_file):
+        """Note that this class requires some input file: 
+            there is not point of creating this object with empty pattern"""
         super().__init__(template_file, view_ids=False)  # don't show ids for datasets
 
         # update name for a random pattern
@@ -228,7 +234,7 @@ if __name__ == "__main__":
     # newpattern = RandomPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
 
     # log to file
-    log_folder = 'direct_upd_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    log_folder = 'panel_order_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
     log_folder = os.path.join(base_path, log_folder)
     os.makedirs(log_folder)
 
