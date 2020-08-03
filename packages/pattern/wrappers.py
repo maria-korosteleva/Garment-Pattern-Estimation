@@ -60,8 +60,8 @@ class VisPattern(core.ParametrizedPattern):
         Estimates multiplicative factor to convert vertex units to pixel coordinates
         Heuritic approach, s.t. all the patterns from the same template are displayed similarly
         """
-        if not self.pattern['panels']:  # emppty pattern
-            return 1
+        if not self.pattern['panels']:  # empty pattern
+            return None
         any_panel = next(iter(self.pattern['panels'].values()))
         vertices = np.asarray(any_panel['vertices'])
 
@@ -156,6 +156,8 @@ class VisPattern(core.ParametrizedPattern):
         """
             Saves current pattern in svg and png format for visualization
         """
+        if self.scaling_for_drawing is None:  # re-evaluate if not ready
+            self.scaling_for_drawing = self._verts_to_px_scaling_factor()
 
         dwg = svgwrite.Drawing(svg_filename, profile='tiny')
         base_offset = [60, 60]
@@ -228,13 +230,16 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
-    # pattern = VisPattern(os.path.join(base_path, 'data_1000_tee_200527-14-50-42', 'tee_DIVLQNKVUJ', 'specification.json'))
+    pattern = VisPattern(os.path.join(
+        base_path, 
+        'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43200803-10-10-41', 
+        'test', 'tee_00A2ZO1ELB', '_predicted_specification.json'))
     # newpattern = RandomPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
 
     # log to file
-    log_folder = 'panel_order_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    log_folder = 'panel_vissize_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
     log_folder = os.path.join(base_path, log_folder)
     os.makedirs(log_folder)
 
