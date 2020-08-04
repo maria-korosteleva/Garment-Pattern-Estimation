@@ -692,7 +692,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
                 total_len += unpadded_panel.shape[0]
         stds = torch.sqrt(stds / total_len)
 
-        self.config['standardize'] = {'gt_mean' : mean.cpu().numpy(), 'gt_std': stds.cpu().numpy()}
+        self.config['standardize'] = {'mean' : mean.cpu().numpy(), 'std': stds.cpu().numpy()}
 
         # print(self.config['standardize'])
 
@@ -716,7 +716,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         """Convert given predicted value to pattern object"""
         prediction = prediction.cpu().numpy()
         if 'standardize' in self.config:
-            prediction = prediction * self.config['standardize']['gt_std'] + self.config['standardize']['gt_mean']
+            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
 
         pattern = VisPattern(view_ids=False)
         pattern.name = dataname
@@ -729,7 +729,6 @@ class Garment3DPatternDataset(GarmentBaseDataset):
             pass
 
         return pattern
-
 
 
 class ParametrizedShirtDataSet(BaseDataset):

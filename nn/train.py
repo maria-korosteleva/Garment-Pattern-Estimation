@@ -12,8 +12,8 @@ dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Test-Garments-Reconstruction', 
-    run_name='PatternAE-skirts', 
+    project_name='Garments-Reconstruction', 
+    run_name='Pattern3D-skirts', 
     run_id=None, 
     no_sync=False) 
 
@@ -25,7 +25,11 @@ experiment = WandbRunWrappper(
 #     Path(system_info['datasets_path']) / dataset_folder, 
 #     {'panel_name': 'front'}, 
 #     gt_caching=True, feature_caching=True)
-dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, gt_caching=True, feature_caching=True)
+# dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, gt_caching=True, feature_caching=True)
+dataset = data.Garment3DPatternDataset(
+    Path(system_info['datasets_path']) / dataset_folder, 
+    {'mesh_samples': 2000}, 
+    gt_caching=True, feature_caching=True)
 
 trainer = Trainer(experiment, dataset, 
                   valid_percent=10, test_percent=10, split_seed=10,
@@ -40,9 +44,18 @@ trainer.init_randomizer(100)
 # model = nets.GarmentPanelsAE(
 #     dataset.config['element_size'], dataset.config['feature_size'], dataset.config['standardize'],
 #     {'hidden_dim_enc': 25, 'hidden_dim_dec': 25, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0})
-model = nets.GarmentPatternAE(
-    dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'],
+# model = nets.GarmentPatternAE(
+#     dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'],
+#     {
+#         'panel_encoding_size': 25, 'panel_n_layers': 3, 
+#         'pattern_encoding_size': 40, 'pattern_n_layers': 3, 
+#         'loop_loss_weight': 0.1, 'dropout': 0
+#     }
+# )
+model = nets.GarmentPattern3DPoint(
+    dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'],
     {
+        'r1': 10, 'r2': 40,
         'panel_encoding_size': 25, 'panel_n_layers': 3, 
         'pattern_encoding_size': 40, 'pattern_n_layers': 3, 
         'loop_loss_weight': 0.1, 'dropout': 0
