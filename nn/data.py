@@ -192,7 +192,7 @@ class SampleToTensor(object):
             'name': sample['name']
         }
 
-class FeatureNormalization():
+class FeatureStandartizatoin():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
         self.mean = mean
@@ -202,6 +202,19 @@ class FeatureNormalization():
         return {
             'features': (sample['features'] - self.mean) / self.std,
             'ground_truth': sample['ground_truth'],
+            'name': sample['name']
+        }
+
+class GTtandartizatoin():
+    """Normalize features of provided sample with given stats"""
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+    
+    def __call__(self, sample):
+        return {
+            'features': sample['features'],
+            'ground_truth': (sample['ground_truth'] - self.mean) / self.std,
             'name': sample['name']
         }
 
@@ -428,6 +441,17 @@ class GarmentBaseDataset(BaseDataset):
         """Convert given predicted value to pattern object"""
         return None
 
+    def _unpad(self, element, tolerance=1.e-5):
+        """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
+        # NOTE: might be some false removal of zero edges in the middle of the list.
+        if torch.is_tensor(element):        
+            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=tolerance)  # per-element comparison with zero
+            selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
+        else:  # numpy
+            selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
+        return element[selection]
+
+
 class GarmentParamsDataset(GarmentBaseDataset):
     """
     For loading the custom generated data:
@@ -525,7 +549,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
         # print(self.config['standardize'])
 
-        self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
+        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -561,16 +585,6 @@ class GarmentPanelDataset(GarmentBaseDataset):
             pass
 
         return pattern
-
-    def _unpad(self, element, tolerance=1.e-5):
-        """Return copy of in element without padding from given element -- edge sequence"""
-        # NOTE: might be some false removal of zero edges in the middle of the list.
-        if torch.is_tensor(element):        
-            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=tolerance)  # per-element comparison with zero
-            selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
-        else:  # numpy
-            selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
-        return element[selection]
 
 
 class Garment2DPatternDataset(GarmentBaseDataset):
@@ -609,7 +623,7 @@ class Garment2DPatternDataset(GarmentBaseDataset):
 
         # print(self.config['standardize'])
 
-        self.transforms.append(FeatureNormalization(feature_mean, feature_stds))
+        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -642,15 +656,80 @@ class Garment2DPatternDataset(GarmentBaseDataset):
 
         return pattern
 
-    def _unpad(self, element, tolerance=1.e-5):
-        """Return copy of in element without padding from given element -- edge sequence"""
-        # NOTE: might be some false removal of zero edges in the middle of the list.
-        if torch.is_tensor(element):        
-            bool_matrix = torch.isclose(element, torch.zeros_like(element), atol=tolerance)  # per-element comparison with zero
-            selection = ~torch.all(bool_matrix, axis=1)  # only non-zero rows
-        else:  # numpy
-            selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
-        return element[selection]
+
+class Garment3DPatternDataset(GarmentBaseDataset):
+    """Dataset definition for extracting pattern from 3D garment shape:
+        * features: point samples from 3D surface
+        * ground truth: tensor representation of corresponding pattern"""
+    
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+        if 'mesh_samples' not in start_config:
+            start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+        self.config['panel_len'] = self[0]['ground_truth'].shape[1]
+        self.config['element_size'] = self[0]['ground_truth'].shape[2]
+    
+    def standardize(self, training):
+        """Use mean&std for normalization of output edge features & restoring input predictions.
+            Accepts training subset as input -- the stats are only based on training subsection of the data
+        """
+        print('GarmentPanelDataset::Using data normalization for ground truth')
+
+        # per sequence element means
+        mean = torch.zeros_like(training[0]['ground_truth'][0][0])
+        for pattern in training: # 
+            for panel in pattern['ground_truth']:
+                mean += self._unpad(panel).mean(axis=0)
+        mean = mean / (len(training) * self.config['ground_truth_size']) 
+
+        # per sequence element stds
+        stds = torch.zeros_like(mean)
+        total_len = 0
+        for pattern in training:
+            for panel in pattern['ground_truth']:
+                unpadded_panel = self._unpad(panel)
+                stds += ((unpadded_panel - mean) ** 2).sum(0)
+                total_len += unpadded_panel.shape[0]
+        stds = torch.sqrt(stds / total_len)
+
+        self.config['standardize'] = {'gt_mean' : mean.cpu().numpy(), 'gt_std': stds.cpu().numpy()}
+
+        # print(self.config['standardize'])
+
+        self.transforms.append(GTtandartizatoin(mean, stds))
+
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        points = self._sample_points(datapoint_name, folder_elements)
+        return points  # return in 3D
+        
+    def _get_ground_truth(self, datapoint_name, folder_elements):
+        """Get the pattern representation"""
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
+        return pattern.pattern_as_tensor()
+
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        prediction = prediction.cpu().numpy()
+        if 'standardize' in self.config:
+            prediction = prediction * self.config['standardize']['gt_std'] + self.config['standardize']['gt_mean']
+
+        pattern = VisPattern(view_ids=False)
+        pattern.name = dataname
+
+        # apply new edge info
+        try: 
+            pattern.pattern_from_tensor(prediction, padded=True)   
+        except RuntimeError as e:
+            print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
+            pass
+
+        return pattern
+
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -725,7 +804,7 @@ if __name__ == "__main__":
 
     data_location = Path(system['output']) / dataset_folder
 
-    dataset = Garment2DPatternDataset(data_location)
+    dataset = Garment3DPatternDataset(data_location)
 
     print(len(dataset), dataset.config)
     print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
@@ -737,4 +816,4 @@ if __name__ == "__main__":
 
     datawrapper.standardize_data()
 
-    print(dataset[5]['features'])
+    print(dataset[5]['ground_truth'])
