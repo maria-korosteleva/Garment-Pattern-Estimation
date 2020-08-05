@@ -124,28 +124,7 @@ class DatasetWrapper(object):
         # data info
         self.dataset.save_to_wandb(experiment)
 
-    # ---------- Normalization ----------------
-    def mean_std(self, loader):
-        """Calculate mean & std of the data for a given loader"""
-
-        stats = { 
-        'batch_sums': [], 
-        'batch_sq_sums': []}
-    
-        for data in loader:
-            batch_sum = data['features'].sum(0)
-            stats['batch_sums'].append(batch_sum)
-
-        mean_features = sum(stats['batch_sums']) / len(dataloader)
-        
-        for data in dataloader:
-            batch_sum_sq = (data['features'] - mean_features.view(1, len(mean_features)))**2
-            stats['batch_sq_sums'].append(batch_sum_sq.sum(0))
-                            
-        std_features = torch.sqrt(sum(stats['batch_sq_sums']) / len(dataloader))
-        
-        return mean_features, std_features
-
+    # ---------- Standardinzation ----------------
     def standardize_data(self):
         """Apply data normalization based on stats from training set"""
         self.dataset.standardize(self.training)
@@ -395,7 +374,7 @@ class GarmentBaseDataset(BaseDataset):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
 
-    # ------ Data-specific basic functions --------
+    # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self):
         """Remove all elements marked as failure from the datapoint list"""
         self.datapoints_names.remove('renders')  # TODO read ignore list from props
@@ -410,6 +389,11 @@ class GarmentBaseDataset(BaseDataset):
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
 
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        return None
+
+    # ------------- Datapoints Utils --------------
     def _sample_points(self, datapoint_name, folder_elements):
         """Make a sample from the 3d surface of a given datapoint"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
@@ -437,10 +421,33 @@ class GarmentBaseDataset(BaseDataset):
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-        return None
+    def _read_pattern(self, datapoint_name, folder_elements):
+        """Read given pattern in tensor representation from file"""
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
+        return pattern.pattern_as_tensor()
 
+    def _pattern_from_tenzor(self, dataname, tenzor, std_config={}, supress_error=True):
+        """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
+        if std_config and 'standardize' in std_config:
+            tenzor = tenzor * self.config['standardize']['std'] + self.config['standardize']['mean']
+
+        pattern = VisPattern(view_ids=False)
+        pattern.name = dataname
+        try: 
+            pattern.pattern_from_tensor(tenzor, padded=True)   
+        except RuntimeError as e:
+            if not supress_error:
+                raise e
+            print('Garment3DPatternDataset::Warning::{}: {}'.format(dataname, e))
+            pass
+
+        return pattern
+
+    # -------- Generalized Utils
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
@@ -450,6 +457,21 @@ class GarmentBaseDataset(BaseDataset):
         else:  # numpy
             selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
         return element[selection]
+
+    def _get_stats(self, input_batch, padded=False):
+        """Calculates mean & std values for the input tenzor along the last dimention"""
+
+        input_batch = input_batch.view(-1, input_batch.shape[-1])
+        if padded:
+            input_batch = self._unpad(input_batch)  # remove rows with zeros
+
+        # per dimention means
+        mean = input_batch.mean(axis=0)
+        # per dimention stds
+        stds = ((input_batch - mean) ** 2).sum(0)
+        stds = torch.sqrt(stds / input_batch.shape[0])
+
+        return mean, stds
 
 
 class GarmentParamsDataset(GarmentBaseDataset):
@@ -530,38 +552,19 @@ class GarmentPanelDataset(GarmentBaseDataset):
         """
         print('GarmentPanelDataset::Using data normalization')
 
-        # per sequence element means
-        feature_mean = torch.zeros_like(training[0]['features'][0])
-        for elem in training:
-            feature_mean += self._unpad(elem['features']).mean(axis=0)
-        feature_mean = feature_mean / len(training)
-
-        # per sequence element stds
-        feature_stds = torch.zeros_like(feature_mean)
-        total_len = 0
-        for elem in training:
-            unpadded = self._unpad(elem['features'])
-            feature_stds += ((unpadded - feature_mean) ** 2).sum(0)
-            total_len += unpadded.shape[0]
-        feature_stds = torch.sqrt(feature_stds / total_len)
-
+        loader = DataLoader(training, batch_size=len(training), shuffle=False)
+        for batch in loader:
+            feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
+            # only one batch out there anyway
+            break
         self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
-
-        # print(self.config['standardize'])
 
         self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        spec_list = [file for file in folder_elements if 'specification.json' in file]
-        if not spec_list:
-            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
-        
-        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
-        pattern_nn = pattern.pattern_as_tensor()
-
+        pattern_nn = self._read_pattern(datapoint_name, folder_elements)
         # return random panel from a pattern
         return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
         
@@ -570,8 +573,11 @@ class GarmentPanelDataset(GarmentBaseDataset):
         return None
 
     def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
+        """Save predicted value for a panel to pattern object"""
+        # Not using standard util for saving as One panel out of all need update
+
         prediction = prediction.cpu().numpy()
+
         if 'standardize' in self.config:
             prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
 
@@ -587,74 +593,23 @@ class GarmentPanelDataset(GarmentBaseDataset):
         return pattern
 
 
-class Garment2DPatternDataset(GarmentBaseDataset):
+class Garment2DPatternDataset(GarmentPanelDataset):
     """Dataset definition for 2D pattern autoencoder
         * features: a 'front' panel edges represented as a sequence
-        * ground_truth is not used"""
+        * ground_truth is not used as in Panel dataset"""
     def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['panel_len'] = self[0]['features'].shape[1]
         self.config['element_size'] = self[0]['features'].shape[2]
     
-    def standardize(self, training):
-        """Use mean&std for normalization of output edge features & restoring input predictions.
-            Accepts training subset as input -- the stats are only based on training subsection of the data
-        """
-        print('GarmentPanelDataset::Using data normalization')
-
-        # per sequence element means
-        feature_mean = torch.zeros_like(training[0]['features'][0][0])
-        for pattern in training: # 
-            for panel in pattern['features']:
-                feature_mean += self._unpad(panel).mean(axis=0)
-        feature_mean = feature_mean / (len(training) * self.config['feature_size']) 
-
-        # per sequence element stds
-        feature_stds = torch.zeros_like(feature_mean)
-        total_len = 0
-        for pattern in training:
-            for panel in pattern['features']:
-                unpadded_panel = self._unpad(panel)
-                feature_stds += ((unpadded_panel - feature_mean) ** 2).sum(0)
-                total_len += unpadded_panel.shape[0]
-        feature_stds = torch.sqrt(feature_stds / total_len)
-
-        self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
-
-        # print(self.config['standardize'])
-
-        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
-
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        spec_list = [file for file in folder_elements if 'specification.json' in file]
-        if not spec_list:
-            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
+        return self._read_pattern(datapoint_name, folder_elements)
         
-        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensor()
-        
-    def _get_ground_truth(self, datapoint_name, folder_elements):
-        """The dataset targets AutoEncoding tasks -- no need for features"""
-        return None
-
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
         prediction = prediction.cpu().numpy()
-        if 'standardize' in self.config:
-            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
-
-        pattern = VisPattern(view_ids=False)
-        pattern.name = dataname
-
-        # apply new edge info
-        try: 
-            pattern.pattern_from_tensor(prediction, padded=True)   
-        except RuntimeError as e:
-            print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
-            pass
-
-        return pattern
+        return self._pattern_from_tenzor(dataname, prediction, self.config, supress_error=True)
 
 
 class Garment3DPatternDataset(GarmentBaseDataset):
@@ -673,30 +628,23 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         """Use mean&std for normalization of output edge features & restoring input predictions.
             Accepts training subset as input -- the stats are only based on training subsection of the data
         """
-        print('GarmentPanelDataset::Using data normalization for ground truth')
+        print('Garment3DPatternDataset::Using data normalization for features & ground truth')
 
-        # per sequence element means
-        mean = torch.zeros_like(training[0]['ground_truth'][0][0])
-        for pattern in training: # 
-            for panel in pattern['ground_truth']:
-                mean += self._unpad(panel).mean(axis=0)
-        mean = mean / (len(training) * self.config['ground_truth_size']) 
+        loader = DataLoader(training, batch_size=len(training), shuffle=False)
+        for batch in loader:
+            gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
+            feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
+            # only one batch out there anyway
+            break
 
-        # per sequence element stds
-        stds = torch.zeros_like(mean)
-        total_len = 0
-        for pattern in training:
-            for panel in pattern['ground_truth']:
-                unpadded_panel = self._unpad(panel)
-                stds += ((unpadded_panel - mean) ** 2).sum(0)
-                total_len += unpadded_panel.shape[0]
-        stds = torch.sqrt(stds / total_len)
-
-        self.config['standardize'] = {'mean' : mean.cpu().numpy(), 'std': stds.cpu().numpy()}
+        self.config['standardize'] = {
+            'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
+            'f_mean' : feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
 
         # print(self.config['standardize'])
 
-        self.transforms.append(GTtandartizatoin(mean, stds))
+        self.transforms.append(GTtandartizatoin(gt_mean, gt_stds))
+        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -705,30 +653,12 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation"""
-        spec_list = [file for file in folder_elements if 'specification.json' in file]
-        if not spec_list:
-            raise RuntimeError('Dataset:Error: *specification.json not found for {}'.format(datapoint_name))
-        
-        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensor()
+        return self._read_pattern(datapoint_name, folder_elements)
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
         prediction = prediction.cpu().numpy()
-        if 'standardize' in self.config:
-            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
-
-        pattern = VisPattern(view_ids=False)
-        pattern.name = dataname
-
-        # apply new edge info
-        try: 
-            pattern.pattern_from_tensor(prediction, padded=True)   
-        except RuntimeError as e:
-            print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
-            pass
-
-        return pattern
+        return self._pattern_from_tenzor(dataname, prediction, self.config, supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -806,7 +736,7 @@ if __name__ == "__main__":
     dataset = Garment3DPatternDataset(data_location)
 
     print(len(dataset), dataset.config)
-    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'])
+    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'].shape)
 
     print(dataset[5]['features'])
 
@@ -815,4 +745,5 @@ if __name__ == "__main__":
 
     datawrapper.standardize_data()
 
-    print(dataset[5]['ground_truth'])
+    print(dataset[0]['ground_truth'])
+    print(dataset[5]['features'])
