@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch_geometric.nn as geometric
 
 class BaseModule(nn.Module):
-    """Base interface for neural nets"""
+    """Base interface for my neural nets"""
     def __init__(self):
         super().__init__()
         self.config = {'loss': 'MSELoss'}
@@ -145,6 +145,75 @@ class GarmentParamsPoint(BaseModule):
 
 # ------------- Pattern representation ----
 
+def init_tenzor(*shape, device='cpu'):
+    """shortcut to create & initialize tenzors on a given device.  """
+    new_tenzor = torch.empty(shape)
+    nn.init.kaiming_normal_(new_tenzor)  # TODO suport other init types 
+    return new_tenzor.to(device)
+
+# --- Util modules ---
+class LSTMEncoderModule(nn.Module):
+    """A wrapper for LSTM targeting encoding task"""
+    def __init__(self, elem_len, encoding_size, n_layers, dropout=0):
+        super().__init__()
+        self.n_layers = n_layers
+        self.encoding_size = encoding_size
+        self.lstm = nn.LSTM(
+            elem_len, encoding_size, n_layers, 
+            dropout=dropout, batch_first=True)
+
+    def forward(self, batch_sequence):
+        device = batch_sequence.device
+        batch_size = batch_sequence.size(0)
+        
+        # --- encode --- 
+        hidden_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device)
+        cell_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device)
+        _, (hidden, _) = self.lstm(batch_sequence, (hidden_init, cell_init))
+
+        # final encoding is the last output == hidden of last layer 
+        return hidden[-1]
+
+
+class LSTMDecoderModule(nn.Module):
+    """A wrapper for LSTM targeting decoding task"""
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0):
+        super().__init__()
+        self.n_layers = n_layers
+        self.encoding_size = encoding_size
+        self.hidden_size = hidden_size
+        self.out_elem_size = out_elem_size
+
+        self.lstm = nn.LSTM(encoding_size, hidden_size, n_layers, 
+                            dropout=dropout, batch_first=True)
+
+        # post-process to match the desired outut shape
+        self.lin = nn.Linear(hidden_size, out_elem_size)
+
+    def forward(self, batch_enc, out_len):
+        """out_len specifies the length of the output sequence to produce"""
+        device = batch_enc.device
+        batch_size = batch_enc.size(0)
+        
+        # propagate encoding for needed seq_len
+        dec_input = batch_enc.unsqueeze(1).repeat(1, out_len, 1)  # along sequence dimention
+
+        # decode
+        hidden_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device)
+        cell_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device)
+        out, _ = self.lstm(dec_input, (hidden_init, cell_init))
+        
+        # back to requested format
+        # reshaping the outputs such that it can be fit into the fully connected layer
+        out = out.contiguous().view(-1, self.hidden_size)
+        out = self.lin(out)
+        # back to sequence
+        out = out.contiguous().view(batch_size, out_len, -1)
+
+        return out
+
+
+# --- Nets classes ---
 class GarmentPanelsAE(BaseModule):
     """Model for sequential encoding & decoding of garment panels
         References: 
@@ -163,59 +232,30 @@ class GarmentPanelsAE(BaseModule):
         self.config['loss'] = 'MSE Reconstruction with loop'
         self.config['hidden_init'] = 'kaiming_normal_'
 
-        self.max_seq_len = max_seq_len
-
         self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(in_elem_len)
         if not torch.is_tensor(self.pad_tenzor):
             self.pad_tenzor = torch.Tensor(self.pad_tenzor)
         self.pad_tenzor = self.pad_tenzor.repeat(max_seq_len, 1)
 
         # encode
-        self.seq_encoder = nn.LSTM(
-            in_elem_len, 
-            self.config['hidden_dim_enc'], self.config['n_layers'], 
-            dropout=self.config['dropout'],
-            batch_first=True)
+        self.seq_encoder = LSTMEncoderModule(
+            in_elem_len, self.config['hidden_dim_enc'], self.config['n_layers'], dropout=self.config['dropout']
+        )
 
         # decode
-        self.seq_decoder = nn.LSTM(
-            self.config['hidden_dim_enc'], 
-            self.config['hidden_dim_dec'], self.config['n_layers'], 
-            dropout=self.config['dropout'],
-            batch_first=True)
-
-        # post-process
-        self.lin = nn.Linear(self.config['hidden_dim_dec'], in_elem_len)
+        self.seq_decoder = LSTMDecoderModule(
+            self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
+            dropout=self.config['dropout']
+        )
 
         # init values
         self.init_net_params()
 
     def forward(self, x):
-        self.device = x.device
-        batch_size = x.size(0)
-        
-        # --- encode --- 
-        hidden_init = self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_enc'])
-        cell_init =  self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_enc'])
-        out, (hidden, _) = self.seq_encoder(x, (hidden_init, cell_init))
-        # final encoding is the last output == hidden of last layer 
-        encoding = hidden[-1]
 
-        # --- decode ---
-        # propagate encoding for needed seq_len
-        dec_input = encoding.unsqueeze(1).repeat(1, self.max_seq_len, 1)  # along sequence dimention
-        # init memory with zeros (not with encoder state) for future indeendent use of decoder 
-        dec_hidden_init = self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_dec'])
-        dec_cell_init =  self.init_hidden(batch_size, self.config['n_layers'], self.config['hidden_dim_dec'])
-        out, hidden = self.seq_decoder(dec_input, (dec_hidden_init, dec_cell_init))
-        
-        # --- back to original format --- 
-        # Reshaping the outputs such that it can be fit into the fully connected layer
-        out = out.contiguous().view(-1, self.config['hidden_dim_dec'])
-        out = self.lin(out)
-        # back to sequence
-        out = out.contiguous().view(batch_size, self.max_seq_len, -1)
-        
+        encoding = self.seq_encoder(x)  # Yay
+
+        out = self.seq_decoder(encoding, x.shape[-2])  # -2 corresponds to len of paddel panel
         return out
 
     def init_net_params(self):
@@ -229,15 +269,6 @@ class GarmentPanelsAE(BaseModule):
             if 'weight' in name:
                 nn.init.kaiming_normal_(param)
             # leave defaults for bias
-
-        # leave defaults for linear layer
-
-    def init_hidden(self, batch_size, n_layers, dim):
-        # This method generates the first hidden state of zeros which we'll use in the forward pass
-        # We'll send the tensor holding the hidden state to the device we specified earlier as well
-        hidden = torch.Tensor(n_layers, batch_size, dim)
-        nn.init.kaiming_normal_(hidden)
-        return hidden.to(self.device)
 
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
@@ -293,102 +324,60 @@ class GarmentPatternAE(BaseModule):
         self.config['loss'] = 'MSE Reconstruction with loop'
         self.config['hidden_init'] = 'kaiming_normal_'
 
-        self.max_panel_len = max_panel_len
-
         self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(in_elem_len)
         if not torch.is_tensor(self.pad_tenzor):
             self.pad_tenzor = torch.Tensor(self.pad_tenzor)
         self.pad_tenzor = self.pad_tenzor.repeat(max_panel_len, 1)
 
         # --- panel-level ---- 
-        # encode
-        self.panel_encoder = nn.LSTM(
-            in_elem_len, 
-            self.config['panel_encoding_size'], self.config['panel_n_layers'], 
-            dropout=self.config['dropout'],
-            batch_first=True)
-
-        # decode
-        self.panel_decoder = nn.LSTM(
-            self.config['panel_encoding_size'], 
-            self.config['panel_encoding_size'], self.config['panel_n_layers'], 
-            dropout=self.config['dropout'],
-            batch_first=True)
-
-        # post-process on panel-level
-        self.panel_lin = nn.Linear(self.config['panel_encoding_size'], in_elem_len)
+        self.panel_encoder = LSTMEncoderModule(
+            in_elem_len, self.config['panel_encoding_size'], self.config['panel_n_layers'], 
+            dropout=self.config['dropout']
+        )
+        self.panel_decoder = LSTMDecoderModule(
+            self.config['panel_encoding_size'], self.config['panel_encoding_size'], in_elem_len, self.config['panel_n_layers'], 
+            dropout=self.config['dropout']
+        )
 
         # ----- patten level ------
-        # given the panel encodings, combine them into pattern encoding
-        # encode
-        self.pattern_encoder = nn.LSTM(
-            self.config['panel_encoding_size'], 
-            self.config['pattern_encoding_size'], self.config['pattern_n_layers'],
-            dropout=self.config['dropout'],
-            batch_first=True
+        self.pattern_encoder = LSTMEncoderModule(
+            self.config['panel_encoding_size'], self.config['pattern_encoding_size'], self.config['pattern_n_layers'], 
+            dropout=self.config['dropout']
         )
-
-        self.pattern_decoder = nn.LSTM(
-            self.config['pattern_encoding_size'], 
-            self.config['pattern_encoding_size'], self.config['pattern_n_layers'],
-            dropout=self.config['dropout'],
-            batch_first=True
+        self.pattern_decoder = LSTMDecoderModule(
+            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
+            dropout=self.config['dropout']
         )
-
-        self.pattern_lin = nn.Linear(self.config['pattern_encoding_size'], self.config['panel_encoding_size'])
 
         # init values
         self.init_submodule_params(self.panel_encoder)
         self.init_submodule_params(self.panel_decoder)
         self.init_submodule_params(self.pattern_encoder)
         self.init_submodule_params(self.pattern_decoder)
-        # leave defaults for linear layers
 
     def forward(self, patterns_batch):
         self.device = patterns_batch.device
         batch_size = patterns_batch.size(0)
         pattern_size = patterns_batch.size(1)
+        panel_size = patterns_batch.size(2)
         num_panels = batch_size * pattern_size
 
-        # --------------- Encode ----------------
-        # ----- Panel-level -----
+        # --- Encode ---
         # flatten -- view simply as a list of panels to apply encoding per panel
         all_panels = patterns_batch.contiguous().view(num_panels, patterns_batch.shape[-2], patterns_batch.shape[-1])
+        panel_encodings = self.panel_encoder(all_panels)
 
-        hidden_init = self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        cell_init =  self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        out, (hidden, _) = self.panel_encoder(all_panels, (hidden_init, cell_init))
-        # final encoding is the last output == hidden of last layer 
-        panel_encodings = hidden[-1]
-        
-        # ---- Pattern-level -----
-        panel_encodings = panel_encodings.contiguous().view(batch_size, pattern_size, -1)  # get back to patterns
-        hidden_init = self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        cell_init =  self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        out, (hidden, _) = self.pattern_encoder(panel_encodings, (hidden_init, cell_init))
+        panel_encodings = panel_encodings.contiguous().view(batch_size, pattern_size, -1)  # group by patterns
+        pattern_encoding = self.pattern_encoder(panel_encodings)   # YAAAAY Pattern hidden representation!!
 
-        pattern_encoding = hidden[-1]   # YAAAAY Pattern hidden representation!!
+        # --- Decode ---
+        panel_encodings_dec = self.pattern_decoder(pattern_encoding, pattern_size)
 
-        # ------------------- Decode ---------------
-        # ---- Pattern-level -----
-        pattern_dec_input = pattern_encoding.unsqueeze(1).repeat(1, pattern_size, 1)  # along sequence dimention
-        hidden_init = self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        cell_init =  self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        out, hidden = self.pattern_decoder(pattern_dec_input, (hidden_init, cell_init))
-        # Flatten: view as just a list of panel encodings to apply lin layer per panel
-        out = out.contiguous().view(-1, self.config['pattern_encoding_size'])
-        all_panels_encodings = self.pattern_lin(out)  # now we have coorect size for predicted panel encodings
+        flat_panel_encodings_dec = panel_encodings_dec.contiguous().view(-1, panel_encodings_dec.shape[-1])
+        flat_panels_dec = self.panel_decoder(flat_panel_encodings_dec, panel_size)
 
-        # ----- Panel-level -----
-        dec_input = all_panels_encodings.unsqueeze(1).repeat(1, self.max_panel_len, 1)  # along sequence dimention
-        hidden_init = self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        cell_init =  self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        out, hidden = self.panel_decoder(dec_input, (hidden_init, cell_init))
-        # Falatten: as simple list of edges without panel\pattern grouping to apply lin layer per edge
-        out = out.contiguous().view(-1, self.config['panel_encoding_size'])
-        out = self.panel_lin(out)  # correct size for predicted edges
         # back to patterns and panels
-        prediction = out.contiguous().view(batch_size, pattern_size, self.max_panel_len, -1)
+        prediction = flat_panels_dec.contiguous().view(batch_size, pattern_size, panel_size, -1)
         
         return prediction
 
@@ -399,13 +388,6 @@ class GarmentPatternAE(BaseModule):
             if 'weight' in name:
                 nn.init.kaiming_normal_(param)
             # leave defaults for bias
-
-    def init_hidden(self, batch_size, n_layers, dim):
-        # This method generates the first hidden state of zeros which we'll use in the forward pass
-        # We'll send the tensor holding the hidden state to the device we specified earlier as well
-        hidden = torch.Tensor(n_layers, batch_size, dim)
-        nn.init.kaiming_normal_(hidden)
-        return hidden.to(self.device)
 
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
@@ -491,23 +473,14 @@ class GarmentPattern3DPoint(BaseModule):
         self.lin3 = nn.Linear(256, self.config['pattern_encoding_size'])
 
         # Decode into pattern definition
-        # ----- patten level ------
-        self.pattern_decoder = nn.LSTM(
-            self.config['pattern_encoding_size'], 
-            self.config['pattern_encoding_size'], self.config['pattern_n_layers'],
-            dropout=self.config['dropout'],
-            batch_first=True
+        self.panel_decoder = LSTMDecoderModule(
+            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
+            dropout=self.config['dropout']
         )
-        self.pattern_lin = nn.Linear(self.config['pattern_encoding_size'], self.config['panel_encoding_size'])
-
-                # --- panel-level ---- 
-        self.panel_decoder = nn.LSTM(
-            self.config['panel_encoding_size'], 
-            self.config['panel_encoding_size'], self.config['panel_n_layers'], 
-            dropout=self.config['dropout'],
-            batch_first=True)
-        # post-process on panel-level
-        self.panel_lin = nn.Linear(self.config['panel_encoding_size'], panel_elem_len)
+        self.pattern_decoder = LSTMDecoderModule(
+            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
+            dropout=self.config['dropout']
+        )
 
         # init values for decoding
         self.init_submodule_params(self.panel_decoder)
@@ -517,8 +490,6 @@ class GarmentPattern3DPoint(BaseModule):
     def forward(self, positions_batch):
         self.device = positions_batch.device
         batch_size = positions_batch.size(0)
-        # pattern_size = patterns_batch.size(1)
-        # num_panels = batch_size * pattern_size
 
         # --------------- Encode ----------------
         # flatten the batch for torch-geometric batch format
@@ -540,26 +511,13 @@ class GarmentPattern3DPoint(BaseModule):
         pattern_encoding = self.lin3(x)  # YAAAAY Pattern hidden representation!!
 
         # ------------------- Decode ---------------
-        # ---- Pattern-level -----
-        pattern_dec_input = pattern_encoding.unsqueeze(1).repeat(1, self.max_pattern_size, 1)  # along sequence dimention
-        hidden_init = self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        cell_init =  self.init_hidden(batch_size, self.config['pattern_n_layers'], self.config['pattern_encoding_size'])
-        out, hidden = self.pattern_decoder(pattern_dec_input, (hidden_init, cell_init))
-        # Flatten: view as just a list of panel encodings to apply lin layer per panel
-        out = out.contiguous().view(-1, self.config['pattern_encoding_size'])
-        all_panels_encodings = self.pattern_lin(out)  # now we have coorect size for predicted panel encodings
+        panel_encodings_dec = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
 
-        # ----- Panel-level -----
-        num_panels = self.max_pattern_size * batch_size  # total panels in batch
-        dec_input = all_panels_encodings.unsqueeze(1).repeat(1, self.max_panel_len, 1)  # along sequence dimention
-        hidden_init = self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        cell_init =  self.init_hidden(num_panels, self.config['panel_n_layers'], self.config['panel_encoding_size'])
-        out, hidden = self.panel_decoder(dec_input, (hidden_init, cell_init))
-        # Falatten: as simple list of edges without panel\pattern grouping to apply lin layer per edge
-        out = out.contiguous().view(-1, self.config['panel_encoding_size'])
-        out = self.panel_lin(out)  # correct size for predicted edges
+        flat_panel_encodings_dec = panel_encodings_dec.contiguous().view(-1, panel_encodings_dec.shape[-1])
+        flat_panels_dec = self.panel_decoder(flat_panel_encodings_dec, self.max_panel_len)
+
         # back to patterns and panels
-        prediction = out.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        prediction = flat_panels_dec.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
         
         return prediction
 
