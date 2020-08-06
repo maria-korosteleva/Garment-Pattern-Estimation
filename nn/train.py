@@ -12,8 +12,8 @@ dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='PatternAE-std-upd',   # Pattern3D-tee-in-std
+    project_name='Test-Garments-Reconstruction', 
+    run_name='loop-loss-ref',   # Pattern3D-tee-in-std
     run_id=None, 
     no_sync=False) 
 
@@ -69,7 +69,7 @@ if hasattr(model, 'config'):
 trainer.fit(model)
 
 # --------------- Final evaluation --------------
-final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
+final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
 print ('Test metrics: {}'.format(final_metrics))
 experiment.add_statistic('test', final_metrics)
 

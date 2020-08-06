@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as geometric
 
+# my modules
+import metrics
+
 class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
@@ -232,10 +235,7 @@ class GarmentPanelsAE(BaseModule):
         self.config['loss'] = 'MSE Reconstruction with loop'
         self.config['hidden_init'] = 'kaiming_normal_'
 
-        self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(in_elem_len)
-        if not torch.is_tensor(self.pad_tenzor):
-            self.pad_tenzor = torch.Tensor(self.pad_tenzor)
-        self.pad_tenzor = self.pad_tenzor.repeat(max_seq_len, 1)
+        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # encode
         self.seq_encoder = LSTMEncoderModule(
@@ -276,27 +276,8 @@ class GarmentPanelsAE(BaseModule):
 
         # Base reconstruction loss
         reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
-
         # ensuring edges within panel loop & return to origin
-        panel_coords_sum = torch.zeros((features.shape[0], 2))
-        panel_coords_sum = panel_coords_sum.to(device=features.device)
-        self.pad_tenzor = self.pad_tenzor.to(device=features.device)
-        for el_id in range(features.shape[0]):
-            # iterate over elements in batch
-            # loop loss per panel + we need to know each panel original length
-            panel = features[el_id]
-            # unpad
-            bool_matrix = torch.isclose(panel, self.pad_tenzor, atol=1.e-2)
-            seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
-
-            # update loss
-            panel_coords_sum[el_id] = preds[el_id][:seq_len, :2].sum(axis=0)
-
-        # panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
-        panel_square_sums = panel_coords_sum ** 2  # per sum square
-
-        # batch mean of squared norms of per-panel final points:
-        loop_loss = panel_square_sums.sum() / panel_square_sums.shape[0]
+        loop_loss = self.loop_loss(preds, features)
 
         return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
 
@@ -324,10 +305,7 @@ class GarmentPatternAE(BaseModule):
         self.config['loss'] = 'MSE Reconstruction with loop'
         self.config['hidden_init'] = 'kaiming_normal_'
 
-        self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(in_elem_len)
-        if not torch.is_tensor(self.pad_tenzor):
-            self.pad_tenzor = torch.Tensor(self.pad_tenzor)
-        self.pad_tenzor = self.pad_tenzor.repeat(max_panel_len, 1)
+        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # --- panel-level ---- 
         self.panel_encoder = LSTMEncoderModule(
@@ -360,11 +338,10 @@ class GarmentPatternAE(BaseModule):
         batch_size = patterns_batch.size(0)
         pattern_size = patterns_batch.size(1)
         panel_size = patterns_batch.size(2)
-        num_panels = batch_size * pattern_size
 
         # --- Encode ---
         # flatten -- view simply as a list of panels to apply encoding per panel
-        all_panels = patterns_batch.contiguous().view(num_panels, patterns_batch.shape[-2], patterns_batch.shape[-1])
+        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
         panel_encodings = self.panel_encoder(all_panels)
 
         panel_encodings = panel_encodings.contiguous().view(batch_size, pattern_size, -1)  # group by patterns
@@ -397,31 +374,11 @@ class GarmentPatternAE(BaseModule):
         reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
 
         # ---- Loop loss -----
-        # ensuring edges within panel loop & return to origin
-
-        # flatten the pattern dimention to calculate loss per panel as before
+        # flatten the pattern dimention to calculate loss per panel
         features = features.view(-1, features.shape[-2], features.shape[-1])
         preds = preds.view(-1, preds.shape[-2], preds.shape[-1])
 
-        panel_coords_sum = torch.zeros((features.shape[0], 2))
-        panel_coords_sum = panel_coords_sum.to(device=features.device)
-        self.pad_tenzor = self.pad_tenzor.to(device=features.device)
-        for el_id in range(features.shape[0]):
-            # iterate over elements in batch
-            # loop loss per panel + we need to know each panel original length
-            panel = features[el_id]
-            # unpad
-            bool_matrix = torch.isclose(panel, self.pad_tenzor, atol=1.e-2)
-            seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
-
-            # update loss
-            panel_coords_sum[el_id] = preds[el_id][:seq_len, :2].sum(axis=0)
-
-        # panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
-        panel_square_sums = panel_coords_sum ** 2  # per sum square
-
-        # batch mean of squared norms of per-panel final points:
-        loop_loss = panel_square_sums.sum() / panel_square_sums.shape[0]
+        loop_loss = self.loop_loss(preds, features)
 
         return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
 
@@ -444,21 +401,18 @@ class GarmentPattern3DPoint(BaseModule):
             'pattern_n_layers': 3, 
             'loop_loss_weight': 0.1, 
             'dropout': 0,
+            'loss': 'MSE with loop',
+            'net_init': 'kaiming_normal_'
         })
         # update with input settings
         self.config.update(config) 
 
-        # additional info
-        self.config['loss'] = 'MSE with loop'
-        self.config['hidden_init'] = 'kaiming_normal_'
-
+        # output props
         self.max_panel_len = max_panel_len
         self.max_pattern_size = max_pattern_size
 
-        self.pad_tenzor = -data_norm['mean'] / data_norm['std'] if data_norm else torch.zeros(panel_elem_len)
-        if not torch.is_tensor(self.pad_tenzor):
-            self.pad_tenzor = torch.Tensor(self.pad_tenzor)
-        self.pad_tenzor = self.pad_tenzor.repeat(max_panel_len, 1)
+        # extra loss object
+        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
         self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
@@ -485,7 +439,6 @@ class GarmentPattern3DPoint(BaseModule):
         # init values for decoding
         self.init_submodule_params(self.panel_decoder)
         self.init_submodule_params(self.pattern_decoder)
-        # leave defaults for linear layers
 
     def forward(self, positions_batch):
         self.device = positions_batch.device
@@ -529,46 +482,18 @@ class GarmentPattern3DPoint(BaseModule):
                 nn.init.kaiming_normal_(param)
             # leave defaults for bias
 
-    def init_hidden(self, batch_size, n_layers, dim):
-        # This method generates the first hidden state of zeros which we'll use in the forward pass
-        # We'll send the tensor holding the hidden state to the device we specified earlier as well
-        hidden = torch.Tensor(n_layers, batch_size, dim)
-        nn.init.kaiming_normal_(hidden)
-        return hidden.to(self.device)
-
     def loss(self, features, ground_truth):
         """Evalute loss when predicting patterns"""
         preds = self(features)
 
-        # ---- Base reconstruction loss -----
+        # Base extraction loss 
         pattern_loss = self.regression_loss(preds, ground_truth)   # features are the ground truth in this case -> reconstruction loss
 
-        # ---- Loop loss -----
-        # ensuring edges within panel loop & return to origin
-
-        # flatten the pattern dimention to calculate loss per panel as before
+        # Loop loss per panel
+        # flatten into list of panels
         ground_truth = ground_truth.view(-1, ground_truth.shape[-2], ground_truth.shape[-1])
         preds = preds.view(-1, preds.shape[-2], preds.shape[-1])
-
-        panel_coords_sum = torch.zeros((ground_truth.shape[0], 2))
-        panel_coords_sum = panel_coords_sum.to(device=features.device)
-        self.pad_tenzor = self.pad_tenzor.to(device=features.device)
-        for el_id in range(ground_truth.shape[0]):
-            # iterate over elements in batch
-            # loop loss per panel + we need to know each panel original length
-            panel = ground_truth[el_id]
-            # unpad
-            bool_matrix = torch.isclose(panel, self.pad_tenzor, atol=1.e-2)
-            seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
-
-            # update loss
-            panel_coords_sum[el_id] = preds[el_id][:seq_len, :2].sum(axis=0)
-
-        # panel_coords_sum = preds.sum(axis=1)[:, 0:2]  # taking only edge vectors' endpoints -- ignoring curvature coords
-        panel_square_sums = panel_coords_sum ** 2  # per sum square
-
-        # batch mean of squared norms of per-panel final points:
-        loop_loss = panel_square_sums.sum() / panel_square_sums.shape[0]
+        loop_loss = self.loop_loss(preds, ground_truth)
 
         return pattern_loss + self.config['loop_loss_weight'] * loop_loss
 
