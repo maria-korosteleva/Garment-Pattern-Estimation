@@ -21,18 +21,17 @@ class PanelLoopLoss():
                 If data stats are not provided at init or in this call, zero vector padding is assumed
             * data_stats can be used to update padding vector on the fly
         """
-        panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
-        panel_coords_sum = panel_coords_sum.to(device=predicted_panels.device)
-
         # prepare for padding comparison
         if data_stats:
             self._eval_pad_vector(data_stats)
         if original_panels is not None:
             if self.pad_tenzor is None:  # assume zero vector for padding
-                self._eval_pad_vector(pad_len=original_panels.shape[-1])
+                self.pad_tenzor = torch.zeros(original_panels.shape[-1])
             pad_tenzor_propagated = self.pad_tenzor.repeat(original_panels.shape[1], 1)
             pad_tenzor_propagated = pad_tenzor_propagated.to(device=predicted_panels.device)
-
+            
+        panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
+        panel_coords_sum = panel_coords_sum.to(device=predicted_panels.device)
         # iterate over elements in batch
         for el_id in range(predicted_panels.shape[0]):
             if original_panels is not None and self.pad_tenzor is not None:
@@ -74,9 +73,9 @@ def eval_metrics(model, data_wrapper, section='test', loop_loss=False):
 
     if loop_loss:
         # modify loss object according to the data stats
-        if 'standardization' in data_wrapper.dataset.config:
+        if 'standardize' in data_wrapper.dataset.config:
             # NOTE assuming shift&scale is applied to padding
-            metric_functions['loop_loss'] = PanelLoopLoss(data_stats=data_wrapper.dataset.config['standardization'])
+            metric_functions['loop_loss'] = PanelLoopLoss(data_stats=data_wrapper.dataset.config['standardize'])
         else:
             metric_functions['loop_loss'] = PanelLoopLoss()  # no padding == zero padding assumed
 
