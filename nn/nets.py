@@ -6,6 +6,8 @@ import torch_geometric.nn as geometric
 # my modules
 import metrics
 
+
+# ------ Interface --------
 class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
@@ -18,54 +20,7 @@ class BaseModule(nn.Module):
         preds = self(features)
         return self.regression_loss(preds, ground_truth)
 
-
-class ShirtfeaturesMLP(BaseModule):
-    """MLP for training on shirts dataset. Assumes 100 features parameters used"""
-    
-    def __init__(self, in_size, out_size):
-        super().__init__()
-        
-        # layers definitions
-        self.sequence = nn.Sequential(
-            nn.Linear(in_size, 300),  # nn.Linear(36756, 3000),
-            nn.ReLU(), 
-            nn.Linear(300, 300),  # nn.Linear(3000, 300)
-            nn.ReLU(), 
-            nn.Linear(300, 60),
-            nn.ReLU(),
-            nn.Linear(60, out_size)
-        )
-    
-    def forward(self, x_batch):
-        #print (x_batch)
-        
-        return self.sequence(x_batch)
-
-
-class GarmentParamsMLP(BaseModule):
-    """MLP for training on shirts dataset. Assumes 100 features parameters used"""
-    
-    def __init__(self, in_size, out_size):
-        super().__init__()
-        
-        # layers definitions
-        self.sequence = nn.Sequential(
-            nn.Linear(in_size, 300),
-            nn.ReLU(), 
-            nn.Linear(300, 300),
-            nn.ReLU(), 
-            nn.Linear(300, 60),
-            nn.ReLU(),
-            nn.Linear(60, out_size)
-        )
-    
-    def forward(self, x_batch):
-        #print (x_batch)
-        
-        return self.sequence(x_batch)
-
-
-# --------- PointNet++ - based -------
+# --------- PointNet++ modules -------
 # https://github.com/rusty1s/pytorch_geometric/blob/master/examples/pointnet2_classification.py
 
 class SetAbstractionModule(nn.Module):
@@ -107,22 +62,23 @@ def MLP(channels, batch_norm=True):
     ])
 
 
-class GarmentParamsPoint(BaseModule):
-    """PointNet++ processing of input geometry to predict parameters
-        Note that architecture is agnostic of number of input points"""
+class PointNetPlusPlus(nn.Module):
+    """
+        Module for extracting latent representation of 3D geometry.
+        Based on PointNet++
+        NOTE architecture is agnostic of number of input points
+    """
     def __init__(self, out_size, config={}):
         super().__init__()
 
-        self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
+        self.config = {'r1': 0.1, 'r2': 0.4}  # defaults for this net
         self.config.update(config)  # from input
 
-        self.sa1_module = SetAbstractionModule(0.5, config['r1'], MLP([3, 64, 64, 128]))
-        self.sa2_module = SetAbstractionModule(0.25, config['r2'], MLP([128 + 3, 128, 128, 256]))
+        self.sa1_module = SetAbstractionModule(0.5, self.config['r1'], MLP([3, 64, 64, 128]))
+        self.sa2_module = SetAbstractionModule(0.25, self.config['r2'], MLP([128 + 3, 128, 128, 256]))
         self.sa3_module = GlobalSetAbstractionModule(MLP([256 + 3, 256, 512, 1024]))
 
-        self.lin1 = nn.Linear(1024, 512)
-        self.lin2 = nn.Linear(512, 256)
-        self.lin3 = nn.Linear(256, out_size)
+        self.lin = nn.Linear(1024, out_size)
 
     def forward(self, positions):
 
@@ -137,24 +93,18 @@ class GarmentParamsPoint(BaseModule):
         sa1_out = self.sa1_module(*sa0_out)
         sa2_out = self.sa2_module(*sa1_out)
         sa3_out = self.sa3_module(*sa2_out)
-        x, _, _ = sa3_out
-        x = F.relu(self.lin1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(self.lin2(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin3(x)
-        return x
+        out, _, _ = sa3_out
+        out = self.lin(out)
+        return out
 
-
-# ------------- Pattern representation ----
-
+# ------------- Sequence modules -----------
 def init_tenzor(*shape, device='cpu'):
     """shortcut to create & initialize tenzors on a given device.  """
     new_tenzor = torch.empty(shape)
     nn.init.kaiming_normal_(new_tenzor)  # TODO suport other init types 
     return new_tenzor.to(device)
 
-# --- Util modules ---
+
 class LSTMEncoderModule(nn.Module):
     """A wrapper for LSTM targeting encoding task"""
     def __init__(self, elem_len, encoding_size, n_layers, dropout=0):
@@ -216,7 +166,79 @@ class LSTMDecoderModule(nn.Module):
         return out
 
 
-# --- Nets classes ---
+# -------- Nets srchitectures -----------
+
+class ShirtfeaturesMLP(BaseModule):
+    """MLP for training on shirts dataset. Assumes 100 features parameters used"""
+    
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        
+        # layers definitions
+        self.sequence = nn.Sequential(
+            nn.Linear(in_size, 300),  # nn.Linear(36756, 3000),
+            nn.ReLU(), 
+            nn.Linear(300, 300),  # nn.Linear(3000, 300)
+            nn.ReLU(), 
+            nn.Linear(300, 60),
+            nn.ReLU(),
+            nn.Linear(60, out_size)
+        )
+    
+    def forward(self, x_batch):
+        #print (x_batch)
+        
+        return self.sequence(x_batch)
+
+
+class GarmentParamsMLP(BaseModule):
+    """MLP for training on shirts dataset. Assumes 100 features parameters used"""
+    
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        
+        # layers definitions
+        self.sequence = nn.Sequential(
+            nn.Linear(in_size, 300),
+            nn.ReLU(), 
+            nn.Linear(300, 300),
+            nn.ReLU(), 
+            nn.Linear(300, 60),
+            nn.ReLU(),
+            nn.Linear(60, out_size)
+        )
+    
+    def forward(self, x_batch):
+        #print (x_batch)
+        
+        return self.sequence(x_batch)
+
+
+class GarmentParamsPoint(BaseModule):
+    """PointNet++ processing of input geometry to predict parameters
+        Note that architecture is agnostic of number of input points"""
+    def __init__(self, out_size, config={}):
+        super().__init__()
+
+        self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
+        self.config.update(config)  # from input
+
+        self.feature_extractor = PointNetPlusPlus(512, {'r1': self.config['r1'], 'r2': self.config['r2']})
+
+        self.lin2 = nn.Linear(512, 256)
+        self.lin3 = nn.Linear(256, out_size)
+
+    def forward(self, positions):
+
+        out = self.feature_extractor(positions)
+        out = F.relu(out)
+        out = F.dropout(out, p=0.5, training=self.training)
+        out = F.relu(self.lin2(out))
+        out = F.dropout(out, p=0.5, training=self.training)
+        out = self.lin3(out)
+        return out
+
+
 class GarmentPanelsAE(BaseModule):
     """Model for sequential encoding & decoding of garment panels
         References: 
@@ -383,10 +405,9 @@ class GarmentPatternAE(BaseModule):
         return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
 
 
-# --------- PointNet++ + Patterns
 class GarmentPattern3DPoint(BaseModule):
     """
-        Predicting 2D pattern from 3D garment geometry
+        Predicting 2D pattern from 3D garment geometry -- getting closer to solving reconstruction task
         Based on findings from GarmentPatternAE & GarmentParamsPoint 
     """
     def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, data_norm={}, config={}):
@@ -415,16 +436,7 @@ class GarmentPattern3DPoint(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
-        self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
-        self.config.update(config)  # from input
-
-        self.sa1_module = SetAbstractionModule(0.5, self.config['r1'], MLP([3, 64, 64, 128]))
-        self.sa2_module = SetAbstractionModule(0.25, self.config['r2'], MLP([128 + 3, 128, 128, 256]))
-        self.sa3_module = GlobalSetAbstractionModule(MLP([256 + 3, 256, 512, 1024]))
-
-        self.lin1 = nn.Linear(1024, 512)
-        self.lin2 = nn.Linear(512, 256)
-        self.lin3 = nn.Linear(256, self.config['pattern_encoding_size'])
+        self.feature_extractor = PointNetPlusPlus(self.config['pattern_encoding_size'], {'r1': self.config['r1'], 'r2': self.config['r2']})
 
         # Decode into pattern definition
         self.panel_decoder = LSTMDecoderModule(
@@ -444,33 +456,17 @@ class GarmentPattern3DPoint(BaseModule):
         self.device = positions_batch.device
         batch_size = positions_batch.size(0)
 
-        # --------------- Encode ----------------
-        # flatten the batch for torch-geometric batch format
-        pos_flat = positions_batch.view(-1, positions_batch.size(-1))
-        batch = torch.cat([
-            torch.full((elem.size(0),), fill_value=i, device=self.device, dtype=torch.long) for i, elem in enumerate(positions_batch)
-        ])
+        # Extract info from geometry 
+        pattern_encoding = self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
 
-        # forward pass on PointNet++
-        sa0_out = (None, pos_flat, batch)
-        sa1_out = self.sa1_module(*sa0_out)
-        sa2_out = self.sa2_module(*sa1_out)
-        sa3_out = self.sa3_module(*sa2_out)
-        x, _, _ = sa3_out
-        x = F.relu(self.lin1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(self.lin2(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        pattern_encoding = self.lin3(x)  # YAAAAY Pattern hidden representation!!
+        # Decode 
+        panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
 
-        # ------------------- Decode ---------------
-        panel_encodings_dec = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
-
-        flat_panel_encodings_dec = panel_encodings_dec.contiguous().view(-1, panel_encodings_dec.shape[-1])
-        flat_panels_dec = self.panel_decoder(flat_panel_encodings_dec, self.max_panel_len)
+        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+        flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
 
         # back to patterns and panels
-        prediction = flat_panels_dec.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        prediction = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
         
         return prediction
 
