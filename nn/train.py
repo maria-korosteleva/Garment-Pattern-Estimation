@@ -20,7 +20,7 @@ experiment = WandbRunWrappper(
 # train
 # dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
 # dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
-# dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000})
+# dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, {'mesh_samples': 2000}, gt_caching=True, feature_caching=True)
 # dataset = data.GarmentPanelDataset(
 #     Path(system_info['datasets_path']) / dataset_folder, 
 #     {'panel_name': 'front'}, 
