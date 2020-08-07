@@ -21,6 +21,12 @@ class PanelLoopLoss():
                 If data stats are not provided at init or in this call, zero vector padding is assumed
             * data_stats can be used to update padding vector on the fly
         """
+        # flatten input into list of panels
+        if len(predicted_panels.shape) > 3:
+            predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
+        if original_panels is not None and len(original_panels.shape) > 3:
+            original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
+
         # prepare for padding comparison
         if data_stats:
             self._eval_pad_vector(data_stats)
@@ -54,9 +60,9 @@ class PanelLoopLoss():
     def _eval_pad_vector(self, data_stats={}):
         # prepare padding vector for unpadding the panel data on call
         if data_stats:
-            self.pad_tenzor = -data_stats['mean'] / data_stats['std']
-            if not torch.is_tensor(self.pad_tenzor):
-                self.pad_tenzor = torch.Tensor(self.pad_tenzor)
+            mean = torch.Tensor(data_stats['mean'])
+            std = torch.Tensor(data_stats['std'])
+            self.pad_tenzor = - mean / std
         else:
             self.pad_tenzor = None
 

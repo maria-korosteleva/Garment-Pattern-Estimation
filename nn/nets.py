@@ -396,10 +396,6 @@ class GarmentPatternAE(BaseModule):
         reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
 
         # ---- Loop loss -----
-        # flatten the pattern dimention to calculate loss per panel
-        features = features.view(-1, features.shape[-2], features.shape[-1])
-        preds = preds.view(-1, preds.shape[-2], preds.shape[-1])
-
         loop_loss = self.loop_loss(preds, features)
 
         return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
@@ -486,9 +482,6 @@ class GarmentPattern3DPoint(BaseModule):
         pattern_loss = self.regression_loss(preds, ground_truth)   # features are the ground truth in this case -> reconstruction loss
 
         # Loop loss per panel
-        # flatten into list of panels
-        ground_truth = ground_truth.view(-1, ground_truth.shape[-2], ground_truth.shape[-1])
-        preds = preds.view(-1, preds.shape[-2], preds.shape[-1])
         loop_loss = self.loop_loss(preds, ground_truth)
 
         return pattern_loss + self.config['loop_loss_weight'] * loop_loss

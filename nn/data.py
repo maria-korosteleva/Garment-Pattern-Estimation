@@ -174,8 +174,8 @@ class SampleToTensor(object):
 class FeatureStandartizatoin():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
+        self.mean = torch.Tensor(mean)
+        self.std = torch.Tensor(std)
     
     def __call__(self, sample):
         return {
@@ -187,8 +187,8 @@ class FeatureStandartizatoin():
 class GTtandartizatoin():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
+        self.mean = torch.Tensor(mean)
+        self.std = torch.Tensor(std)
     
     def __call__(self, sample):
         return {
@@ -228,6 +228,10 @@ class BaseDataset(Dataset):
 
         # in\out sizes
         self._estimate_data_shape()
+
+        # statistics already there
+        if 'standardize' in self.config:
+            self.standardize(stats=self.config['standardize'])
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -296,10 +300,14 @@ class BaseDataset(Dataset):
         """Saves predicted params of the datapoint to the original data folder"""
         pass
 
-    def standardize(self, training):
-        """Use element normalization based on stats from the training subset.
+    def standardize(self, training=None, stats={}):
+        """Use element normalization\standardization based on stats from the training subset.
             Dataset is the object most aware of the datapoint structure hence it's the place to calculate & use the normalization.
-            Normalization is not implemented as Transform because it might need to be customized for a data & reapplied on saving & visualizing predictions """
+            Accepts either of two inputs: 
+            * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
+            * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
+            """
         print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
 
     def _clean_datapoint_list(self):
@@ -546,20 +554,27 @@ class GarmentPanelDataset(GarmentBaseDataset):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
     
-    def standardize(self, training):
+    def standardize(self, training=None, stats={}):
         """Use mean&std for normalization of output features & restoring input predictions.
-            Accepts training subset as input -- the stats are only based on training subsection of the data
+            Accepts either of two inputs: 
+            * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
+            * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
         """
         print('GarmentPanelDataset::Using data normalization')
 
-        loader = DataLoader(training, batch_size=len(training), shuffle=False)
-        for batch in loader:
-            feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
-            # only one batch out there anyway
-            break
-        self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+        if training is not None:
+            loader = DataLoader(training, batch_size=len(training), shuffle=False)
+            for batch in loader:
+                feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
+                # only one batch out there anyway
+                break
+            self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+            stats = self.config['standardize']
+        elif not stats:
+            raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
 
-        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
+        self.transforms.append(FeatureStandartizatoin(stats['mean'], stats['std']))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -624,27 +639,34 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         self.config['panel_len'] = self[0]['ground_truth'].shape[1]
         self.config['element_size'] = self[0]['ground_truth'].shape[2]
     
-    def standardize(self, training):
+    def standardize(self, training=None, stats={}):
         """Use mean&std for normalization of output edge features & restoring input predictions.
-            Accepts training subset as input -- the stats are only based on training subsection of the data
+            Accepts either of two inputs: 
+            * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
+            * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
         """
         print('Garment3DPatternDataset::Using data normalization for features & ground truth')
 
-        loader = DataLoader(training, batch_size=len(training), shuffle=False)
-        for batch in loader:
-            gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
-            feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
-            # only one batch out there anyway
-            break
+        if training is not None:
+            loader = DataLoader(training, batch_size=len(training), shuffle=False)
+            for batch in loader:
+                gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
+                feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
+                # only one batch out there anyway
+                break
 
-        self.config['standardize'] = {
-            'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
-            'f_mean' : feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
+            self.config['standardize'] = {
+                'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
+                'f_mean' : feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
+            stats = self.config['standardize']
+        elif not stats:
+            raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
 
         # print(self.config['standardize'])
 
-        self.transforms.append(GTtandartizatoin(gt_mean, gt_stds))
-        self.transforms.append(FeatureStandartizatoin(feature_mean, feature_stds))
+        self.transforms.append(GTtandartizatoin(stats['mean'], stats['std']))
+        self.transforms.append(FeatureStandartizatoin(stats['f_mean'], stats['f_std']))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
