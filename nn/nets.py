@@ -98,39 +98,54 @@ class PointNetPlusPlus(nn.Module):
         return out
 
 # ------------- Sequence modules -----------
-def init_tenzor(*shape, device='cpu'):
+def init_tenzor(*shape, device='cpu', init_type=''):
     """shortcut to create & initialize tenzors on a given device.  """
-    new_tenzor = torch.empty(shape)
-    nn.init.kaiming_normal_(new_tenzor)  # TODO suport other init types 
+    # TODO suport other init types 
+    if not init_type: # zeros by default
+        new_tenzor = torch.zeros(shape)
+    elif 'kaiming_normal' in init_type:
+        new_tenzor = torch.empty(shape)
+        nn.init.kaiming_normal_(new_tenzor)
+    else:  
+        raise NotImplementedError('{} tenzor initialization is not implemented'.format(init_type))
+
     return new_tenzor.to(device)
 
-def init_weights(module):
+def init_weights(module, init_type=''):
     """Initialize weights of provided module with requested init type"""
+    if not init_type:
+        # do not re-initialize, leave default pytorch init
+        return
     for name, param in module.named_parameters():
         if 'weight' in name:
-            nn.init.kaiming_normal_(param)
+            if 'kaiming_normal' in init_type:
+                nn.init.kaiming_normal_(param)
+            else:
+                raise NotImplementedError('{} weight initialization is not implemented'.format(init_type))
     # leave defaults for bias
+
 
 class LSTMEncoderModule(nn.Module):
     """A wrapper for LSTM targeting encoding task"""
-    def __init__(self, elem_len, encoding_size, n_layers, dropout=0, custom_init=False):
+    def __init__(self, elem_len, encoding_size, n_layers, dropout=0, custom_init='kaiming_normal'):
         super().__init__()
+        self.custom_init = custom_init
         self.n_layers = n_layers
         self.encoding_size = encoding_size
+
         self.lstm = nn.LSTM(
             elem_len, encoding_size, n_layers, 
             dropout=dropout, batch_first=True)
 
-        if custom_init:
-            init_weights(self.lstm)
+        init_weights(self.lstm, init_type=custom_init)
 
     def forward(self, batch_sequence):
         device = batch_sequence.device
         batch_size = batch_sequence.size(0)
         
         # --- encode --- 
-        hidden_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device)
-        cell_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device)
+        hidden_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device, init_type=self.custom_init)
+        cell_init = init_tenzor(self.n_layers, batch_size, self.encoding_size, device=device, init_type=self.custom_init)
         _, (hidden, _) = self.lstm(batch_sequence, (hidden_init, cell_init))
 
         # final encoding is the last output == hidden of last layer 
@@ -139,8 +154,9 @@ class LSTMEncoderModule(nn.Module):
 
 class LSTMDecoderModule(nn.Module):
     """A wrapper for LSTM targeting decoding task"""
-    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init=False):
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
         super().__init__()
+        self.custom_init = custom_init
         self.n_layers = n_layers
         self.encoding_size = encoding_size
         self.hidden_size = hidden_size
@@ -152,8 +168,8 @@ class LSTMDecoderModule(nn.Module):
         # post-process to match the desired outut shape
         self.lin = nn.Linear(hidden_size, out_elem_size)
 
-        if custom_init:
-            init_weights(self.lstm)
+        # initialize
+        init_weights(self.lstm, init_type=custom_init)
 
     def forward(self, batch_enc, out_len):
         """out_len specifies the length of the output sequence to produce"""
@@ -164,8 +180,8 @@ class LSTMDecoderModule(nn.Module):
         dec_input = batch_enc.unsqueeze(1).repeat(1, out_len, 1)  # along sequence dimention
 
         # decode
-        hidden_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device)
-        cell_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device)
+        hidden_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device, init_type=self.custom_init)
+        cell_init = init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device, init_type=self.custom_init)
         out, _ = self.lstm(dec_input, (hidden_init, cell_init))
         
         # back to requested format
@@ -274,21 +290,20 @@ class GarmentPanelsAE(BaseModule):
 
         # additional info
         self.config['loss'] = 'MSE Reconstruction with loop'
-        self.config['hidden_init'] = 'kaiming_normal_'
 
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # encode
         self.seq_encoder = LSTMEncoderModule(
             in_elem_len, self.config['hidden_dim_enc'], self.config['n_layers'], dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
 
         # decode
         self.seq_decoder = LSTMDecoderModule(
             self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
 
     def forward(self, x):
@@ -326,14 +341,13 @@ class GarmentPatternAE(BaseModule):
             'pattern_n_layers': 3, 
             'loop_loss_weight': 0.1, 
             'dropout': 0,
-            'init': 'kaiming_normal_'
+            'lstm_init': 'kaiming_normal_'
         })
         # update with input settings
         self.config.update(config) 
 
         # additional info
         self.config['loss'] = 'MSE Reconstruction with loop'
-        self.config['hidden_init'] = 'kaiming_normal_'
 
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
@@ -341,24 +355,24 @@ class GarmentPatternAE(BaseModule):
         self.panel_encoder = LSTMEncoderModule(
             in_elem_len, self.config['panel_encoding_size'], self.config['panel_n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
         self.panel_decoder = LSTMDecoderModule(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], in_elem_len, self.config['panel_n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
 
         # ----- patten level ------
         self.pattern_encoder = LSTMEncoderModule(
             self.config['panel_encoding_size'], self.config['pattern_encoding_size'], self.config['pattern_n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
         self.pattern_decoder = LSTMDecoderModule(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
 
     def forward(self, patterns_batch):
@@ -385,7 +399,6 @@ class GarmentPatternAE(BaseModule):
         prediction = flat_panels_dec.contiguous().view(batch_size, pattern_size, panel_size, -1)
         
         return prediction
-
 
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
@@ -418,7 +431,7 @@ class GarmentPattern3DPoint(BaseModule):
             'loop_loss_weight': 0.1, 
             'dropout': 0,
             'loss': 'MSE with loop',
-            'net_init': 'kaiming_normal_'
+            'lstm_init': 'kaiming_normal_'
         })
         # update with input settings
         self.config.update(config) 
@@ -437,12 +450,12 @@ class GarmentPattern3DPoint(BaseModule):
         self.panel_decoder = LSTMDecoderModule(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
             dropout=self.config['dropout'], 
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
         self.pattern_decoder = LSTMDecoderModule(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
             dropout=self.config['dropout'],
-            custom_init=True
+            custom_init=self.config['lstm_init']
         )
 
     def forward(self, positions_batch):
