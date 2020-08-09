@@ -104,16 +104,25 @@ def init_tenzor(*shape, device='cpu'):
     nn.init.kaiming_normal_(new_tenzor)  # TODO suport other init types 
     return new_tenzor.to(device)
 
+def init_weights(module):
+    """Initialize weights of provided module with requested init type"""
+    for name, param in module.named_parameters():
+        if 'weight' in name:
+            nn.init.kaiming_normal_(param)
+    # leave defaults for bias
 
 class LSTMEncoderModule(nn.Module):
     """A wrapper for LSTM targeting encoding task"""
-    def __init__(self, elem_len, encoding_size, n_layers, dropout=0):
+    def __init__(self, elem_len, encoding_size, n_layers, dropout=0, custom_init=False):
         super().__init__()
         self.n_layers = n_layers
         self.encoding_size = encoding_size
         self.lstm = nn.LSTM(
             elem_len, encoding_size, n_layers, 
             dropout=dropout, batch_first=True)
+
+        if custom_init:
+            init_weights(self.lstm)
 
     def forward(self, batch_sequence):
         device = batch_sequence.device
@@ -130,7 +139,7 @@ class LSTMEncoderModule(nn.Module):
 
 class LSTMDecoderModule(nn.Module):
     """A wrapper for LSTM targeting decoding task"""
-    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0):
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init=False):
         super().__init__()
         self.n_layers = n_layers
         self.encoding_size = encoding_size
@@ -142,6 +151,9 @@ class LSTMDecoderModule(nn.Module):
 
         # post-process to match the desired outut shape
         self.lin = nn.Linear(hidden_size, out_elem_size)
+
+        if custom_init:
+            init_weights(self.lstm)
 
     def forward(self, batch_enc, out_len):
         """out_len specifies the length of the output sequence to produce"""
@@ -249,7 +261,14 @@ class GarmentPanelsAE(BaseModule):
         super().__init__()
 
         # defaults for this net
-        self.config.update({'hidden_dim_enc': 20, 'hidden_dim_dec': 20, 'n_layers': 3, 'loop_loss_weight': 0.1, 'dropout': 0.1})
+        self.config.update({
+            'hidden_dim_enc': 20, 
+            'hidden_dim_dec': 20, 
+            'n_layers': 3, 
+            'loop_loss_weight': 0.1, 
+            'dropout': 0.1,
+            'lstm_init': 'kaiming_normal_'
+        })
         # update with input settings
         self.config.update(config) 
 
@@ -261,17 +280,16 @@ class GarmentPanelsAE(BaseModule):
 
         # encode
         self.seq_encoder = LSTMEncoderModule(
-            in_elem_len, self.config['hidden_dim_enc'], self.config['n_layers'], dropout=self.config['dropout']
+            in_elem_len, self.config['hidden_dim_enc'], self.config['n_layers'], dropout=self.config['dropout'],
+            custom_init=True
         )
 
         # decode
         self.seq_decoder = LSTMDecoderModule(
             self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
-
-        # init values
-        self.init_net_params()
 
     def forward(self, x):
 
@@ -279,18 +297,6 @@ class GarmentPanelsAE(BaseModule):
 
         out = self.seq_decoder(encoding, x.shape[-2])  # -2 corresponds to len of paddel panel
         return out
-
-    def init_net_params(self):
-        """Apply custom initialization to net parameters"""
-        self.config['init'] = 'kaiming_normal_'
-        for name, param in self.seq_encoder.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param)
-            # leave defaults for bias
-        for name, param in self.seq_decoder.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param)
-            # leave defaults for bias
 
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
@@ -319,7 +325,9 @@ class GarmentPatternAE(BaseModule):
             'pattern_encoding_size': 40, 
             'pattern_n_layers': 3, 
             'loop_loss_weight': 0.1, 
-            'dropout': 0})
+            'dropout': 0,
+            'init': 'kaiming_normal_'
+        })
         # update with input settings
         self.config.update(config) 
 
@@ -332,28 +340,26 @@ class GarmentPatternAE(BaseModule):
         # --- panel-level ---- 
         self.panel_encoder = LSTMEncoderModule(
             in_elem_len, self.config['panel_encoding_size'], self.config['panel_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
         self.panel_decoder = LSTMDecoderModule(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], in_elem_len, self.config['panel_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
 
         # ----- patten level ------
         self.pattern_encoder = LSTMEncoderModule(
             self.config['panel_encoding_size'], self.config['pattern_encoding_size'], self.config['pattern_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
         self.pattern_decoder = LSTMDecoderModule(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
-
-        # init values
-        self.init_submodule_params(self.panel_encoder)
-        self.init_submodule_params(self.panel_decoder)
-        self.init_submodule_params(self.pattern_encoder)
-        self.init_submodule_params(self.pattern_decoder)
 
     def forward(self, patterns_batch):
         self.device = patterns_batch.device
@@ -380,13 +386,6 @@ class GarmentPatternAE(BaseModule):
         
         return prediction
 
-    def init_submodule_params(self, submodule):
-        """Apply custom initialization to net parameters of given submodule"""
-        self.config['init'] = 'kaiming_normal_'
-        for name, param in submodule.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param)
-            # leave defaults for bias
 
     def loss(self, features, ground_truth):
         """Override base class loss calculation to use reconstruction loss"""
@@ -437,16 +436,14 @@ class GarmentPattern3DPoint(BaseModule):
         # Decode into pattern definition
         self.panel_decoder = LSTMDecoderModule(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'], 
+            custom_init=True
         )
         self.pattern_decoder = LSTMDecoderModule(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
-            dropout=self.config['dropout']
+            dropout=self.config['dropout'],
+            custom_init=True
         )
-
-        # init values for decoding
-        self.init_submodule_params(self.panel_decoder)
-        self.init_submodule_params(self.pattern_decoder)
 
     def forward(self, positions_batch):
         self.device = positions_batch.device
@@ -465,14 +462,6 @@ class GarmentPattern3DPoint(BaseModule):
         prediction = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
         
         return prediction
-
-    def init_submodule_params(self, submodule):
-        """Apply custom initialization to net parameters of given submodule"""
-        self.config['init'] = 'kaiming_normal_'
-        for name, param in submodule.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param)
-            # leave defaults for bias
 
     def loss(self, features, ground_truth):
         """Evalute loss when predicting patterns"""
