@@ -24,23 +24,26 @@ class PanelLoopLoss():
         # flatten input into list of panels
         if len(predicted_panels.shape) > 3:
             predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
-        if original_panels is not None and len(original_panels.shape) > 3:
-            original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
-
+        
+        
         # prepare for padding comparison
-        if data_stats:
-            self._eval_pad_vector(data_stats)
-        if original_panels is not None:
-            if self.pad_tenzor is None:  # assume zero vector for padding
+        with_unpadding = original_panels is not None and original_panels.nelement() > 0  # existing non-empty tensor
+        if with_unpadding:
+            # flatten if not already 
+            if len(original_panels.shape) > 3:
+                original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
+            if data_stats: # update pad vector
+                self._eval_pad_vector(data_stats)
+            if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
                 self.pad_tenzor = torch.zeros(original_panels.shape[-1])
             pad_tenzor_propagated = self.pad_tenzor.repeat(original_panels.shape[1], 1)
             pad_tenzor_propagated = pad_tenzor_propagated.to(device=predicted_panels.device)
             
+        # evaluate loss
         panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
         panel_coords_sum = panel_coords_sum.to(device=predicted_panels.device)
-        # iterate over elements in batch
         for el_id in range(predicted_panels.shape[0]):
-            if original_panels is not None and self.pad_tenzor is not None:
+            if with_unpadding:
                 # panel original length
                 panel = original_panels[el_id]
                 # unpaded length
@@ -94,6 +97,8 @@ def eval_metrics(model, data_wrapper, section='test', loop_loss=False):
             loop_loss = 0
             for batch in loader:
                 features, gt = batch['features'].to(device), batch['ground_truth'].to(device)
+                if gt is None or gt.nelement() == 0:  # assume reconstruction task
+                    gt = features
                 # basic metric
                 model_defined += model.loss(features, gt)
                 # other metrics from this module
