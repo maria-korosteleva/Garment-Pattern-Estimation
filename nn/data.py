@@ -229,9 +229,9 @@ class BaseDataset(Dataset):
         # in\out sizes
         self._estimate_data_shape()
 
-        # statistics already there
+        # statistics already there --> need to apply it
         if 'standardize' in self.config:
-            self.standardize(stats=self.config['standardize'])
+            self.standardize()
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -300,14 +300,15 @@ class BaseDataset(Dataset):
         """Saves predicted params of the datapoint to the original data folder"""
         pass
 
-    def standardize(self, training=None, stats={}):
+    def standardize(self, training=None):
         """Use element normalization\standardization based on stats from the training subset.
             Dataset is the object most aware of the datapoint structure hence it's the place to calculate & use the normalization.
-            Accepts either of two inputs: 
+            Uses either of two: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
-            * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
-            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
-            """
+            * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided:
+                this allows to save some time
+        """
         print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
 
     def _clean_datapoint_list(self):
@@ -554,16 +555,19 @@ class GarmentPanelDataset(GarmentBaseDataset):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
     
-    def standardize(self, training=None, stats={}):
+    def standardize(self, training=None):
         """Use mean&std for normalization of output features & restoring input predictions.
             Accepts either of two inputs: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
             * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
-            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
+            configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided
         """
         print('GarmentPanelDataset::Using data normalization')
 
-        if training is not None:
+        if 'standardize' in self.config:
+            print('{}::Using stats from config'.format(self.__class__.__name__))
+            stats = self.config['standardize']
+        elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
                 feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
@@ -571,9 +575,13 @@ class GarmentPanelDataset(GarmentBaseDataset):
                 break
             self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
-        elif not stats:
+        else:  # no info provided
             raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
 
+        # clean-up tranform list to avoid duplicates
+        for transform in self.transforms:
+            if isinstance(transform, FeatureStandartizatoin):
+                self.transforms.remove(transform)
         self.transforms.append(FeatureStandartizatoin(stats['mean'], stats['std']))
 
     def _get_features(self, datapoint_name, folder_elements):
@@ -639,16 +647,20 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         self.config['panel_len'] = self[0]['ground_truth'].shape[1]
         self.config['element_size'] = self[0]['ground_truth'].shape[2]
     
-    def standardize(self, training=None, stats={}):
+    def standardize(self, training=None):
         """Use mean&std for normalization of output edge features & restoring input predictions.
             Accepts either of two inputs: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
-            * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
-            'training' parameter has a priority: if it's given, the statistics are recalculated despte the value in 'stats' param
+            * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided
+                => speed-up by providing stats or speeding up multiple calls to this function
         """
         print('Garment3DPatternDataset::Using data normalization for features & ground truth')
 
-        if training is not None:
+        if 'standardize' in self.config:
+            print('{}::Using stats from config'.format(self.__class__.__name__))
+            stats = self.config['standardize']
+        elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
                 gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
@@ -660,10 +672,15 @@ class Garment3DPatternDataset(GarmentBaseDataset):
                 'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
                 'f_mean' : feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
-        elif not stats:
-            raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
+        else:  # nothing is provided
+            raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
 
         # print(self.config['standardize'])
+
+        # clean-up tranform list to avoid duplicates
+        for transform in self.transforms:
+            if isinstance(transform, GTtandartizatoin) or isinstance(transform, FeatureStandartizatoin):
+                self.transforms.remove(transform)
 
         self.transforms.append(GTtandartizatoin(stats['mean'], stats['std']))
         self.transforms.append(FeatureStandartizatoin(stats['f_mean'], stats['f_std']))

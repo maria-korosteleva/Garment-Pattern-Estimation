@@ -36,7 +36,7 @@ class Trainer():
             },
             early_stopping={
                 'window': 0.005,
-                'patience': 50
+                'patience': 30
             }
         )
 

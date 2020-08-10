@@ -10,12 +10,22 @@ from experiment import WandbRunWrappper
 dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
 system_info = customconfig.Properties('./system.json')
+# MAIN experiment object
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Pattern3D-init-control',   # Pattern3D-tee-in-std
+    run_name='Pattern3D-capacity',   # Pattern3D-tee-in-std
     run_id=None, 
     no_sync=False) 
+
+# get data stats from older runs to save runtime
+old_experiment = WandbRunWrappper(system_info['wandb_username'],
+    project_name='Garments-Reconstruction', 
+    run_name='Pattern3D-capacity',
+    run_id='2hj3sdv0'
+)
+# NOTE data stats are ONLY correct for a specific data split, so these two need to go together
+old_split, _, data_config = old_experiment.data_info()
 
 # train
 # dataset = data.ParametrizedShirtDataSet(r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest', {'num_verts': 'all'})
@@ -26,13 +36,19 @@ experiment = WandbRunWrappper(
 #     {'panel_name': 'front'}, 
 #     gt_caching=True, feature_caching=True)
 # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, gt_caching=True, feature_caching=True)
+# NOTE this dataset involves point sampling SO data stats from previous runs might not be correct,
+# Especially if we change the number of samples
+# TO speed up training, we assume that previous estimations are close to the truth (as the data amount is sufficient for good estimation)
+data_config.update(mesh_samples=4000)
 dataset = data.Garment3DPatternDataset(
     Path(system_info['datasets_path']) / dataset_folder, 
-    {'mesh_samples': 2000}, 
+    data_config,   # uses data stats from previous run
     gt_caching=True, feature_caching=True)
 
 trainer = Trainer(experiment, dataset, 
-                  valid_percent=10, test_percent=10, split_seed=10,
+                  valid_percent=old_split['valid_percent'],   
+                  test_percent=old_split['test_percent'], 
+                  split_seed=old_split['random_seed'],   # valid_percent=10, test_percent=10, split_seed=10,
                   with_norm=True,
                   with_visualization=False)  # only turn on on custom garment data
 dataset_wrapper = trainer.datawraper
@@ -55,9 +71,9 @@ trainer.init_randomizer(100)
 model = nets.GarmentPattern3DPoint(
     dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'],
     {
-        'r1': 0.1, 'r2': 0.4,
-        'panel_encoding_size': 25, 'panel_n_layers': 3, 
-        'pattern_encoding_size': 40, 'pattern_n_layers': 3, 
+        'r1': 1, 'r2': 4,
+        'panel_encoding_size': 35, 'panel_n_layers': 3, 
+        'pattern_encoding_size': 100, 'pattern_n_layers': 3, 
         'loop_loss_weight': 0.1, 'dropout': 0
     }
 )
