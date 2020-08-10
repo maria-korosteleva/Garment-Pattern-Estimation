@@ -571,8 +571,12 @@ class GarmentPanelDataset(GarmentBaseDataset):
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
                 feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
-                # only one batch out there anyway
-                break
+                # NOTE mean values for panels are zero due to loop property 
+                # panel components CANNOT be shifted to keep the loop property intact 
+                # hence enforce zeros in mean value for edge coordinates
+                feature_mean[0] = feature_mean[1] = 0
+
+                break  # only one batch out there anyway
             self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
         else:  # no info provided
@@ -663,10 +667,15 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
-                gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
                 feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
-                # only one batch out there anyway
-                break
+
+                gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
+                # NOTE mean values for panels are zero due to loop property 
+                # panel components CANNOT be shifted to keep the loop property intact 
+                # hence enforce zeros in mean value for edge coordinates
+                gt_mean[0] = gt_mean[1] = 0
+                
+                break  # only one batch out there anyway
 
             self.config['standardize'] = {
                 'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
