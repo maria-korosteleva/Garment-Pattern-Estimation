@@ -138,7 +138,7 @@ class Trainer():
             self._save_checkpoint(model, epoch)
 
             # check for early stoping
-            if self._early_stopping(loss, valid_loss):
+            if self._early_stopping(loss, valid_loss, self.optimizer.param_groups[0]['lr']):
                 print('Trainer::Stopped training early')
                 break
 
@@ -205,7 +205,7 @@ class Trainer():
         # new epoch id
         return checkpoint['epoch'] + 1
 
-    def _early_stopping(self, last_loss, last_tracking_loss):
+    def _early_stopping(self, last_loss, last_tracking_loss, last_lr):
         """Check if conditions are met to stop training. Returns a message with a reason if met
             Early stopping allows to save compute time"""
 
@@ -225,6 +225,11 @@ class Trainer():
                 self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.early_stopping['patience']))
                 return True
         # do not check untill wb.config.early_stopping.patience # of calls are gathered
+
+        # Learning rate vanished
+        if last_lr < 1e-6:
+            self.experiment.add_statistic('stopped early', 'Learning Rate vanished')
+            return True
         
         return False
 
