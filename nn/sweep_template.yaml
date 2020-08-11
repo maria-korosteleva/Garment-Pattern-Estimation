@@ -1,0 +1,48 @@
+# How to run
+entity: <wandb username>
+# Assume running from the root of git directory
+program: ./nn/train.py
+command:
+  - ${env}
+  - C:/ProgramData/Anaconda3/python.exe
+  - ${program}
+  - ${args}
+
+# Description of this sweep
+project: Garments-Reconstruction
+name: Sweep_Over_Parameters
+decription: Find best combination!!!
+
+# Setup
+method: bayes
+metric:
+  name: valid_loss
+  goal: minimize
+early_terminate:
+  type: hyperband
+  min_iter: 3
+parameters:
+  mesh_samples_multiplier:
+    min: 2
+    max: 20
+  pattern_encoding_multiplier:
+    min: 3
+    max: 15
+  panel_encoding_multiplier:
+    min: 2
+    max: 7
+  pattern_n_layers:
+    min: 1
+    max: 5
+  panel_n_layers:
+    min: 1
+    max: 5
+  r1:
+    min: 1.0
+    max: 4.0
+  r2:
+    min: 2.0
+    max: 7.0
+  net_seed:
+    min: 0
+    max: 10000000000

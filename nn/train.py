@@ -10,32 +10,33 @@ def get_values_from_args():
     """command line arguments to control the run for running wandb Sweeps!"""
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mesh_samples', '-m', help='number of samples per mesh ', type=int, default=4000)
-    parser.add_argument('--pattern_encoding_size', '-pte', help='size of pattern encoding', type=int, default=100)
-    parser.add_argument('--pattern_n_layers', '-ptl', help='size of pattern encoding', type=int, default=3)
-    parser.add_argument('--panel_encoding_size', '-pe', help='size of panel encoding', type=int, default=35)
-    parser.add_argument('--panel_n_layers', '-pl', help='size of pattern encoding', type=int, default=3)
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=8)
+    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=100)
+    parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=3)
+    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=35)
+    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
     parser.add_argument('--r1', '-r1', help='size of second PN++ layer radius', type=float, default=1.5)
     parser.add_argument('--r2', '-r2', help='size of first PN++ layer radius', type=float, default=5)
+    parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=100)
 
     args = parser.parse_args()
     print(args)
 
     data_config = {
-        'mesh_samples': args.mesh_samples
+        'mesh_samples': args.mesh_samples_multiplier * 500
     }
 
     nn_config = {
         'r1': args.r1,
         'r2': args.r2,
-        'panel_encoding_size': args.panel_encoding_size,
+        'panel_encoding_size': args.panel_encoding_multiplier * 10,
         'panel_n_layers': args.panel_n_layers,
-        'pattern_encoding_size': args.pattern_encoding_size,
+        'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
         'pattern_n_layers': args.pattern_n_layers
     }
 
 
-    return data_config, nn_config
+    return data_config, nn_config, args.net_seed
 
 
 def get_data_config(in_config, old_stats=False):
@@ -70,13 +71,13 @@ if __name__ == "__main__":
     
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-    in_data_config, in_nn_config = get_values_from_args()
+    in_data_config, in_nn_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Pattern3D-capacity', 
+        run_name='Pattern3D-capacity-sweep', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -88,7 +89,7 @@ if __name__ == "__main__":
                     valid_percent=split['valid_percent'], test_percent=split['test_percent'], split_seed=split['random_seed'],  
                     with_norm=True, with_visualization=False)  # only turn on on custom garment data
     
-    trainer.init_randomizer(100)
+    trainer.init_randomizer(net_seed)
     model = nets.GarmentPattern3DPoint(
         dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
         in_nn_config

@@ -18,6 +18,7 @@ __pycache__
 
 # custom settings -- to have customized local copy
 system.json
+sweeps
 
 # file for small script tries
 tmp*.py
