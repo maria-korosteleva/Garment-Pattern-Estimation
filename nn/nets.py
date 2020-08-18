@@ -34,7 +34,7 @@ class SetAbstractionModule(nn.Module):
     def forward(self, features, pos, batch):
         idx = geometric.fps(pos, batch, ratio=self.ratio)
         row, col = geometric.radius(pos, pos[idx], self.radius, batch, batch[idx],
-                            max_num_neighbors=32)
+                            max_num_neighbors=25)
         edge_index = torch.stack([col, row], dim=0)
         features = self.conv(features, (pos, pos[idx]), edge_index)
         pos, batch = pos[idx], batch[idx]
@@ -74,7 +74,7 @@ class PointNetPlusPlus(nn.Module):
         self.config = {'r1': 0.1, 'r2': 0.4}  # defaults for this net
         self.config.update(config)  # from input
 
-        self.sa1_module = SetAbstractionModule(0.5, self.config['r1'], MLP([3, 64, 64, 128]))
+        self.sa1_module = SetAbstractionModule(0.2, self.config['r1'], MLP([3, 64, 64, 128]))
         self.sa2_module = SetAbstractionModule(0.25, self.config['r2'], MLP([128 + 3, 128, 128, 256]))
         self.sa3_module = GlobalSetAbstractionModule(MLP([256 + 3, 256, 512, 1024]))
 
