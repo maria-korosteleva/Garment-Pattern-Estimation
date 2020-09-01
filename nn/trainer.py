@@ -89,7 +89,8 @@ class Trainer():
         print('Trainer::NN training Using device: {}'.format(self.device))
 
         if self.log_with_visualization:
-            # go to upper dir to avoid bug TODO https://github.com/wandb/client/issues/1128
+            # to run parent dir -- wandb will automatically keep track of intermediate values
+            # Othervise it might only display the last value (if saving with the same name every time)
             self.folder_for_preds = Path(wb.run.dir) / '..' / 'intermediate_preds'
             self.folder_for_preds.mkdir(exist_ok=True)
         
@@ -244,13 +245,14 @@ class Trainer():
         """Log image of one example prediction to wandb.
             If the loader does not shuffle batches, logged image is the same on every step"""
         with torch.no_grad():
-            for batch in loader:
-                img_files = self.datawraper.dataset.save_prediction_batch(
-                    model(batch['features'].to(self.device)), batch['name'], save_to=self.folder_for_preds)
-                
-                print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
-                wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
-                break  # One is enough
+            # take one sample from the supplied loader
+            sample = loader.dataset[0]  
+            # use it as "one-sample batch"
+            img_files = self.datawraper.dataset.save_prediction_batch(
+                model(sample['features'].unsqueeze(0).to(self.device)), [sample['name']], save_to=self.folder_for_preds)
+            
+            print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
+            wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
 
     def _save_checkpoint(self, model, epoch, save_name='checkpoint'):
         """Save checkpoint to be used to resume training"""
