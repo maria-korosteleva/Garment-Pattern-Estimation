@@ -91,9 +91,7 @@ if __name__ == "__main__":
     dataset = data.Garment3DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, 
                                             data_config, gt_caching=True, feature_caching=True)
 
-    trainer = Trainer(experiment, dataset, 
-                    valid_percent=split['valid_percent'], test_percent=split['test_percent'], split_seed=split['random_seed'],  
-                    with_norm=True, with_visualization=True)  # only turn on on custom garment data
+    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
     
     trainer.init_randomizer(net_seed)
     model = nets.GarmentPattern3DPoint(

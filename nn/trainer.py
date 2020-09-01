@@ -13,7 +13,7 @@ import wandb as wb
 import data as data
 
 class Trainer():
-    def __init__(self, experiment_tracker, dataset=None, valid_percent=None, test_percent=None, split_seed=None, with_norm=True, with_visualization=False):
+    def __init__(self, experiment_tracker, dataset=None, data_split={}, with_norm=True, with_visualization=False):
         """Initialize training and dataset split (if given)
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
@@ -41,7 +41,7 @@ class Trainer():
         )
 
         if dataset is not None:
-            self.use_dataset(dataset, valid_percent, test_percent, split_seed)
+            self.use_dataset(dataset, **data_split)
    
     def init_randomizer(self, random_seed=None):
         """Init randomizatoin for torch globally for reproducibility. 
