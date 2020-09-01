@@ -173,11 +173,11 @@ class WandbRunWrappper(object):
             raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
 
         # Using artifacts to store important files for this run
-        if save_name == 'checkpoint':
-            artifact = wb.Artifact(self.artifactname(self.checkpoint_filetag, with_version=False), type='checkpoint')
+        if 'checkpoint' or 'best' in save_name:
+            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='checkpoint')
             filename = self.checkpoint_filename()
         elif save_name == 'final':
-            artifact = wb.Artifact(self.artifactname(self.final_filetag, with_version=False), type='result')
+            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='result')
             filename = self.final_filename()
         else:
             artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='other')

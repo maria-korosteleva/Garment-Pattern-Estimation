@@ -103,6 +103,7 @@ class Trainer():
         """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
         model.to(self.device)
         log_step = wb.run.step - 1
+        best_valid_loss = None
         
         for epoch in range (start_epoch, wb.config.epochs):
             model.train()
@@ -125,10 +126,16 @@ class Trainer():
                 losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'].to(self.device)) for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
+
+            # compare with previous best
+            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
+                best_valid_loss = valid_loss
+                self._save_checkpoint(model, epoch, 'best')
             
             # Base logging
             print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
-            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
+            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss,
+                    'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
 
             # prediction for visual reference
             if self.log_with_visualization:
@@ -245,7 +252,7 @@ class Trainer():
                 wb.log({batch['name'][0]: wb.Image(str(img_files[0])), 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
                 break  # One is enough
 
-    def _save_checkpoint(self, model, epoch):
+    def _save_checkpoint(self, model, epoch, save_name='checkpoint'):
         """Save checkpoint to be used to resume training"""
         self.experiment.save(
             {
@@ -254,6 +261,6 @@ class Trainer():
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict()
             },
-            save_name='checkpoint'
+            save_name=save_name
         )
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
