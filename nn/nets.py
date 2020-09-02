@@ -250,10 +250,10 @@ class GarmentPattern3DPoint(BaseModule):
 
         # defaults for this net
         self.config.update({
-            'r1': 10, 'r2': 40,   # PointNet++
-            'panel_encoding_size': 20, 
-            'panel_n_layers': 3, 
-            'pattern_encoding_size': 40, 
+            'r1': 3, 'r2': 4, 'r3': 5, 'r4': 7,  # PointNet++
+            'panel_encoding_size': 70, 
+            'panel_n_layers': 4, 
+            'pattern_encoding_size': 130, 
             'pattern_n_layers': 3, 
             'loop_loss_weight': 0.1, 
             'dropout': 0,
@@ -271,7 +271,9 @@ class GarmentPattern3DPoint(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
-        self.feature_extractor = blocks.PointNetPlusPlus(self.config['pattern_encoding_size'], {'r1': self.config['r1'], 'r2': self.config['r2']})
+        self.feature_extractor = blocks.PointNetPlusPlus(
+            self.config['pattern_encoding_size'], 
+            {'r1': self.config['r1'], 'r2': self.config['r2'], 'r3': self.config['r3'], 'r4': self.config['r4']})
 
         # Decode into pattern definition
         self.panel_decoder = blocks.LSTMDecoderModule(
