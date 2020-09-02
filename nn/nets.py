@@ -318,6 +318,87 @@ class GarmentPattern3DPoint(BaseModule):
         return pattern_loss + self.config['loop_loss_weight'] * loop_loss
 
 
+class GarmentPattern3DEdge(BaseModule):
+    """
+        Predicting 2D pattern from 3D garment geometry 
+        Based on decoder from GarmentPatternAE & EdgeConvs from "Dynamic Graph CNN
+        for Learning on Point Clouds" <https://arxiv.org/abs/1801.07829> 
+    """
+    def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, data_norm={}, config={}):
+        super().__init__()
+
+        # defaults for this net
+        self.config.update({
+            'panel_encoding_size': 70, 
+            'panel_n_layers': 4, 
+            'pattern_encoding_size': 130, 
+            'pattern_n_layers': 3, 
+            'loop_loss_weight': 0.1, 
+            'dropout': 0,
+            'loss': 'MSE with loop',
+            'lstm_init': 'kaiming_normal_'
+        })
+        # update with input settings
+        self.config.update(config) 
+
+        # output props
+        self.max_panel_len = max_panel_len
+        self.max_pattern_size = max_pattern_size
+
+        # extra loss object
+        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
+
+        # Feature extractor definition
+        self.feature_extractor = blocks.EdgeConvFeatures(self.config['pattern_encoding_size'])
+
+        # Decode into pattern definition
+        self.panel_decoder = blocks.LSTMDecoderModule(
+            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
+            dropout=self.config['dropout'], 
+            custom_init=self.config['lstm_init']
+        )
+        self.pattern_decoder = blocks.LSTMDecoderModule(
+            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
+            dropout=self.config['dropout'],
+            custom_init=self.config['lstm_init']
+        )
+        self.config.update(
+            feature_extractor=self.feature_extractor.__class__.__name__, 
+            decoder=self.panel_decoder.__class__.__name__
+            )
+
+    def forward(self, positions_batch):
+        self.device = positions_batch.device
+        batch_size = positions_batch.size(0)
+
+        # Extract info from geometry 
+        pattern_encoding = self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
+
+        # Decode 
+        panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
+
+        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+        flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
+
+        # back to patterns and panels
+        prediction = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        
+        return prediction
+
+    def loss(self, features, ground_truth):
+        """Evalute loss when predicting patterns"""
+        preds = self(features)
+
+        # Base extraction loss 
+        pattern_loss = self.regression_loss(preds, ground_truth)   # features are the ground truth in this case -> reconstruction loss
+
+        # Loop loss per panel
+        loop_loss = self.loop_loss(preds, ground_truth)
+
+        return pattern_loss + self.config['loop_loss_weight'] * loop_loss
+
+
+
 if __name__ == "__main__":
 
     torch.manual_seed(125)

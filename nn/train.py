@@ -17,10 +17,6 @@ def get_values_from_args():
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=3)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=7)
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=4)
-    parser.add_argument('--r1', '-r1', help='size of first PN++ layer radius', type=float, default=3)
-    parser.add_argument('--r2', '-r2', help='size of second PN++ layer radius', type=float, default=4)
-    parser.add_argument('--r3', '-r3', help='size of third PN++ layer radius', type=float, default=5)
-    parser.add_argument('--r4', '-r4', help='size of forth PN++ layer radius', type=float, default=7)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
 
     args = parser.parse_args()
@@ -31,10 +27,6 @@ def get_values_from_args():
     }
 
     nn_config = {
-        'r1': args.r1,
-        'r2': args.r2,
-        'r3': args.r3,
-        'r4': args.r4,
         'panel_encoding_size': args.panel_encoding_multiplier * 10,
         'panel_n_layers': args.panel_n_layers,
         'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
@@ -82,8 +74,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='Pattern3D-simple-vis', 
+        project_name='Garments-Reconstruction', 
+        run_name='Pattern3D-edge-init', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -94,7 +86,7 @@ if __name__ == "__main__":
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
     
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPattern3DPoint(
+    model = nets.GarmentPattern3DEdge(
         dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
         in_nn_config
     )

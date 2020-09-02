@@ -44,7 +44,6 @@ def _MLP(channels, batch_norm=True):
         for i in range(1, len(channels))
     ])
 
-
 class PointNetPlusPlus(nn.Module):
     """
         Module for extracting latent representation of 3D geometry.
@@ -84,6 +83,56 @@ class PointNetPlusPlus(nn.Module):
         out = self.lin(out)
         return out
 
+# ------------- EdgeConv ----------
+# https://github.com/AnTao97/dgcnn.pytorch/blob/master/model.py
+
+class EdgeConvFeatures(nn.Module):
+    """Extracting feature vector from 3D point cloud based on Edge convolutions from Paper “Dynamic Graph CNN for Learning on Point Clouds”"""
+    def __init__(self, out_size, config={}):
+        super().__init__()
+
+        self.config = {'conv_depth': 3}  # defaults for this net
+        self.config.update(config)  # from input
+
+        # DynamicEdgeConv!!!!!!
+        self.conv1 = geometric.DynamicEdgeConv(_MLP([2 * 3, 64, 64, 32]), k=10, aggr='max')
+        self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
+        self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
+
+        self.lin1 = nn.Linear(32, 512)
+        self.lin2 = nn.Linear(32, out_size)
+
+    def forward(self, positions):
+        batch_size = positions.size(0)
+        n_vertices = positions.size(1)
+        # flatten the batch for torch-geometric batch format
+        pos_flat = positions.view(-1, positions.size(-1))
+        batch = torch.cat([
+            torch.full((elem.size(0),), fill_value=i, device=positions.device, dtype=torch.long) for i, elem in enumerate(positions)
+        ])
+
+        # Vertex features
+        out = self.conv1(pos_flat, batch)
+        # print(out.shape)
+        out = self.conv2(out, batch)
+        # print(out.shape)
+        out = self.conv3(out, batch)  # n_points x length_features
+
+        # print(out.shape)
+
+        # reshape back into batch 
+        out = out.contiguous().view(batch_size, n_vertices, -1)
+        # print(out.shape)
+
+        # aggregate features from vertices
+        out = out.max(dim=-2, keepdim=False)[0]  # TODO Make sure to aggregate on the feature dimention
+
+        # print(out.shape)
+
+        # post-processing (no non-linearity!)
+        out = self.lin2(out)
+
+        return out
 
 # ------------- Sequence modules -----------
 def _init_tenzor(*shape, device='cpu', init_type=''):
@@ -181,3 +230,18 @@ class LSTMDecoderModule(nn.Module):
 
         return out
 
+
+
+# Quick tests
+if __name__ == "__main__":
+
+    torch.manual_seed(125)
+
+    positions = torch.arange(1, 37, dtype=torch.float)
+    features_batch = positions.view(2, -1, 3)  # note for the same batch size
+
+    print('In batch shape: {}'.format(features_batch.shape))
+
+    net = EdgeConvFeatures(5)
+
+    print(net(features_batch))
