@@ -86,7 +86,7 @@ if __name__ == "__main__":
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
     
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPattern3DEdge(
+    model = nets.GarmentPattern3D(
         dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
         in_nn_config
     )

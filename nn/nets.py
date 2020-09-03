@@ -240,89 +240,10 @@ class GarmentPatternAE(BaseModule):
         return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
 
 
-class GarmentPattern3DPoint(BaseModule):
-    """
-        Predicting 2D pattern from 3D garment geometry -- getting closer to solving reconstruction task
-        Based on findings from GarmentPatternAE & GarmentParamsPoint 
-    """
-    def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, data_norm={}, config={}):
-        super().__init__()
-
-        # defaults for this net
-        self.config.update({
-            'r1': 3, 'r2': 4, 'r3': 5, 'r4': 7,  # PointNet++
-            'panel_encoding_size': 70, 
-            'panel_n_layers': 4, 
-            'pattern_encoding_size': 130, 
-            'pattern_n_layers': 3, 
-            'loop_loss_weight': 0.1, 
-            'dropout': 0,
-            'loss': 'MSE with loop',
-            'lstm_init': 'kaiming_normal_'
-        })
-        # update with input settings
-        self.config.update(config) 
-
-        # output props
-        self.max_panel_len = max_panel_len
-        self.max_pattern_size = max_pattern_size
-
-        # extra loss object
-        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
-
-        # Feature extractor definition
-        self.feature_extractor = blocks.PointNetPlusPlus(
-            self.config['pattern_encoding_size'], 
-            {'r1': self.config['r1'], 'r2': self.config['r2'], 'r3': self.config['r3'], 'r4': self.config['r4']})
-
-        # Decode into pattern definition
-        self.panel_decoder = blocks.LSTMDecoderModule(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
-            dropout=self.config['dropout'], 
-            custom_init=self.config['lstm_init']
-        )
-        self.pattern_decoder = blocks.LSTMDecoderModule(
-            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-
-    def forward(self, positions_batch):
-        self.device = positions_batch.device
-        batch_size = positions_batch.size(0)
-
-        # Extract info from geometry 
-        pattern_encoding = self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
-
-        # Decode 
-        panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
-
-        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
-        flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
-
-        # back to patterns and panels
-        prediction = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        
-        return prediction
-
-    def loss(self, features, ground_truth):
-        """Evalute loss when predicting patterns"""
-        preds = self(features)
-
-        # Base extraction loss 
-        pattern_loss = self.regression_loss(preds, ground_truth)   # features are the ground truth in this case -> reconstruction loss
-
-        # Loop loss per panel
-        loop_loss = self.loop_loss(preds, ground_truth)
-
-        return pattern_loss + self.config['loop_loss_weight'] * loop_loss
-
-
-class GarmentPattern3DEdge(BaseModule):
+class GarmentPattern3D(BaseModule):
     """
         Predicting 2D pattern from 3D garment geometry 
-        Based on decoder from GarmentPatternAE & EdgeConvs from "Dynamic Graph CNN
-        for Learning on Point Clouds" <https://arxiv.org/abs/1801.07829> 
+        Constists of (interchangeable) feature extractor and pattern decoder from GarmentPatternAE
     """
     def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, data_norm={}, config={}):
         super().__init__()
@@ -349,6 +270,7 @@ class GarmentPattern3DEdge(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
+        # self.feature_extractor = blocks.PointNetPlusPlus(self.config['pattern_encoding_size'], self.config)  # pass cofiguration from upper layer
         self.feature_extractor = blocks.EdgeConvFeatures(self.config['pattern_encoding_size'])
 
         # Decode into pattern definition
@@ -362,6 +284,8 @@ class GarmentPattern3DEdge(BaseModule):
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
+
+        # Save for reference
         self.config.update(
             feature_extractor=self.feature_extractor.__class__.__name__, 
             decoder=self.panel_decoder.__class__.__name__
