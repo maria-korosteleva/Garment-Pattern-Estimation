@@ -255,7 +255,7 @@ class Trainer():
             wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
 
     def _save_checkpoint(self, model, epoch, save_name='checkpoint'):
-        """Save checkpoint to be used to resume training"""
+        """Save checkpoint that can be used to resume training"""
         self.experiment.save(
             {
             'epoch': epoch,
