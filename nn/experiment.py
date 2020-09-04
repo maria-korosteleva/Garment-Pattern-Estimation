@@ -144,7 +144,7 @@ class WandbRunWrappper(object):
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore checkpoint from the could')
         try:
-            art_path = self._load_artifact(self.artifactname(self.checkpoint_filetag, version=version))
+            art_path = self._load_artifact(self.artifactname('checkpoint', version=version))
             return torch.load(str(Path(art_path) / self.checkpoint_filename()))
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
@@ -162,6 +162,18 @@ class WandbRunWrappper(object):
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
     
+    def load_best_model(self, to_path=None):
+        """Load model parameters (model with best performance) file from the cloud if it exists"""
+        if not self.run_id:
+            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
+        try:
+            art_path = self._load_artifact(self.artifactname('best'), to_path=to_path)  # latest version to load last best -- default
+            print(Path(art_path) / self.checkpoint_filename())
+            return torch.load(str(Path(art_path) / self.checkpoint_filename()))
+
+        except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
+            raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
+    
     def save(self, state, save_name='checkpoint'):
         """Save given state dict as torch checkpoint to local run dir
             save_name parameter controls saving names (multiple could be used):
@@ -172,19 +184,23 @@ class WandbRunWrappper(object):
         if not self.initialized:
             raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
 
+        print('Saving model state artifact {}'.format(save_name))
+
         # Using artifacts to store important files for this run
-        if 'checkpoint' or 'best' in save_name:
-            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='checkpoint')
+        if 'checkpoint' in save_name or 'best' in save_name:
             filename = self.checkpoint_filename()
+            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type=save_name)
+            
         elif save_name == 'final':
-            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='result')
+            print('SAVING FINAL MODEL')
+            artifact = wb.Artifact(self.artifactname(self.final_filetag, with_version=False), type='result')
             filename = self.final_filename()
         else:
             artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='other')
             filename = save_name
 
-        torch.save(state, self.local_path() / filename)
-        artifact.add_file(str(self.local_path() / filename))
+        torch.save(state, self.local_path() / '..' / filename)
+        artifact.add_file(str(self.local_path() / '..' / filename))
         wb.run.log_artifact(artifact)
 
     # ------- utils -------

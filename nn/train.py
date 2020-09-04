@@ -74,8 +74,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Pattern3D-edge-init', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Pattern3D-edge-nonlin', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -96,6 +96,9 @@ if __name__ == "__main__":
     trainer.fit(model)  # Magic happens here
 
     # --------------- Final evaluation --------------
+    # On the best-performing model
+    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+
     dataset_wrapper = trainer.datawraper
     # save predictions
     prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
@@ -103,7 +106,7 @@ if __name__ == "__main__":
 
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
     print ('Test metrics: {}'.format(final_metrics))
-    experiment.add_statistic('test', final_metrics)
+    experiment.add_statistic('test_on_best', final_metrics)
 
     # reflect predictions info in expetiment
     experiment.add_statistic('predictions_folder', prediction_path.name)
