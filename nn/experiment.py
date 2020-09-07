@@ -50,6 +50,7 @@ class WandbRunWrappper(object):
         # wb.run.use_artifact(self.artifact)
 
         self.initialized = True
+        self.checkpoint_counter = 0
 
     def stop(self):
         """Stop wandb for current run. All logging finishes & files get uploaded"""
@@ -110,9 +111,10 @@ class WandbRunWrappper(object):
         return run.state == 'finished'
 
     # ---- file info -----
-    def checkpoint_filename(self):
+    def checkpoint_filename(self, check_id=None):
         """Produce filename for the checkpoint of given epoch"""
-        return '{}.pth'.format(self.checkpoint_filetag)
+        check_id_str = '_{}'.format(check_id) if check_id is not None else ''
+        return '{}{}.pth'.format(self.checkpoint_filetag, check_id_str)
 
     def artifactname(self, tag, with_version=True, version=None):
         """Produce name for wandb artifact for current run with fiven tag"""
@@ -138,6 +140,13 @@ class WandbRunWrappper(object):
         return Path(wb.run.dir)
         # raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
 
+    def local_artifact_path(self):
+        """create & maintain path to save files to-be-commited-as-artifacts"""
+        path = self.local_path() / '..' / 'artifacts' / self.run_id
+        if not path.exists():
+            path.mkdir(parents=True)
+        return path
+
     # ----- working with files -------
     def load_checkpoint_file(self, to_path=None, version=None):
         """Load checkpoint file for given epoch from the cloud"""
@@ -145,7 +154,9 @@ class WandbRunWrappper(object):
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore checkpoint from the could')
         try:
             art_path = self._load_artifact(self.artifactname('checkpoint', version=version))
-            return torch.load(str(Path(art_path) / self.checkpoint_filename()))
+            for file in art_path.iterdir():
+                return torch.load(file)
+                # only one file per checkpoint anyway
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
             print('WbRunWrapper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
@@ -168,8 +179,10 @@ class WandbRunWrappper(object):
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
         try:
             art_path = self._load_artifact(self.artifactname('best'), to_path=to_path)  # latest version to load last best -- default
-            print(Path(art_path) / self.checkpoint_filename())
-            return torch.load(str(Path(art_path) / self.checkpoint_filename()))
+            for file in art_path.iterdir():
+                print(file)
+                return torch.load(file)
+                # only one file per checkpoint anyway
 
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
@@ -188,8 +201,9 @@ class WandbRunWrappper(object):
 
         # Using artifacts to store important files for this run
         if 'checkpoint' in save_name or 'best' in save_name:
-            filename = self.checkpoint_filename()
+            filename = self.checkpoint_filename(self.checkpoint_counter)
             artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type=save_name)
+            self.checkpoint_counter += 1  # ensure all checkpoints have unique names
             
         elif save_name == 'final':
             print('SAVING FINAL MODEL')
@@ -199,8 +213,8 @@ class WandbRunWrappper(object):
             artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='other')
             filename = save_name
 
-        torch.save(state, self.local_path() / '..' / filename)
-        artifact.add_file(str(self.local_path() / '..' / filename))
+        torch.save(state, self.local_artifact_path() / filename)
+        artifact.add_file(str(self.local_artifact_path() / filename))
         wb.run.log_artifact(artifact)
 
     # ------- utils -------
@@ -213,7 +227,7 @@ class WandbRunWrappper(object):
         filepath = artifact.download(str(to_path) if to_path else None)
         print('Experiment::Artifact saved to: {}'.format(filepath))
 
-        return filepath
+        return Path(filepath)
 
     def _run_object(self):
         """ Shortcut for getting reference to wandb api run object. 
