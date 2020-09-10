@@ -1,6 +1,7 @@
 """Evaluate a model on the data"""
 
 from pathlib import Path
+import torch
 
 # My modules
 import customconfig, data, metrics, nets
@@ -11,9 +12,9 @@ from experiment import WandbRunWrappper
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='Pattern3D-edge-nonlin', 
-    run_id='veeany7a')  # finished experiment
+    project_name='Test-Garments-Reconstruction', 
+    run_name='Pattern3D-data-transforms', 
+    run_id='cgkk8eb7')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -35,6 +36,7 @@ dataset = data.Garment3DPatternDataset(
     gt_caching=True, feature_caching=True)
 
 print(dataset.config)
+print('Batch: {}, Split: {}'.format(batch_size, split))
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
@@ -48,16 +50,21 @@ model = nets.GarmentPattern3D(
     experiment.NN_config()
 )
 
+# model_state = torch.load('./wandb/artifacts/2lunqzha/checkpoint_227.pth')['model_state_dict']  # debug
+# model.load_state_dict(model_state)
 
 # model.load_state_dict(experiment.load_final_model())
 # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
 model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
 # ------- Evaluate --------
-valid_loss = metrics.eval_metrics(model, datawrapper, 'validation', loop_loss=False)
+valid_loss = metrics.eval_metrics(model, datawrapper, 'validation', loop_loss=True)
 print ('Validation metrics: {}'.format(valid_loss))
-test_metrics = metrics.eval_metrics(model, datawrapper, 'test', loop_loss=False)
+test_metrics = metrics.eval_metrics(model, datawrapper, 'test', loop_loss=True)
 print ('Test metrics: {}'.format(test_metrics))
+
+# print(dataset[276]['features'])  # first element of validation set
+
 experiment.add_statistic('valid_metrics', valid_loss)
 experiment.add_statistic('test_metrics', test_metrics)
 

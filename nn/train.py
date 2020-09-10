@@ -12,7 +12,7 @@ def get_values_from_args():
     parser = argparse.ArgumentParser()
     
     # Default values from run 9j12qp24, best of sweep y1mmngej
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=19)
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=4)  # 19
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=13)
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=3)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=7)
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Pattern3D-edge', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Pattern3D-data-transforms', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -84,7 +84,7 @@ if __name__ == "__main__":
                                             data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
-    
+
     trainer.init_randomizer(net_seed)
     model = nets.GarmentPattern3D(
         dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
@@ -100,14 +100,16 @@ if __name__ == "__main__":
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
     dataset_wrapper = trainer.datawraper
-    # save predictions
-    prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-    print('Predictions saved to {}'.format(prediction_path))
 
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
     print ('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
+    # print(dataset[276]['features'])  # first element of validation set
+
+    # save predictions
+    prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+    print('Predictions saved to {}'.format(prediction_path))
     # reflect predictions info in expetiment
     experiment.add_statistic('predictions_folder', prediction_path.name)
     experiment.add_artifact(prediction_path, dataset_wrapper.dataset.name, 'result')

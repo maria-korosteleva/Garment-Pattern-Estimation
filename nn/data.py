@@ -213,7 +213,6 @@ class BaseDataset(Dataset):
         _, dirs, _ = next(os.walk(self.root_path))
         self.datapoints_names = dirs
         self._clean_datapoint_list()
-        self.cached = {}
         self.gt_cached = {}
         self.gt_caching = gt_caching
         if gt_caching:
@@ -226,12 +225,15 @@ class BaseDataset(Dataset):
         # Use default tensor transform + the ones from input
         self.transforms = [SampleToTensor()] + transforms
 
-        # in\out sizes
-        self._estimate_data_shape()
-
         # statistics already there --> need to apply it
         if 'standardize' in self.config:
             self.standardize()
+
+        # DEBUG -- access all the datapoints to pre-populate the cache of the data
+        # self._renew_cache()
+
+        # in\out sizes
+        self._estimate_data_shape()
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -279,8 +281,9 @@ class BaseDataset(Dataset):
         for transform in self.transforms:
             sample = transform(sample)
 
-        # if datapoint_name == 'tee_0BEJ3JZP2O':
-        #    print(sample)
+        # if datapoint_name == 'tee_AME9SSCR7X':
+        #     print(self.transforms)
+        #     print('After transform: {}'.format(sample['features']))
 
         return sample
 
@@ -294,6 +297,15 @@ class BaseDataset(Dataset):
 
         self.config['name'] = self.name
         self._update_on_config_change()
+
+    def _renew_cache(self):
+        """Flush the cache and re-fill it with updated information if any kind of caching is enabled"""
+        self.gt_cached = {}
+        self.feature_cached = {}
+        if self.feature_caching or self.gt_caching:
+            for i in range(len(self)):
+                self[i]
+            print('Data cached!')
 
     # -------- Data-specific functions --------
     def save_prediction_batch(self, predictions, datanames, save_to):
@@ -583,9 +595,8 @@ class GarmentPanelDataset(GarmentBaseDataset):
             raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
 
         # clean-up tranform list to avoid duplicates
-        for transform in self.transforms:
-            if isinstance(transform, FeatureStandartizatoin):
-                self.transforms.remove(transform)
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, FeatureStandartizatoin)]
+
         self.transforms.append(FeatureStandartizatoin(stats['mean'], stats['std']))
 
     def _get_features(self, datapoint_name, folder_elements):
@@ -686,13 +697,14 @@ class Garment3DPatternDataset(GarmentBaseDataset):
 
         # print(self.config['standardize'])
 
+        print('Transforms before update: {}'.format(self.transforms))
         # clean-up tranform list to avoid duplicates
-        for transform in self.transforms:
-            if isinstance(transform, GTtandartizatoin) or isinstance(transform, FeatureStandartizatoin):
-                self.transforms.remove(transform)
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartizatoin) and not isinstance(transform, FeatureStandartizatoin)]
 
         self.transforms.append(GTtandartizatoin(stats['mean'], stats['std']))
         self.transforms.append(FeatureStandartizatoin(stats['f_mean'], stats['f_std']))
+
+        print('Transforms after update: {}'.format(self.transforms))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
