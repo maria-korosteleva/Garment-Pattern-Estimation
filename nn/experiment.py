@@ -197,16 +197,14 @@ class WandbRunWrappper(object):
         if not self.initialized:
             raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
 
-        print('Saving model state artifact {}'.format(save_name))
+        print('Experiment::Saving model state artifact {}'.format(save_name))
 
         # Using artifacts to store important files for this run
         if 'checkpoint' in save_name or 'best' in save_name:
             filename = self.checkpoint_filename(self.checkpoint_counter)
             artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type=save_name)
-            self.checkpoint_counter += 1  # ensure all checkpoints have unique names
-            
+            self.checkpoint_counter += 1  # ensure all checkpoints have unique names 
         elif save_name == 'final':
-            print('SAVING FINAL MODEL')
             artifact = wb.Artifact(self.artifactname(self.final_filetag, with_version=False), type='result')
             filename = self.final_filename()
         else:
