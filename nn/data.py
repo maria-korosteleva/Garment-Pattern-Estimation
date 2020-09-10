@@ -695,16 +695,11 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         else:  # nothing is provided
             raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
 
-        # print(self.config['standardize'])
-
-        print('Transforms before update: {}'.format(self.transforms))
         # clean-up tranform list to avoid duplicates
         self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
 
         self.transforms.append(GTtandartization(stats['mean'], stats['std']))
         self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
-
-        print('Transforms after update: {}'.format(self.transforms))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
