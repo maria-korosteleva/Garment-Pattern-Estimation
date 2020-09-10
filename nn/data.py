@@ -171,7 +171,7 @@ class SampleToTensor(object):
             'name': sample['name']
         }
 
-class FeatureStandartizatoin():
+class FeatureStandartization():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
         self.mean = torch.Tensor(mean)
@@ -184,7 +184,7 @@ class FeatureStandartizatoin():
             'name': sample['name']
         }
 
-class GTtandartizatoin():
+class GTtandartization():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
         self.mean = torch.Tensor(mean)
@@ -595,9 +595,9 @@ class GarmentPanelDataset(GarmentBaseDataset):
             raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
 
         # clean-up tranform list to avoid duplicates
-        self.transforms = [transform for transform in self.transforms if not isinstance(transform, FeatureStandartizatoin)]
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, FeatureStandartization)]
 
-        self.transforms.append(FeatureStandartizatoin(stats['mean'], stats['std']))
+        self.transforms.append(FeatureStandartization(stats['mean'], stats['std']))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -699,10 +699,10 @@ class Garment3DPatternDataset(GarmentBaseDataset):
 
         print('Transforms before update: {}'.format(self.transforms))
         # clean-up tranform list to avoid duplicates
-        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartizatoin) and not isinstance(transform, FeatureStandartizatoin)]
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
 
-        self.transforms.append(GTtandartizatoin(stats['mean'], stats['std']))
-        self.transforms.append(FeatureStandartizatoin(stats['f_mean'], stats['f_std']))
+        self.transforms.append(GTtandartization(stats['mean'], stats['std']))
+        self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
 
         print('Transforms after update: {}'.format(self.transforms))
 
