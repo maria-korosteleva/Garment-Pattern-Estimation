@@ -257,7 +257,9 @@ class GarmentPattern3D(BaseModule):
             'loop_loss_weight': 0.1, 
             'dropout': 0,
             'loss': 'MSE with loop',
-            'lstm_init': 'kaiming_normal_'
+            'lstm_init': 'kaiming_normal_', 
+            'feature_extractor': 'EdgeConvFeatures',
+            'decoder': 'LSTMDecoderModule'
         })
         # update with input settings
         self.config.update(config) 
@@ -270,26 +272,28 @@ class GarmentPattern3D(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
-        # self.feature_extractor = blocks.PointNetPlusPlus(self.config['pattern_encoding_size'], self.config)  # pass cofiguration from upper layer
-        self.feature_extractor = blocks.EdgeConvFeatures(self.config['pattern_encoding_size'])
+        if self.config['feature_extractor'] == 'PointNetPlusPlus':
+            self.feature_extractor = blocks.PointNetPlusPlus(self.config['pattern_encoding_size'], self.config)  # pass cofiguration from upper layer
+        elif self.config['feature_extractor'] == 'EdgeConvFeatures':
+            self.feature_extractor = blocks.EdgeConvFeatures(self.config['pattern_encoding_size'])
+        else: 
+            raise ValueError('GarmentPattern3D::Error::Unsupported feature extractor {} requested in config'.format(self.config['feature_extractor']))
+
 
         # Decode into pattern definition
-        self.panel_decoder = blocks.LSTMDecoderModule(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
-            dropout=self.config['dropout'], 
-            custom_init=self.config['lstm_init']
-        )
-        self.pattern_decoder = blocks.LSTMDecoderModule(
-            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-
-        # Save for reference
-        self.config.update(
-            feature_extractor=self.feature_extractor.__class__.__name__, 
-            decoder=self.panel_decoder.__class__.__name__
+        if self.config['decoder'] == 'LSTMDecoderModule':
+            self.panel_decoder = blocks.LSTMDecoderModule(
+                self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
+                dropout=self.config['dropout'], 
+                custom_init=self.config['lstm_init']
             )
+            self.pattern_decoder = blocks.LSTMDecoderModule(
+                self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
+                dropout=self.config['dropout'],
+                custom_init=self.config['lstm_init']
+            )
+        else:
+            raise ValueError('GarmentPattern3D::Error::Unsupported decoder {} requested in config'.format(self.config['decoder']))
 
     def forward(self, positions_batch):
         self.device = positions_batch.device
