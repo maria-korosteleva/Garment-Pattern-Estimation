@@ -99,8 +99,7 @@ class EdgeConvFeatures(nn.Module):
         self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
         self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
 
-        # self.lin1 = nn.Linear(32, 512)
-        self.lin2 = nn.Linear(32, out_size)
+        self.lin = nn.Linear(32, out_size)
 
     def forward(self, positions):
         batch_size = positions.size(0)
@@ -113,26 +112,16 @@ class EdgeConvFeatures(nn.Module):
 
         # Vertex features
         out = self.conv1(pos_flat, batch)
-        # print(out.shape)
         out = self.conv2(out, batch)
-        # print(out.shape)
         out = self.conv3(out, batch)  # n_points x length_features
-
-        # print(out.shape)
-
         # reshape back into batch 
         out = out.contiguous().view(batch_size, n_vertices, -1)
-        # print(out.shape)
 
         # aggregate features from vertices
         out = out.max(dim=-2, keepdim=False)[0]
 
-        # print(out.shape)
-
-        # post-processing (tmp added non-linearity!)
-        # out = F.relu(self.lin1(out))
-        # out = F.dropout(out, p=0.5, training=self.training)
-        out = self.lin2(out)
+        # post-processing
+        out = self.lin(out)
 
         return out
 
