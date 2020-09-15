@@ -222,17 +222,71 @@ class LSTMDecoderModule(nn.Module):
         return out
 
 
+class LSTMDoubleReverseDecoderModule(nn.Module):
+    """A wrapper for LSTM targeting decoding task that decodes the sequence in the reverse order, 
+    and then processes it in the forward order to refine the reconstuction"""
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
+        super().__init__()
+        self.custom_init = custom_init
+        self.n_layers = n_layers
+        self.encoding_size = encoding_size
+        self.hidden_size = hidden_size
+        self.out_elem_size = out_elem_size
+
+        # revrese & forward models share the architecture but not the weights
+        self.lstm_reverse = nn.LSTM(encoding_size, hidden_size, n_layers, 
+                                    dropout=dropout, batch_first=True)
+        self.lstm_forward = nn.LSTM(hidden_size, hidden_size, n_layers, 
+                                    dropout=dropout, batch_first=True)
+
+        # post-process to match the desired outut shape
+        self.lin = nn.Linear(hidden_size, out_elem_size)
+
+        # initialize
+        _init_weights(self.lstm_reverse, init_type=custom_init)
+        _init_weights(self.lstm_forward, init_type=custom_init)
+
+    def forward(self, batch_enc, out_len):
+        """out_len specifies the length of the output sequence to produce"""
+        device = batch_enc.device
+        batch_size = batch_enc.size(0)
+        
+        # propagate encoding for needed seq_len
+        dec_input = batch_enc.unsqueeze(1).repeat(1, out_len, 1)  # along sequence dimention
+
+        # decode reversed sequence
+        hidden_init = _init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device, init_type=self.custom_init)
+        cell_init = _init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device, init_type=self.custom_init)
+        out, state = self.lstm_reverse(dec_input, (hidden_init, cell_init))
+        
+        # decode forward sequence
+        out = torch.flip(out, [1])
+        out, _ = self.lstm_forward(out, state)  # pass the state from previous module for additional info
+
+        # back to requested format
+        # reshaping the outputs such that it can be fit into the fully connected layer
+        out = out.contiguous().view(-1, self.hidden_size)
+        out = self.lin(out)
+        # back to sequence
+        out = out.contiguous().view(batch_size, out_len, -1)
+
+        return out
+
+
+
 
 # Quick tests
 if __name__ == "__main__":
 
     torch.manual_seed(125)
 
-    positions = torch.arange(1, 37, dtype=torch.float)
-    features_batch = positions.view(2, -1, 3)  # note for the same batch size
+    positions = torch.arange(1, 7, dtype=torch.float)  # 37
+    # features_batch = positions.view(2, -1, 3)  # note for the same batch size
+    features_batch = positions.view(-1, 3) 
 
     print('In batch shape: {}'.format(features_batch.shape))
 
-    net = EdgeConvFeatures(5)
+    # net = EdgeConvFeatures(5)
+    net = LSTMDoubleReverseDecoderModule(3, 4, 4, 2)
 
-    print(net(features_batch))
+    print(net(features_batch, 4))

@@ -110,7 +110,8 @@ class GarmentPanelsAE(BaseModule):
             'n_layers': 3, 
             'loop_loss_weight': 0.1, 
             'dropout': 0.1,
-            'lstm_init': 'kaiming_normal_'
+            'lstm_init': 'kaiming_normal_',
+            'decoder': 'LSTMDoubleReverseDecoderModule'
         })
         # update with input settings
         self.config.update(config) 
@@ -127,11 +128,21 @@ class GarmentPanelsAE(BaseModule):
         )
 
         # decode
-        self.seq_decoder = blocks.LSTMDecoderModule(
-            self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
+        if self.config['decoder'] == 'LSTMDecoderModule':
+            self.seq_decoder = blocks.LSTMDecoderModule(
+                self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
+                dropout=self.config['dropout'],
+                custom_init=self.config['lstm_init']
+            )
+        elif self.config['decoder'] == 'LSTMDoubleReverseDecoderModule':
+            self.seq_decoder = blocks.LSTMDoubleReverseDecoderModule(
+                self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
+                dropout=self.config['dropout'],
+                custom_init=self.config['lstm_init']
+            )
+        else:
+            raise ValueError('GarmentPattern3D::Error::Unsupported decoder {} requested in config'.format(self.config['decoder']))
+        
 
     def forward(self, x):
 
@@ -336,7 +347,7 @@ if __name__ == "__main__":
     print(dataset_gt)
     gt_batch = a.view(2, -1, 2, 3)  # ~ 2 examples in batch
     print(gt_batch)
-    net = GarmentPattern3DPoint(gt_batch.shape[3], gt_batch.shape[2], gt_batch.shape[1], {'mean': dataset_gt.mean(), 'std': dataset_gt.std()})
+    net = GarmentPattern3D(gt_batch.shape[3], gt_batch.shape[2], gt_batch.shape[1], {'mean': dataset_gt.mean(), 'std': dataset_gt.std()})
 
     positions = torch.arange(1, 37, dtype=torch.float)
     features_batch = positions.view(2, -1, 3)  # note for the same batch size

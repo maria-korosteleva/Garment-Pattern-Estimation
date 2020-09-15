@@ -313,7 +313,7 @@ class BaseDataset(Dataset):
         pass
 
     def standardize(self, training=None):
-        """Use element normalization\standardization based on stats from the training subset.
+        """Use element normalization/standardization based on stats from the training subset.
             Dataset is the object most aware of the datapoint structure hence it's the place to calculate & use the normalization.
             Uses either of two: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
@@ -569,8 +569,10 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * When saving predictions, the predicted panel is always saved as panel with name provided in config 
 
     """
-    def __init__(self, root_dir, start_config={'panel_name': 'front'}, gt_caching=False, feature_caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+        config = {'panel_name': 'front'}
+        config.update(start_config)
+        super().__init__(root_dir, config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['element_size'] = self[0]['features'].shape[1]
     
     def standardize(self, training=None):
