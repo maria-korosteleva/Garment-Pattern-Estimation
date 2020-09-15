@@ -1,88 +1,107 @@
 """Predicting a 2D pattern for the given 3D models of garments -- not necessarily from the garment datasets of this project"""
 
-from pathlib import Path
-import torch
+import argparse
+from datetime import datetime
 import igl
 import numpy as np
+from pathlib import Path
+import shutil
+import torch
 
 # My modules
-import customconfig, data, metrics, nets
-from trainer import Trainer
+import customconfig, nets
 from experiment import WandbRunWrappper
 from pattern.wrappers import VisPattern
+from data import GarmentBaseDataset
+
+def get_meshes_from_args():
+    """command line arguments to get a path to geometry file with a garment or a folder with OBJ files"""
+    # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
+    system_info = customconfig.Properties('./system.json')
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--file', '-f', help='Path to a garment geometry file', type=str, 
+        default=None) 
+    parser.add_argument(
+        '--directory', '-dir', help='Path to a directory with geometry files to evaluate on', type=str, 
+        default=None)
+    parser.add_argument(
+        '--save_tag', '-s', help='Tag the output directory name with this str', type=str, 
+        default='per_mesh_pred')
+
+    args = parser.parse_args()
+    print(args)
+
+    # turn arguments into the list of obj files
+    paths_list = []
+    if args.file is None and args.directory is None: 
+        # default value if no arguments provided
+        paths_list.append(Path('D:/Data/my garments/data_1000_tee_200527-14-50-42_regen_200612-16-56-43/tee_1NOVZ1DB7L/tee_1NOVZ1DB7L_sim.obj'))
+    else:
+        if args.file is not None:
+            paths_list.append(Path(args.file))
+        if args.directory is not None:
+            directory = Path(args.directory)
+            for elem in directory.glob('*'):
+                if elem.is_file() and '.obj' in elem:
+                    paths_list.append(elem)
+
+    saving_path = Path(system_info['output']) / (args.save_tag + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+    saving_path.mkdir(parents=True)
+
+    return paths_list, saving_path
 
 
-# --------------- Experiment to evaluate on ---------
-system_info = customconfig.Properties('./system.json')
-experiment = WandbRunWrappper(system_info['wandb_username'],
-    project_name='Test-Garments-Reconstruction', 
-    run_name='Pattern3D-data-transforms', 
-    run_id='cgkk8eb7')  # finished experiment
+if __name__ == "__main__":
+    
+    system_info = customconfig.Properties('./system.json')
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    mesh_paths, save_to = get_meshes_from_args()
 
-if not experiment.is_finished():
-    print('Warning::Evaluating unfinished experiment')
+    # --------------- Experiment to evaluate on ---------
+    experiment = WandbRunWrappper(system_info['wandb_username'],
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Pattern3D-data-transforms', 
+        run_id='cgkk8eb7') 
+    if not experiment.is_finished():
+        print('Warning::Evaluating unfinished experiment')
 
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    # data stats from training 
+    _, _, data_config = experiment.data_info()  # need to get data stats
 
-# -------- data stats from training -------
-_, _, data_config = experiment.data_info()  # need to get data stats
+    # ----- Model architecture -----
+    # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
+    model = nets.GarmentPattern3D(
+        data_config['element_size'], data_config['panel_len'], data_config['ground_truth_size'], data_config['standardize'],
+        experiment.NN_config()
+    )
+    # model.load_state_dict(experiment.load_final_model())
+    # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
+    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    model = model.to(device=device)
 
-# ----- Model architecture -----
-# model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
-model = nets.GarmentPattern3D(
-    data_config['element_size'], data_config['panel_len'], data_config['ground_truth_size'], data_config['standardize'],
-    experiment.NN_config()
-)
-# model.load_state_dict(experiment.load_final_model())
-# model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
-model.load_state_dict(experiment.load_best_model()['model_state_dict'])
-model = model.to(device=device)
+    # ------ prepare input data & construct batch -------
+    points_list = []
+    for mesh in mesh_paths:
+        verts, faces = igl.read_triangle_mesh(str(mesh))
+        points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
+        if 'standardize' in data_config:
+            points = (points - data_config['standardize']['f_mean']) / data_config['standardize']['f_std']
+        points_list.append(torch.Tensor(points))
 
-# ------ prepare input data -------
-# TODO get from paramters
-# TODO allow to specify folder
-mesh_path = Path('D:/Data/my garments/data_1000_tee_200527-14-50-42_regen_200612-16-56-43/tee_1NOVZ1DB7L/tee_1NOVZ1DB7L_sim.obj')
-verts, faces = igl.read_triangle_mesh(str(mesh_path))
+    # -------- Predict ---------
+    with torch.no_grad():
+        points_batch = torch.stack(points_list).to(device)
+        preds = model(points_batch).cpu().numpy()
 
-# sample 
-# TODO remove duplicate code
-barycentric_samples, face_ids = igl.random_points_on_mesh(data_config['mesh_samples'], verts, faces)
-face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
+    # ---- save ----
+    for pred, mesh in zip(preds, mesh_paths):
+        if 'standardize' in data_config:
+            pred = pred * data_config['standardize']['std'] + data_config['standardize']['mean']
 
-# convert to normal coordinates
-points = np.empty(barycentric_samples.shape)
-for i in range(len(face_ids)):
-    face = faces[face_ids[i]]
-    barycentric_coords = barycentric_samples[i]
-    face_verts = verts[face]
-    points[i] = np.dot(barycentric_coords, face_verts)
-
-# standardize
-if 'standardize' in data_config:
-    points = (points - data_config['standardize']['f_mean']) / data_config['standardize']['f_std']
-
-# torch batch
-points = torch.Tensor(points)
-points = points.unsqueeze(0).to(device)
-
-
-# -------- Predict ---------
-with torch.no_grad():
-    preds = model(points).cpu().numpy()
-
-# ---- save ----
-for pred in preds:
-    print(preds)
-    if 'standardize' in data_config:
-        pred = pred * data_config['standardize']['std'] + data_config['standardize']['mean']
-
-    pattern = VisPattern(view_ids=False)
-    pattern.name = mesh_path.stem
-
-    try: 
+        pattern = VisPattern(view_ids=False)
+        pattern.name = VisPattern.name_from_path(mesh)
         pattern.pattern_from_tensor(pred, padded=True)   
-    except RuntimeError as e:
-        print('Garment3DPatternDataset::Warning::{}: {}'.format(mesh_path.stem, e))
-        pass
 
-    pattern.serialize('./wandb', tag='pred_')
+        log_dir = pattern.serialize(save_to)
+        shutil.copy2(str(mesh), str(log_dir))

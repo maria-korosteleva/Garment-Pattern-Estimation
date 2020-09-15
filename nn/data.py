@@ -416,19 +416,29 @@ class GarmentBaseDataset(BaseDataset):
 
     # ------------- Datapoints Utils --------------
     def _sample_points(self, datapoint_name, folder_elements):
-        """Make a sample from the 3d surface of a given datapoint"""
+        """Make a sample from the 3d surface from a given datapoint files"""
         obj_list = [file for file in folder_elements if 'sim.obj' in file]
         if not obj_list:
             raise RuntimeError('Dataset:Error: geometry file *sim.obj not found for {}'.format(datapoint_name))
         
         verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
+        points = GarmentBaseDataset.sample_mesh_points(self.config['mesh_samples'], verts, faces)
 
-        num_samples = self.config['mesh_samples']
+        # Debug
+        # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
+        #     meshplot.offline()
+        #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
+        return points
 
-        barycentric_samples, face_ids = igl.random_points_on_mesh(num_samples, verts, faces)
+    @staticmethod
+    def sample_mesh_points(num_points, verts, faces):
+        """A routine to sample requested number of points from a given mesh
+            Returns points in world coordinates"""
+
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
         face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
 
-        # convert to normal coordinates
+        # convert to world coordinates
         points = np.empty(barycentric_samples.shape)
         for i in range(len(face_ids)):
             face = faces[face_ids[i]]
@@ -436,10 +446,6 @@ class GarmentBaseDataset(BaseDataset):
             face_verts = verts[face]
             points[i] = np.dot(barycentric_coords, face_verts)
 
-        # Debug
-        # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
-        #     meshplot.offline()
-        #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
     def _read_pattern(self, datapoint_name, folder_elements):
