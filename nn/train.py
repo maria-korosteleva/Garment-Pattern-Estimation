@@ -75,24 +75,24 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='PanelAE-double-reverse', 
+        run_name='Pattern3D-reproduce', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)
-    dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
-    # dataset = data.Garment3DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, 
-    #                                         data_config, gt_caching=True, feature_caching=True)
+    split, data_config = get_data_config(in_data_config, old_stats=True)
+    # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment3DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, 
+                                            data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], dataset.config['standardize'], 
-        in_nn_config)
-    # model = nets.GarmentPattern3D(
-    #     dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
-    #     in_nn_config
-    # )
+    # model = nets.GarmentPatternAE(dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'], 
+    #     in_nn_config)
+    model = nets.GarmentPattern3D(
+        dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
+        in_nn_config
+    )
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
 
