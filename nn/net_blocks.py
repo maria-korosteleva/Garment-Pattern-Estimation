@@ -236,7 +236,7 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
         # revrese & forward models share the architecture but not the weights
         self.lstm_reverse = nn.LSTM(encoding_size, hidden_size, n_layers, 
                                     dropout=dropout, batch_first=True)
-        self.lstm_forward = nn.LSTM(hidden_size, hidden_size, n_layers, 
+        self.lstm_forward = nn.LSTM(hidden_size + encoding_size, hidden_size, n_layers, 
                                     dropout=dropout, batch_first=True)
 
         # post-process to match the desired outut shape
@@ -261,6 +261,7 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
         
         # decode forward sequence
         out = torch.flip(out, [1])
+        out = torch.cat([out, dec_input], -1)  # skip connection with original input
         out, _ = self.lstm_forward(out, state)  # pass the state from previous module for additional info
 
         # back to requested format
