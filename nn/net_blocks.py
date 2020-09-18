@@ -95,10 +95,10 @@ class EdgeConvFeatures(nn.Module):
 
         # DynamicEdgeConv!!!!!!
         self.conv1 = geometric.DynamicEdgeConv(_MLP([2 * 3, 64, 64, 32]), k=10, aggr='max')
-        self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
-        self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 32]), k=10, aggr='max')
+        self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 64]), k=10, aggr='max')
+        self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 64, 64, 64, 64]), k=10, aggr='max')
 
-        self.lin = nn.Linear(32, out_size)
+        self.lin = nn.Linear(64, out_size)
 
     def forward(self, positions):
         batch_size = positions.size(0)

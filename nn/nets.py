@@ -272,7 +272,7 @@ class GarmentPattern3D(BaseModule):
             'dropout': 0,
             'loss': 'MSE with loop',
             'lstm_init': 'kaiming_normal_', 
-            'feature_extractor': 'EdgeConvPoolingFeatures',
+            'feature_extractor': 'EdgeConvFeatures',
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule'
         })
