@@ -85,7 +85,6 @@ class PointNetPlusPlus(nn.Module):
 
 # ------------- EdgeConv ----------
 # https://github.com/AnTao97/dgcnn.pytorch/blob/master/model.py
-
 class EdgeConvFeatures(nn.Module):
     """Extracting feature vector from 3D point cloud based on Edge convolutions from Paper “Dynamic Graph CNN for Learning on Point Clouds”"""
     def __init__(self, out_size, config={}):
@@ -124,6 +123,88 @@ class EdgeConvFeatures(nn.Module):
         out = self.lin(out)
 
         return out
+
+
+class DynamicEdgePool(nn.Module):
+    """Pooling operator on PointCloud-like feature input that constructs the graph from imput point features
+        and performes EdgePool on it
+        https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.pool.EdgePooling
+        Uses the edge pooling operator from the “Towards Graph Pooling by Edge Contraction” and “Edge Contraction Pooling for Graph Neural Networks” papers.
+
+        * k -- number of nearest neighbors to use for building the graph == pooling power~!
+    """
+    def __init__(self, feature_size, k=10):
+        super().__init__()
+
+        self.k = 10
+        self.edge_pool = geometric.EdgePooling(feature_size)
+
+    def forward(self, node_features, batch):
+
+        # graph construction 
+        # follows the idea from here https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/nn/conv/edge_conv.html#DynamicEdgeConv
+        if isinstance(batch, torch.Tensor):  # or, ot could be a tuple already
+            b = (batch, batch)
+
+        edge_index = geometric.knn(node_features, node_features, self.k, b[0], b[1])
+
+        out, edge_index, new_batch, _ = self.edge_pool(node_features, edge_index, batch)
+
+        return out, new_batch
+
+
+class EdgeConvPoolingFeatures(nn.Module):
+    """Extracting feature vector from 3D point cloud based on Edge convolutions from Paper “Dynamic Graph CNN for Learning on Point Clouds”
+        with added pooling layers that coarsen the graphs and (should) give additional feature propagation"""
+    def __init__(self, out_size, config={}):
+        super().__init__()
+
+        self.config = {'conv_depth': 3}  # defaults for this net
+        self.config.update(n_features1 = 32, n_features2 = 128, n_features3 = 256, k=10)
+        self.config.update(config)  # from input
+
+        self.conv1 = geometric.DynamicEdgeConv(
+            _MLP([2 * 3, 64, 64, self.config['n_features1']]), 
+            k=self.config['k'], aggr='max')
+        self.pool1 = DynamicEdgePool(self.config['n_features1'], k=self.config['k'])
+        self.conv2 = geometric.DynamicEdgeConv(
+            _MLP([2 * self.config['n_features1'], self.config['n_features2'], self.config['n_features2'], self.config['n_features2']]), 
+            k=self.config['k'], aggr='max'
+            )
+        self.pool2 = DynamicEdgePool(self.config['n_features2'], k=self.config['k'])
+        self.conv3 = geometric.DynamicEdgeConv(
+            _MLP([2 * self.config['n_features2'], self.config['n_features3'], self.config['n_features3'], self.config['n_features3']]), 
+            k=self.config['k'], aggr='max')
+
+        self.lin = nn.Linear(self.config['n_features3'], out_size)
+
+    def forward(self, positions):
+        # batch_size = positions.size(0)
+        # n_vertices = positions.size(1)
+        # flatten the batch for torch-geometric batch format
+        pos_flat = positions.view(-1, positions.size(-1))
+        batch = torch.cat([
+            torch.full((elem.size(0),), fill_value=i, device=positions.device, dtype=torch.long) for i, elem in enumerate(positions)
+        ])
+
+        # Vertex features
+        out = self.conv1(pos_flat, batch)
+        out, batch = self.pool1(out, batch)
+
+        out = self.conv2(out, batch)
+        out, batch = self.pool2(out, batch)
+
+        out = self.conv3(out, batch)
+
+        # aggregate features from final nodes
+        out = geometric.global_max_pool(out, batch)
+
+        # post-processing
+        out = self.lin(out)
+
+        return out
+
+
 
 # ------------- Sequence modules -----------
 def _init_tenzor(*shape, device='cpu', init_type=''):
@@ -281,13 +362,12 @@ if __name__ == "__main__":
 
     torch.manual_seed(125)
 
-    positions = torch.arange(1, 7, dtype=torch.float)  # 37
-    # features_batch = positions.view(2, -1, 3)  # note for the same batch size
-    features_batch = positions.view(-1, 3) 
+    positions = torch.arange(1, 601, dtype=torch.float)  # 37
+    features_batch = positions.view(2, -1, 3)  # note for the same batch size
+    # features_batch = positions.view(-1, 3) 
 
     print('In batch shape: {}'.format(features_batch.shape))
 
-    # net = EdgeConvFeatures(5)
-    net = LSTMDoubleReverseDecoderModule(3, 4, 4, 2)
+    net = EdgeConvPoolingFeatures(5)
 
-    print(net(features_batch, 4))
+    print(net(features_batch))

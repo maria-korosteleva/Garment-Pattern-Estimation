@@ -252,7 +252,11 @@ class Trainer():
                 model(sample['features'].unsqueeze(0).to(self.device)), [sample['name']], save_to=self.folder_for_preds)
             
             print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
-            wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+            try:
+                wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+            except BaseException as e:
+                print(e)
+                pass
 
     def _save_checkpoint(self, model, epoch, save_name='checkpoint'):
         """Save checkpoint that can be used to resume training"""

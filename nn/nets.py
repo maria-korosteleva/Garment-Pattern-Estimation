@@ -272,7 +272,7 @@ class GarmentPattern3D(BaseModule):
             'dropout': 0,
             'loss': 'MSE with loop',
             'lstm_init': 'kaiming_normal_', 
-            'feature_extractor': 'EdgeConvFeatures',
+            'feature_extractor': 'EdgeConvPoolingFeatures',
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule'
         })
@@ -287,12 +287,10 @@ class GarmentPattern3D(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
 
         # Feature extractor definition
-        if self.config['feature_extractor'] == 'PointNetPlusPlus':
-            self.feature_extractor = blocks.PointNetPlusPlus(self.config['pattern_encoding_size'], self.config)  # pass cofiguration from upper layer
-        elif self.config['feature_extractor'] == 'EdgeConvFeatures':
-            self.feature_extractor = blocks.EdgeConvFeatures(self.config['pattern_encoding_size'])
-        else: 
-            raise ValueError('GarmentPattern3D::Error::Unsupported feature extractor {} requested in config'.format(self.config['feature_extractor']))
+        feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
+        self.feature_extractor = feature_extractor_module(self.config['pattern_encoding_size'], self.config)
+        if hasattr(self.feature_extractor, 'config'):
+            self.config.update(self.feature_extractor.config)   # save extractor's additional configuration
 
 
         # Decode into pattern definition
