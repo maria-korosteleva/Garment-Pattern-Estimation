@@ -122,11 +122,12 @@ class BasicPattern(object):
         return name
 
     # --------- Special representations -----
-    def pattern_as_tensor(self, pad_panels_to_len=None):
+    def pattern_as_tensor(self, pad_panels_to_len=None, with_placement=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
             * 3D tensor of panel's 3D rotations
+            with_placement tag is given mostly for backward compatibility
             """
         # get panel ordering
         panel_order = self.panel_order()
@@ -136,12 +137,21 @@ class BasicPattern(object):
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         panel_seqs = []
-        # TODO gather rotations & translations
+        panel_translations = []
+        panel_rotations = []
         for panel_name in panel_order:
             edges, rot, transl = self.panel_as_sequence(panel_name, pad_to_len=max_len)
             panel_seqs.append(edges)
+            panel_translations.append(transl)
+            panel_rotations.append(rot)
         
-        return np.stack(panel_seqs)
+        # format result as requested
+        result = [np.stack(panel_seqs)]
+        if with_placement:
+            result.append(np.stack(panel_rotations))
+            result.append(np.stack(panel_translations))
+
+        return tuple(result)
 
     def pattern_from_tensor(self, pattern_representation, padded=False):
         """Create panels from given panel representation. 
@@ -164,7 +174,7 @@ class BasicPattern(object):
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
 
-        # ---- offset vertices to have one vertex at (0, 0) -- deterministically ----
+        # ---- offset vertices to have one (~low-left) vertex at (0, 0) -- deterministically ----
         # bounding box low-left to origin
         left_corner = np.min(vertices, axis=0)
         shift = - left_corner
@@ -211,15 +221,6 @@ class BasicPattern(object):
         shift = np.append(shift, 0)  # translation to 3D
         comenpensating_shift = - panel_rotation.dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
-
-        # TEST 
-        print('Rotation: {}'.format(panel['rotation']))
-        vertex_1 = np.append(np.array(panel['vertices'][0]), 0)
-        # vertex_1 = np.array([0, 1, 0])
-        print('v1: {}'.format(vertex_1))
-        print('Rotated v1: {}'.format(panel_rotation.dot(vertex_1)))
-        print('Shifted v1: {}'.format(vertex_1 + shift)) # sign check!
-        print('Rotated after Shifted v1: {}'.format(panel_rotation.dot(vertex_1 + shift) + comenpensating_shift))
 
         return np.stack(edge_sequence, axis=0), panel_rotation.flatten()[:6], translation
 
