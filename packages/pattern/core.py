@@ -9,6 +9,7 @@ import copy
 import errno
 import json
 import numpy as np
+from scipy.spatial.transform import Rotation
 import os
 import random
 
@@ -122,7 +123,11 @@ class BasicPattern(object):
 
     # --------- Special representations -----
     def pattern_as_tensor(self, pad_panels_to_len=None):
-        """Return pattern in 3D tensor (TODO plus aditional info) suitable for NN inputs/outputs"""
+        """Return pattern in format suitable for NN inputs/outputs
+            * 3D tensor of panel edges
+            * 3D tensor of panel's 3D translations
+            * 3D tensor of panel's 3D rotations
+            """
         # get panel ordering
         panel_order = self.panel_order()
 
@@ -131,8 +136,10 @@ class BasicPattern(object):
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         panel_seqs = []
+        # TODO gather rotations & translations
         for panel_name in panel_order:
-            panel_seqs.append(self.panel_as_sequence(panel_name, pad_to_len=max_len))
+            edges, rot, transl = self.panel_as_sequence(panel_name, pad_to_len=max_len)
+            panel_seqs.append(edges)
         
         return np.stack(panel_seqs)
 
@@ -149,9 +156,10 @@ class BasicPattern(object):
 
     def panel_as_sequence(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length.
-           * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
-           * Edges are returned in additive manner: 
+            * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
+            * Edges are returned in additive manner: 
                 each edge as a vector that needs to be added to previous edges to get a 2D coordinate of end vertex
+            * Panel placement is returned according to the shift needed for sequential representation
         """
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
@@ -159,6 +167,7 @@ class BasicPattern(object):
         # ---- offset vertices to have one vertex at (0, 0) -- deterministically ----
         # bounding box low-left to origin
         left_corner = np.min(vertices, axis=0)
+        shift = - left_corner
         vertices = vertices - left_corner
 
         # ids of verts sitting on Ox
@@ -169,8 +178,10 @@ class BasicPattern(object):
         origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
         origin_id = on_ox_ids[origin_candidate]
         # Chosen vertex to origin
+        shift = shift - vertices[origin_id]
         vertices = vertices - vertices[origin_id]
 
+        # ----- Construct edge sequence ----------
         # Edge that starts at origin
         first_edge = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
         first_edge = first_edge[0]
@@ -190,9 +201,27 @@ class BasicPattern(object):
             for _ in range(len(edge_sequence), pad_to_len):
                 edge_sequence.append(np.zeros_like(edge_sequence[0]))
         
-        # TODO add 3D placement convertion 
+        # ----- 3D placement convertion  ------
+        # Follows the Maya convention: intrinsic xyz Euler Angles
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.html
+        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)
+        panel_rotation = panel_rotation.as_matrix()
 
-        return np.stack(edge_sequence, axis=0)
+        # Global Translation with compensative update for local origin change (shift)
+        shift = np.append(shift, 0)  # translation to 3D
+        comenpensating_shift = - panel_rotation.dot(shift)
+        translation = np.array(panel['translation']) + comenpensating_shift
+
+        # TEST 
+        print('Rotation: {}'.format(panel['rotation']))
+        vertex_1 = np.append(np.array(panel['vertices'][0]), 0)
+        # vertex_1 = np.array([0, 1, 0])
+        print('v1: {}'.format(vertex_1))
+        print('Rotated v1: {}'.format(panel_rotation.dot(vertex_1)))
+        print('Shifted v1: {}'.format(vertex_1 + shift)) # sign check!
+        print('Rotated after Shifted v1: {}'.format(panel_rotation.dot(vertex_1 + shift) + comenpensating_shift))
+
+        return np.stack(edge_sequence, axis=0), panel_rotation.flatten()[:6], translation
 
     def panel_from_sequence(self, panel_name, edge_sequence, padded=False):
         """Set panel vertex positions & edge dictionaries from given edge sequence"""
@@ -876,24 +905,22 @@ class ParametrizedPattern(BasicPattern):
 # ---------- test -------------
 if __name__ == "__main__":
     import customconfig
-    from pattern.wrappers import VisPattern
+    # from pattern.wrappers import VisPattern
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
-    # pattern = VisPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
-    pattern = VisPattern()
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    # pattern = VisPattern()
 
-    print(pattern.spec)
-
-    # tensor = pattern.pattern_as_tensor()
-    # print(pattern.panel_order())
-    # print(tensor)
+    tensor = pattern.pattern_as_tensor()
+    # out = pattern.panel_as_sequence('right')
+    print(tensor)
 
     # tensor[2][0][0] -= 10
 
     # # tensor = tensor[:-1]
     # pattern.pattern_from_tensor(tensor, padded=True)
 
-    pattern.name += '_save_try_1'
-    pattern.serialize(system_config['output'], to_subfolder=True)
+    # pattern.name += '_save_try_1'
+    # pattern.serialize(system_config['output'], to_subfolder=True)
