@@ -153,7 +153,7 @@ class BasicPattern(object):
 
         return tuple(result) if len(result) > 1 else result[0]
 
-    def pattern_from_tensor(self, pattern_representation, padded=False):
+    def pattern_from_tensor(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
         """Create panels from given panel representation. 
             Assuming that representation uses cm as units"""
         # TODO updating panels 3D placement?
@@ -162,7 +162,12 @@ class BasicPattern(object):
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         for idx in range(len(pattern_representation)):
-            self.panel_from_sequence('panel_' + str(idx), pattern_representation[idx], padded=padded)
+            self.panel_from_sequence(
+                'panel_' + str(idx), 
+                pattern_representation[idx], 
+                rotation_6=panel_rotations[idx] if panel_rotations is not None else None,
+                translation=panel_translations[idx] if panel_translations is not None else None,
+                padded=padded)
 
     def panel_as_sequence(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length.
@@ -222,10 +227,12 @@ class BasicPattern(object):
         comenpensating_shift = - panel_rotation.dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
 
-        return np.stack(edge_sequence, axis=0), panel_rotation.flatten()[:6], translation
+        rotation_representation = panel_rotation.flatten(order='F')[:6]  # first two columns
+        return np.stack(edge_sequence, axis=0), rotation_representation, translation
 
-    def panel_from_sequence(self, panel_name, edge_sequence, padded=False):
-        """Set panel vertex positions & edge dictionaries from given edge sequence"""
+    def panel_from_sequence(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
+        """* Set panel vertex (local) positions & edge dictionaries from given edge sequence
+            * Set panel 3D translation and orientation if given. Accepts 6-element rotation representation -- first two colomns of rotation matrix"""
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
             self.pattern['panels'][panel_name] = copy.deepcopy(panel_spec_template)
@@ -235,7 +242,7 @@ class BasicPattern(object):
             selection = ~np.all(np.isclose(edge_sequence, 0, atol=1.5), axis=1)  # only non-zero rows
             edge_sequence = edge_sequence[selection]
 
-        # Convert representation
+        # ---- Convert edge representation ----
         vertices = np.array([[0, 0]])  # first vertex is always at origin
         edges = []
         for idx in range(len(edge_sequence) - 1):
@@ -262,7 +269,22 @@ class BasicPattern(object):
         panel['vertices'] = vertices.tolist()
         panel['edges'] = edges
 
-        print('BasicPattern::Warning::{}::Edge and vertex info updated for panel {}. Parameters, stitches, and 3D placement might be broken'.format(self.name, panel_name))
+        # ----- 3D placement setup --------
+        if translation is not None:
+            # simply set as is
+            panel['translation'] = translation.tolist()
+        
+        if rotation_6 is not None:
+            # convert from 6-elements representation
+            col_1 = rotation_6[:3] / np.linalg.norm(rotation_6[:3])
+            col_2 = rotation_6[3:] / np.linalg.norm(rotation_6[3:])
+            col_3 = np.cross(col_1, col_2)
+            rot_mat = np.column_stack((col_1, col_2, col_3))
+            rotation = Rotation.from_matrix(rot_mat)
+            # Follows the Maya convention: intrinsic xyz Euler Angles
+            panel['rotation'] = rotation.as_euler('xyz', degrees=True).tolist()
+        
+        print('BasicPattern::Warning::{}::Edge and vertex info updated for panel {}. Stitches might be broken'.format(self.name, panel_name))
 
     def panel_order(self, name_list=None, dim=0, tolerance=5):
         """Ordering of the panels based on their 3D translation values.
@@ -913,15 +935,22 @@ if __name__ == "__main__":
     pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = VisPattern()
+    # empty_pattern = BasicPattern()
+    print(pattern.panel_order())
 
-    tensor = pattern.pattern_as_tensor()
-    # out = pattern.panel_as_sequence('right')
-    print(tensor)
+    tensor, rot, transl = pattern.pattern_as_tensor(with_placement=True)
+    panel_name = 'right'
+    print(pattern.pattern['panels'][panel_name])
+    # edges, rot, transl = pattern.panel_as_sequence(panel_name)
+    # print(edges, rot, transl)
 
     # tensor[2][0][0] -= 10
 
     # # tensor = tensor[:-1]
-    # pattern.pattern_from_tensor(tensor, padded=True)
+    pattern.pattern_from_tensor(tensor, rot, transl, padded=True)
+    # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
+    print(pattern.pattern['panels']['panel_0'])
+    print(pattern.panel_order())
 
-    # pattern.name += '_save_try_1'
+    # pattern.name += '_placement_upd_1'
     # pattern.serialize(system_config['output'], to_subfolder=True)
