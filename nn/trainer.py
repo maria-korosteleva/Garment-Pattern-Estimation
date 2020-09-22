@@ -91,7 +91,7 @@ class Trainer():
         if self.log_with_visualization:
             # to run parent dir -- wandb will automatically keep track of intermediate values
             # Othervise it might only display the last value (if saving with the same name every time)
-            self.folder_for_preds = Path(wb.run.dir) / '..' / 'intermediate_preds'
+            self.folder_for_preds = Path('./wandb') / 'intermediate_preds'
             self.folder_for_preds.mkdir(exist_ok=True)
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)

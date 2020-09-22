@@ -142,7 +142,7 @@ class WandbRunWrappper(object):
 
     def local_artifact_path(self):
         """create & maintain path to save files to-be-commited-as-artifacts"""
-        path = self.local_path() / '..' / 'artifacts' / self.run_id
+        path = Path('./wandb') / 'artifacts' / self.run_id
         if not path.exists():
             path.mkdir(parents=True)
         return path
