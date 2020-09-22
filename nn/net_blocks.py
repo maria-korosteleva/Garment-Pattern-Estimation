@@ -32,7 +32,8 @@ class _GlobalSetAbstractionModule(nn.Module):
         self.nn = per_point_net
 
     def forward(self, features, pos, batch):
-        features = self.nn(torch.cat([features, pos], dim=1))
+        features = torch.cat([features, pos], dim=1) if features is not None else pos
+        features = self.nn(features)
         features = geometric.global_max_pool(features, batch)  # returns classical PyTorch batch format #Batch_size x (out_shape)
         pos = pos.new_zeros((features.size(0), 3))
         batch = torch.arange(features.size(0), device=batch.device)
@@ -56,11 +57,12 @@ class PointNetPlusPlus(nn.Module):
         self.config = {'r1': 3, 'r2': 4, 'r3': 5, 'r4': 7}  # defaults for this net
         self.config.update(config)  # from input
 
-        self.sa1_module = _SetAbstractionModule(0.2, self.config['r1'], _MLP([3, 64, 64, 128]))
-        self.sa2_module = _SetAbstractionModule(0.25, self.config['r2'], _MLP([128 + 3, 128, 128, 128]))
-        self.sa3_module = _SetAbstractionModule(0.25, self.config['r3'], _MLP([128 + 3, 128, 128, 128]))
-        self.sa4_module = _SetAbstractionModule(0.25, self.config['r4'], _MLP([128 + 3, 128, 128, 256]))
-        self.sa_last_module = _GlobalSetAbstractionModule(_MLP([256 + 3, 256, 512, 1024]))
+        # self.sa1_module = _SetAbstractionModule(0.2, self.config['r1'], _MLP([3, 64, 64, 128]))
+        # self.sa2_module = _SetAbstractionModule(0.25, self.config['r2'], _MLP([128 + 3, 128, 128, 128]))
+        # self.sa3_module = _SetAbstractionModule(0.25, self.config['r3'], _MLP([128 + 3, 128, 128, 128]))
+        # self.sa4_module = _SetAbstractionModule(0.25, self.config['r4'], _MLP([128 + 3, 128, 128, 256]))
+        # self.sa_last_module = _GlobalSetAbstractionModule(_MLP([256 + 3, 256, 512, 1024]))
+        self.sa_last_module = _GlobalSetAbstractionModule(_MLP([3, 256, 512, 1024]))
 
         self.lin = nn.Linear(1024, out_size)
 
@@ -73,12 +75,12 @@ class PointNetPlusPlus(nn.Module):
         ])
 
         # forward pass
-        sa0_out = (None, pos_flat, batch)
-        sa1_out = self.sa1_module(*sa0_out)
-        sa2_out = self.sa2_module(*sa1_out)
-        sa3_out = self.sa3_module(*sa2_out)
-        sa4_out = self.sa4_module(*sa3_out)
-        sa_last_out = self.sa_last_module(*sa4_out)
+        sa_out = (None, pos_flat, batch)
+        # sa1_out = self.sa1_module(*sa0_out)
+        # sa2_out = self.sa2_module(*sa1_out)
+        # sa3_out = self.sa3_module(*sa2_out)
+        # sa4_out = self.sa4_module(*sa3_out)
+        sa_last_out = self.sa_last_module(*sa_out)
         out, _, _ = sa_last_out
         out = self.lin(out)
         return out
