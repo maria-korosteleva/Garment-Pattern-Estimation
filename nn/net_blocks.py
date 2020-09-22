@@ -94,9 +94,9 @@ class EdgeConvFeatures(nn.Module):
         self.config.update(config)  # from input
 
         # DynamicEdgeConv!!!!!!
-        self.conv1 = geometric.DynamicEdgeConv(_MLP([2 * 3, 64, 64, 32]), k=10, aggr='max')
-        self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 64]), k=10, aggr='max')
-        self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 64, 64, 64, 64]), k=10, aggr='max')
+        self.conv1 = geometric.DynamicEdgeConv(_MLP([2 * 3, 64, 64, 64]), k=10, aggr='max')  #  
+        # self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 64]), k=10, aggr='max')  #  64,
+        # self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 64, 64, 64, 64]), k=10, aggr='max')  # 64, 
 
         self.lin = nn.Linear(64, out_size)
 
@@ -111,8 +111,8 @@ class EdgeConvFeatures(nn.Module):
 
         # Vertex features
         out = self.conv1(pos_flat, batch)
-        out = self.conv2(out, batch)
-        out = self.conv3(out, batch)  # n_points x length_features
+        # out = self.conv2(out, batch)
+        # out = self.conv3(out, batch)  # n_points x length_features
         # reshape back into batch 
         out = out.contiguous().view(batch_size, n_vertices, -1)
 
