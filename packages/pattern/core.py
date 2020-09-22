@@ -579,18 +579,18 @@ class ParametrizedPattern(BasicPattern):
         self.parameters = self.spec['parameters']
     
     # ------- Direct pattern update -------
-    def pattern_from_tensor(self, pattern_representation, padded=False):
+    def pattern_from_tensor(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
         """When direct update is applied to parametrized pattern, 
             all the parameter settings become invalid"""
-        super().pattern_from_tensor(pattern_representation, padded)
+        super().pattern_from_tensor(pattern_representation, panel_rotations, panel_translations, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
 
-    def panel_from_sequence(self, panel_name, edge_sequence, padded=False):
+    def panel_from_sequence(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
         """When direct update is applied to parametrized pattern panels, 
             all the parameter settings become invalid"""
-        super().panel_from_sequence(panel_name, edge_sequence, padded)
+        super().panel_from_sequence(panel_name, edge_sequence, rotation_6, translation, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
