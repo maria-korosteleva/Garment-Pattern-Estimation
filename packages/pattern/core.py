@@ -151,7 +151,7 @@ class BasicPattern(object):
             result.append(np.stack(panel_rotations))
             result.append(np.stack(panel_translations))
 
-        return tuple(result)
+        return tuple(result) if len(result) > 1 else result[0]
 
     def pattern_from_tensor(self, pattern_representation, padded=False):
         """Create panels from given panel representation. 
