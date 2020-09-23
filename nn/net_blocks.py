@@ -129,8 +129,8 @@ class EdgeConvFeatures(nn.Module):
 
 class DynamicASAPool(nn.Module):
     """Pooling operator on PointCloud-like feature input that constructs the graph from imput point features
-        and performes Adaptive Structure Aware Pooling on it
-        https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.pool.ASAPooling
+        and performes  Self-Attention Graph Pooling on it
+        https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.pool.SAGPooling
 
         * k -- number of nearest neighbors to use for building the graph == pooling power~!
     """
@@ -138,7 +138,7 @@ class DynamicASAPool(nn.Module):
         super().__init__()
 
         self.k = 10
-        self.edge_pool = geometric.ASAPooling(feature_size, ratio=0.5)
+        self.edge_pool = geometric.SAGPooling(feature_size, ratio=0.5)
 
     def forward(self, node_features, batch):
 
@@ -149,7 +149,7 @@ class DynamicASAPool(nn.Module):
 
         edge_index = geometric.knn(node_features, node_features, self.k, b[0], b[1])
 
-        out, edge_index, _, new_batch, _ = self.edge_pool(node_features, edge_index, batch=batch)
+        out, edge_index, _, new_batch, _, _ = self.edge_pool(node_features, edge_index, batch=batch)
 
         return out, new_batch
 
