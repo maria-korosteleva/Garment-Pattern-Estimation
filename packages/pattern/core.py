@@ -12,7 +12,7 @@ import numpy as np
 import os
 import random
 import sys
-if sys.version_info[0] > 3:
+if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation  # Not available in scipy 0.19.1 installed for Maya
 
 standard_filenames = [
