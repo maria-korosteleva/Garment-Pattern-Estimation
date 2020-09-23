@@ -9,9 +9,11 @@ import copy
 import errno
 import json
 import numpy as np
-from scipy.spatial.transform import Rotation
 import os
 import random
+import sys
+if sys.version_info[0] > 3:
+    from scipy.spatial.transform import Rotation  # Not available in scipy 0.19.1 installed for Maya
 
 standard_filenames = [
     'specification',  # e.g. used by dataset generation
@@ -129,6 +131,9 @@ class BasicPattern(object):
             * 3D tensor of panel's 3D rotations
             with_placement tag is given mostly for backward compatibility
             """
+        if sys.version_info[0] < 3:
+            raise RuntimeError('BasicPattern::Error::pattern_as_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
+        
         # get panel ordering
         panel_order = self.panel_order()
 
@@ -157,7 +162,9 @@ class BasicPattern(object):
         """Create panels from given panel representation. 
             Assuming that representation uses cm as units"""
         # TODO updating stitches?
-        
+        if sys.version_info[0] < 3:
+            raise RuntimeError('BasicPattern::Error::pattern_from_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
+
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         for idx in range(len(pattern_representation)):
@@ -175,6 +182,9 @@ class BasicPattern(object):
                 each edge as a vector that needs to be added to previous edges to get a 2D coordinate of end vertex
             * Panel placement (translation & Rotation) is returned according to the shift needed for sequential representation
         """
+        if sys.version_info[0] < 3:
+            raise RuntimeError('BasicPattern::Error::panel_as_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
+
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
 
@@ -233,6 +243,9 @@ class BasicPattern(object):
         """ Updates or creates panel from NN-compatible numeric representation
             * Set panel vertex (local) positions & edge dictionaries from given edge sequence
             * Set panel 3D translation and orientation if given. Accepts 6-element rotation representation -- first two colomns of rotation matrix"""
+        if sys.version_info[0] < 3:
+            raise RuntimeError('BasicPattern::Error::panel_from_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
+
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
             self.pattern['panels'][panel_name] = copy.deepcopy(panel_spec_template)
