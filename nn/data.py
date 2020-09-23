@@ -455,7 +455,7 @@ class GarmentBaseDataset(BaseDataset):
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensor()
+        return pattern.pattern_as_tensors()
 
     def _pattern_from_tenzor(self, dataname, tenzor, std_config={}, supress_error=True):
         """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
@@ -465,7 +465,7 @@ class GarmentBaseDataset(BaseDataset):
         pattern = VisPattern(view_ids=False)
         pattern.name = dataname
         try: 
-            pattern.pattern_from_tensor(tenzor, padded=True)   
+            pattern.pattern_from_tensors(tenzor, padded=True)   
         except RuntimeError as e:
             if not supress_error:
                 raise e
@@ -631,7 +631,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
 
         # apply new edge info
         try: 
-            pattern.panel_from_sequence(self.config['panel_name'], self._unpad(prediction, 1.5))   # we can set quite high tolerance! Normal edges are quite long
+            pattern.panel_from_numeric(self.config['panel_name'], self._unpad(prediction, 1.5))   # we can set quite high tolerance! Normal edges are quite long
         except RuntimeError as e:
             print('GarmentPanelDataset::Warning::{}: {}'.format(dataname, e))
             pass

@@ -122,7 +122,7 @@ class BasicPattern(object):
         return name
 
     # --------- Special representations -----
-    def pattern_as_tensor(self, pad_panels_to_len=None, with_placement=False):
+    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
@@ -140,7 +140,7 @@ class BasicPattern(object):
         panel_translations = []
         panel_rotations = []
         for panel_name in panel_order:
-            edges, rot, transl = self.panel_as_sequence(panel_name, pad_to_len=max_len)
+            edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
             panel_seqs.append(edges)
             panel_translations.append(transl)
             panel_rotations.append(rot)
@@ -153,28 +153,27 @@ class BasicPattern(object):
 
         return tuple(result) if len(result) > 1 else result[0]
 
-    def pattern_from_tensor(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
+    def pattern_from_tensors(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
         """Create panels from given panel representation. 
             Assuming that representation uses cm as units"""
-        # TODO updating panels 3D placement?
         # TODO updating stitches?
         
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         for idx in range(len(pattern_representation)):
-            self.panel_from_sequence(
+            self.panel_from_numeric(
                 'panel_' + str(idx), 
                 pattern_representation[idx], 
                 rotation_6=panel_rotations[idx] if panel_rotations is not None else None,
                 translation=panel_translations[idx] if panel_translations is not None else None,
                 padded=padded)
 
-    def panel_as_sequence(self, panel_name, pad_to_len=None):
-        """Represent panel as sequence of edges with each edge as vector of fixed length.
+    def panel_as_numeric(self, panel_name, pad_to_len=None):
+        """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
             * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
             * Edges are returned in additive manner: 
                 each edge as a vector that needs to be added to previous edges to get a 2D coordinate of end vertex
-            * Panel placement is returned according to the shift needed for sequential representation
+            * Panel placement (translation & Rotation) is returned according to the shift needed for sequential representation
         """
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
@@ -230,8 +229,9 @@ class BasicPattern(object):
         rotation_representation = panel_rotation.flatten(order='F')[:6]  # first two columns
         return np.stack(edge_sequence, axis=0), rotation_representation, translation
 
-    def panel_from_sequence(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
-        """* Set panel vertex (local) positions & edge dictionaries from given edge sequence
+    def panel_from_numeric(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
+        """ Updates or creates panel from NN-compatible numeric representation
+            * Set panel vertex (local) positions & edge dictionaries from given edge sequence
             * Set panel 3D translation and orientation if given. Accepts 6-element rotation representation -- first two colomns of rotation matrix"""
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
@@ -579,18 +579,18 @@ class ParametrizedPattern(BasicPattern):
         self.parameters = self.spec['parameters']
     
     # ------- Direct pattern update -------
-    def pattern_from_tensor(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
+    def pattern_from_tensors(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
         """When direct update is applied to parametrized pattern, 
             all the parameter settings become invalid"""
-        super().pattern_from_tensor(pattern_representation, panel_rotations, panel_translations, padded)
+        super().pattern_from_tensors(pattern_representation, panel_rotations, panel_translations, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
 
-    def panel_from_sequence(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
+    def panel_from_numeric(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
         """When direct update is applied to parametrized pattern panels, 
             all the parameter settings become invalid"""
-        super().panel_from_sequence(panel_name, edge_sequence, rotation_6, translation, padded)
+        super().panel_from_numeric(panel_name, edge_sequence, rotation_6, translation, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
@@ -938,7 +938,7 @@ if __name__ == "__main__":
     # empty_pattern = BasicPattern()
     print(pattern.panel_order())
 
-    tensor, rot, transl = pattern.pattern_as_tensor(with_placement=True)
+    tensor, rot, transl = pattern.pattern_as_tensors(with_placement=True)
     panel_name = 'right'
     print(pattern.pattern['panels'][panel_name])
     # edges, rot, transl = pattern.panel_as_sequence(panel_name)
@@ -947,7 +947,7 @@ if __name__ == "__main__":
     # tensor[2][0][0] -= 10
 
     # # tensor = tensor[:-1]
-    pattern.pattern_from_tensor(tensor, rot, transl, padded=True)
+    pattern.pattern_from_tensors(tensor, rot, transl, padded=True)
     # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
     print(pattern.pattern['panels']['panel_0'])
     print(pattern.panel_order())
