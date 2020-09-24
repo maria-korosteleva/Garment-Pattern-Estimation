@@ -92,15 +92,46 @@ class EdgeConvFeatures(nn.Module):
     def __init__(self, out_size, config={}):
         super().__init__()
 
-        self.config = {'conv_depth': 3}  # defaults for this net
+        self.config = {
+            'conv_depth': 3, 
+            'k_neighbors': 10, 
+            'EConv_hidden': 64, 
+            'EConv_hidden_depth' : 2, 
+            'EConv_feature': 64, 
+            'EConv_aggr': 'max', 
+            'global_pool': 'max', 
+            'skip_connections': True
+            }  # defaults for this net
         self.config.update(config)  # from input
 
-        # DynamicEdgeConv!!!!!!
-        self.conv1 = geometric.DynamicEdgeConv(_MLP([2 * 3, 64, 64, 64]), k=10, aggr='max')  #  
-        # self.conv2 = geometric.DynamicEdgeConv(_MLP([2 * 32, 64, 64, 64]), k=10, aggr='max')  #  64,
-        # self.conv3 = geometric.DynamicEdgeConv(_MLP([2 * 64, 64, 64, 64]), k=10, aggr='max')  # 64, 
+        # MLP Scemes
+        first_layer_mpl = [2 * 3] + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']]
+        other_layers_mpl = ([2 * self.config['EConv_feature']] 
+            + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']])
 
-        self.lin = nn.Linear(64, out_size)
+        # Contruct the net
+        self.conv_layers = nn.ModuleList()
+        # first is always there
+        self.conv_layers.append(
+            geometric.DynamicEdgeConv(_MLP(first_layer_mpl), k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
+
+        for _ in range(1, self.config['conv_depth']):
+            self.conv_layers.append(
+                geometric.DynamicEdgeConv(_MLP(other_layers_mpl), k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
+
+        out_features = self.config['EConv_feature'] * self.config['conv_depth'] if self.config['skip_connections'] else self.config['EConv_feature']
+
+        self.lin = nn.Linear(out_features, out_size)
+
+        # pooling layer based on config
+        if self.config['global_pool'] == 'max':
+            self.global_pool = geometric.global_max_pool
+        elif self.config['global_pool'] == 'avg':
+            self.global_pool = geometric.global_mean_pool
+        elif self.config['global_pool'] == 'sum':
+            self.global_pool = geometric.global_add_pool
+        else: # max
+            raise ValueError('{} pooling is not supported' )
 
     def forward(self, positions):
         batch_size = positions.size(0)
@@ -111,18 +142,23 @@ class EdgeConvFeatures(nn.Module):
             torch.full((elem.size(0),), fill_value=i, device=positions.device, dtype=torch.long) for i, elem in enumerate(positions)
         ])
 
-        # Vertex features
-        out = self.conv1(pos_flat, batch)
-        # out = self.conv2(out, batch)
-        # out = self.conv3(out, batch)  # n_points x length_features
-        # reshape back into batch 
-        out = out.contiguous().view(batch_size, n_vertices, -1)
-
-        # aggregate features from vertices
-        out = out.max(dim=-2, keepdim=False)[0]
+        # Vertex features + track global features from each layer (if skip connections are used)
+        # In EdgeConv features from different layers are concatenated per node and then aggregated 
+        # but since the pooling is element-wise on feature vectors, we can swap the operations to save memory
+        aggr_features = []
+        out = self.conv_layers[0](pos_flat, batch)
+        if self.config['skip_connections']:
+            aggr_features.append(self.global_pool(out, batch, batch_size))
+        
+        for conv_id in range(1, self.config['conv_depth']):
+            out = self.conv_layers[conv_id](out, batch)
+            if self.config['skip_connections']:
+                aggr_features.append(self.global_pool(out, batch, batch_size))
+        
+        feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
 
         # post-processing
-        out = self.lin(out)
+        out = self.lin(feature)
 
         return out
 
@@ -372,6 +408,6 @@ if __name__ == "__main__":
 
     print('In batch shape: {}'.format(features_batch.shape))
 
-    net = EdgeConvPoolingFeatures(5)
+    net = EdgeConvFeatures(5)
 
     print(net(features_batch))
