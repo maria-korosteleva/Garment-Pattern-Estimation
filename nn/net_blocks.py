@@ -100,16 +100,19 @@ class EdgeConvFeatures(nn.Module):
             'EConv_feature': 64, 
             'EConv_aggr': 'max', 
             'global_pool': 'max', 
-            'skip_connections': True
+            'skip_connections': True, 
+            'graph_pooling': True,
+            'pool_ratio': 0.5  # only used when the graph pooling is enabled
             }  # defaults for this net
         self.config.update(config)  # from input
 
-        # MLP Scemes
+        # MLP Schemes
         first_layer_mpl = [2 * 3] + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']]
         other_layers_mpl = ([2 * self.config['EConv_feature']] 
             + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']])
 
         # Contruct the net
+        # Conv layers
         self.conv_layers = nn.ModuleList()
         # first is always there
         self.conv_layers.append(
@@ -119,19 +122,26 @@ class EdgeConvFeatures(nn.Module):
             self.conv_layers.append(
                 geometric.DynamicEdgeConv(_MLP(other_layers_mpl), k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
 
-        out_features = self.config['EConv_feature'] * self.config['conv_depth'] if self.config['skip_connections'] else self.config['EConv_feature']
+        # pooling layers
+        if self.config['graph_pooling']:
+            self.gpool_layers = nn.ModuleList()
+            for _ in range(0, self.config['conv_depth']):
+                self.gpool_layers.append(
+                    DynamicTopKPool(self.config['EConv_feature'], k=self.config['k_neighbors'], pool_ratio=self.config['pool_ratio']))
 
-        self.lin = nn.Linear(out_features, out_size)
-
-        # pooling layer based on config
+        # global pooling layer based on config
         if self.config['global_pool'] == 'max':
             self.global_pool = geometric.global_max_pool
-        elif self.config['global_pool'] == 'avg':
+        elif self.config['global_pool'] == 'mean':
             self.global_pool = geometric.global_mean_pool
-        elif self.config['global_pool'] == 'sum':
+        elif self.config['global_pool'] == 'add':
             self.global_pool = geometric.global_add_pool
         else: # max
-            raise ValueError('{} pooling is not supported' )
+            raise ValueError('{} pooling is not supported'.format(self.config['global_pool']))
+            
+        # Output linear layer
+        out_features = self.config['EConv_feature'] * self.config['conv_depth'] if self.config['skip_connections'] else self.config['EConv_feature']
+        self.lin = nn.Linear(out_features, out_size)
 
     def forward(self, positions):
         batch_size = positions.size(0)
@@ -146,12 +156,11 @@ class EdgeConvFeatures(nn.Module):
         # In EdgeConv features from different layers are concatenated per node and then aggregated 
         # but since the pooling is element-wise on feature vectors, we can swap the operations to save memory
         aggr_features = []
-        out = self.conv_layers[0](pos_flat, batch)
-        if self.config['skip_connections']:
-            aggr_features.append(self.global_pool(out, batch, batch_size))
-        
-        for conv_id in range(1, self.config['conv_depth']):
+        out = pos_flat
+        for conv_id in range(0, self.config['conv_depth']):
             out = self.conv_layers[conv_id](out, batch)
+            if self.config['graph_pooling']:
+                out, batch = self.gpool_layers[conv_id](out, batch)
             if self.config['skip_connections']:
                 aggr_features.append(self.global_pool(out, batch, batch_size))
         
@@ -170,11 +179,11 @@ class DynamicTopKPool(nn.Module):
 
         * k -- number of nearest neighbors to use for building the graph == pooling power~!
     """
-    def __init__(self, feature_size, k=10):
+    def __init__(self, feature_size, k=10, pool_ratio=0.5):
         super().__init__()
 
         self.k = 10
-        self.edge_pool = geometric.TopKPooling(feature_size, ratio=0.5)
+        self.edge_pool = geometric.TopKPooling(feature_size, ratio=pool_ratio)
 
     def forward(self, node_features, batch):
 
