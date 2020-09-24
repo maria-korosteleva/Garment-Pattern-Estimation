@@ -115,7 +115,7 @@ class EdgeConvFeatures(nn.Module):
             features_by_layer = [self.config['EConv_feature'] for _ in range(self.config['conv_depth'])]
             hidden_by_layer = [self.config['EConv_hidden'] for _ in range(self.config['conv_depth'])]
         mlp_depth = self.config['EConv_hidden_depth']
-        
+
         # Contruct the net
         # Conv layers
         self.conv_layers = nn.ModuleList()
@@ -136,7 +136,7 @@ class EdgeConvFeatures(nn.Module):
             self.gpool_layers = nn.ModuleList()
             for conv_id in range(0, self.config['conv_depth']):
                 self.gpool_layers.append(
-                    DynamicTopKPool(features_by_layer[conv_id], k=self.config['k_neighbors'], pool_ratio=self.config['pool_ratio']))
+                    DynamicASAPool(features_by_layer[conv_id], k=self.config['k_neighbors'], pool_ratio=self.config['pool_ratio']))
 
         # global pooling layer based on config
         if self.config['global_pool'] == 'max':
@@ -151,7 +151,6 @@ class EdgeConvFeatures(nn.Module):
         # Output linear layer
         out_features = sum(features_by_layer) if self.config['skip_connections'] else self.config['EConv_feature']
 
-        print(out_features)
         self.lin = nn.Linear(out_features, out_size)
 
     def forward(self, positions):
@@ -183,7 +182,7 @@ class EdgeConvFeatures(nn.Module):
         return out
 
 
-class DynamicTopKPool(nn.Module):
+class DynamicASAPool(nn.Module):
     """Pooling operator on PointCloud-like feature input that constructs the graph from imput point features
         and performes  Self-Attention Graph Pooling on it
         https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.pool.SAGPooling
@@ -194,7 +193,7 @@ class DynamicTopKPool(nn.Module):
         super().__init__()
 
         self.k = 10
-        self.edge_pool = geometric.TopKPooling(feature_size, ratio=pool_ratio)
+        self.edge_pool = geometric.ASAPooling(feature_size, ratio=pool_ratio)
 
     def forward(self, node_features, batch):
 
@@ -205,7 +204,7 @@ class DynamicTopKPool(nn.Module):
 
         edge_index = geometric.knn(node_features, node_features, self.k, b[0], b[1])
 
-        out, edge_index, _, new_batch, _, _ = self.edge_pool(node_features, edge_index, batch=batch)
+        out, edge_index, _, new_batch, _ = self.edge_pool(node_features, edge_index, batch=batch)
 
         return out, new_batch
 
@@ -223,12 +222,12 @@ class EdgeConvPoolingFeatures(nn.Module):
         self.conv1 = geometric.DynamicEdgeConv(
             _MLP([2 * 3, 64, 64, self.config['n_features1']]), 
             k=self.config['k'], aggr='max')
-        self.pool1 = DynamicTopKPool(self.config['n_features1'], k=self.config['k'])
+        self.pool1 = DynamicASAPool(self.config['n_features1'], k=self.config['k'])
         self.conv2 = geometric.DynamicEdgeConv(
             _MLP([2 * self.config['n_features1'], self.config['n_features2'], self.config['n_features2'], self.config['n_features2']]), 
             k=self.config['k'], aggr='max'
             )
-        self.pool2 = DynamicTopKPool(self.config['n_features2'], k=self.config['k'])
+        self.pool2 = DynamicASAPool(self.config['n_features2'], k=self.config['k'])
         self.conv3 = geometric.DynamicEdgeConv(
             _MLP([2 * self.config['n_features2'], self.config['n_features3'], self.config['n_features3'], self.config['n_features3']]), 
             k=self.config['k'], aggr='max')
