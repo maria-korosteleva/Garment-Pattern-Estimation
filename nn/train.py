@@ -25,7 +25,7 @@ def get_values_from_args():
     parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
     # EdgeConv
     parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=1)
-    parser.add_argument('--k', '-k', help='number of nearest neigbors for graph construction in EdgeConv', type=int, default=10)
+    parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=2)
     parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=8)
     parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
     parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=8)
@@ -51,7 +51,7 @@ def get_values_from_args():
 
         # EdgeConv params
         'conv_depth': args.conv_depth, 
-        'k_neighbors': args.k, 
+        'k_neighbors': args.k_multiplier * 5, 
         'EConv_hidden': args.ec_hidden_multiplier * 8, 
         'EConv_hidden_depth' : args.ec_hidden_depth, 
         'EConv_feature': args.ec_feature_multiplier * 8, 
