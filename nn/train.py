@@ -12,12 +12,26 @@ def get_values_from_args():
     parser = argparse.ArgumentParser()
     
     # Default values from run 9j12qp24, best of sweep y1mmngej
+
+    # basic
     parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=4)  # 19
+    parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
+    # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=13)
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=3)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=7)
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=4)
-    parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
+    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')
+    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
+    # EdgeConv
+    parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=1)
+    parser.add_argument('--k', '-k', help='number of nearest neigbors for graph construction in EdgeConv', type=int, default=10)
+    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=8)
+    parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
+    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=8)
+    parser.add_argument('--ec_conv_aggr', '-ecca', help='type of feature aggregation in EdgeConv on edge level', type=str, default='max')
+    parser.add_argument('--ec_global_aggr', '-ecga', help='type of feature aggregation in EdgeConv on graph level', type=str, default='max')
+    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=1)
 
     args = parser.parse_args()
     print(args)
@@ -27,12 +41,24 @@ def get_values_from_args():
     }
 
     nn_config = {
+        # pattern decoders
         'panel_encoding_size': args.panel_encoding_multiplier * 10,
         'panel_n_layers': args.panel_n_layers,
         'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
-        'pattern_n_layers': args.pattern_n_layers
-    }
+        'pattern_n_layers': args.pattern_n_layers,
+        'panel_decoder': args.panel_decoder,
+        'pattern_decoder': args.pattern_decoder,
 
+        # EdgeConv params
+        'conv_depth': args.conv_depth, 
+        'k_neighbors': args.k, 
+        'EConv_hidden': args.ec_hidden_multiplier * 8, 
+        'EConv_hidden_depth' : args.ec_hidden_depth, 
+        'EConv_feature': args.ec_feature_multiplier * 8, 
+        'EConv_aggr': args.ec_conv_aggr, 
+        'global_pool': args.ec_global_aggr, 
+        'skip_connections': bool(args.ec_skip)
+    }
 
     return data_config, nn_config, args.net_seed
 
