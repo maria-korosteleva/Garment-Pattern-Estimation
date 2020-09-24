@@ -106,28 +106,37 @@ class EdgeConvFeatures(nn.Module):
             }  # defaults for this net
         self.config.update(config)  # from input
 
-        # MLP Schemes
-        first_layer_mpl = [2 * 3] + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']]
-        other_layers_mpl = ([2 * self.config['EConv_feature']] 
-            + [self.config['EConv_hidden'] for _ in range(self.config['EConv_hidden_depth'])] + [self.config['EConv_feature']])
-
+        # Node feature sizes scheme & MLP hidden layers scheme
+        if self.config['graph_pooling']:
+            # use size variation when using graph pooling to enable larger layers under the same memory constraint
+            features_by_layer = [int(self.config['EConv_feature'] / conv_id) for conv_id in range(self.config['conv_depth'], 0, -1)]
+            hidden_by_layer = [int(self.config['EConv_hidden'] / conv_id) for conv_id in range(self.config['conv_depth'], 0, -1)]
+        else:
+            features_by_layer = [self.config['EConv_feature'] for _ in range(self.config['conv_depth'])]
+            hidden_by_layer = [self.config['EConv_hidden'] for _ in range(self.config['conv_depth'])]
+        mlp_depth = self.config['EConv_hidden_depth']
+        
         # Contruct the net
         # Conv layers
         self.conv_layers = nn.ModuleList()
         # first is always there
         self.conv_layers.append(
-            geometric.DynamicEdgeConv(_MLP(first_layer_mpl), k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
+            geometric.DynamicEdgeConv(
+                _MLP([2 * 3] + [hidden_by_layer[0] for _ in range(mlp_depth)] + [features_by_layer[0]]), 
+                k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
 
-        for _ in range(1, self.config['conv_depth']):
+        for conv_id in range(1, self.config['conv_depth']):
             self.conv_layers.append(
-                geometric.DynamicEdgeConv(_MLP(other_layers_mpl), k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
+                geometric.DynamicEdgeConv(
+                    _MLP([2 * features_by_layer[conv_id - 1]] + [hidden_by_layer[conv_id] for _ in range(mlp_depth)] + [features_by_layer[conv_id]]), 
+                    k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
 
         # pooling layers
         if self.config['graph_pooling']:
             self.gpool_layers = nn.ModuleList()
-            for _ in range(0, self.config['conv_depth']):
+            for conv_id in range(0, self.config['conv_depth']):
                 self.gpool_layers.append(
-                    DynamicTopKPool(self.config['EConv_feature'], k=self.config['k_neighbors'], pool_ratio=self.config['pool_ratio']))
+                    DynamicTopKPool(features_by_layer[conv_id], k=self.config['k_neighbors'], pool_ratio=self.config['pool_ratio']))
 
         # global pooling layer based on config
         if self.config['global_pool'] == 'max':
@@ -140,7 +149,9 @@ class EdgeConvFeatures(nn.Module):
             raise ValueError('{} pooling is not supported'.format(self.config['global_pool']))
             
         # Output linear layer
-        out_features = self.config['EConv_feature'] * self.config['conv_depth'] if self.config['skip_connections'] else self.config['EConv_feature']
+        out_features = sum(features_by_layer) if self.config['skip_connections'] else self.config['EConv_feature']
+
+        print(out_features)
         self.lin = nn.Linear(out_features, out_size)
 
     def forward(self, positions):
