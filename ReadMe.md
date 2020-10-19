@@ -27,7 +27,19 @@ Provides tools for creating datasets of 3D garments with patterns. See [Data Cre
 
 Provides tools to train and run the pattern prediction model on 3D garment geometry 
 
+## Dependencies
+
+### Notes on errors with PIL.Image
+
+You might experience errors related with PIL (pillow) Image module. Those most often come from the ReportLab library requiring older versions of pillow that are currently available, the compatibility issues of pillow and python version, or ReportLab and libigl visualization routines requiring different versions of pillow
+
+*Working combinations*:
+* For ReportLab (saving patterns as png images) to work: Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
+
 ### Main Dependencies
+
+All development was done on Windows 10. If running on other OS endups up with errors, please, raise the issue!
+
 * Python 3.6
 * Numpy
 * Pytorch
