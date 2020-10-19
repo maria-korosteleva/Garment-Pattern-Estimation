@@ -104,7 +104,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='Pattern3D-edge-parametrized', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
@@ -130,7 +130,11 @@ if __name__ == "__main__":
 
     # --------------- Final evaluation --------------
     # On the best-performing model
-    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    try:
+        model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    except BaseException as e: # not the best to catch all the exceptions here, but should work for most of cases foe now
+        print(e)
+        print('Train::Warning::Proceeding to evaluation with the current (final) model state')
 
     dataset_wrapper = trainer.datawraper
 
