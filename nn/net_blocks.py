@@ -19,11 +19,12 @@ class _SetAbstractionModule(nn.Module):
     def forward(self, features, pos, batch):
         idx = geometric.fps(pos, batch, ratio=self.ratio)
         row, col = geometric.radius(pos, pos[idx], self.radius, batch, batch[idx],
-                            max_num_neighbors=25)
+                                    max_num_neighbors=25)
         edge_index = torch.stack([col, row], dim=0)
         features = self.conv(features, (pos, pos[idx]), edge_index)
         pos, batch = pos[idx], batch[idx]
         return features, pos, batch
+
 
 class _GlobalSetAbstractionModule(nn.Module):
     """PointNet feature extraction to get one deature vector from set"""
@@ -39,11 +40,13 @@ class _GlobalSetAbstractionModule(nn.Module):
         batch = torch.arange(features.size(0), device=batch.device)
         return features, pos, batch
 
-def _MLP(channels, batch_norm=True):
+
+def MLP(channels, batch_norm=True):
     return nn.Sequential(*[
         nn.Sequential(nn.Linear(channels[i - 1], channels[i]), nn.ReLU(), nn.BatchNorm1d(channels[i]))
         for i in range(1, len(channels))
     ])
+
 
 class PointNetPlusPlus(nn.Module):
     """
@@ -62,7 +65,7 @@ class PointNetPlusPlus(nn.Module):
         # self.sa3_module = _SetAbstractionModule(0.25, self.config['r3'], _MLP([128 + 3, 128, 128, 128]))
         # self.sa4_module = _SetAbstractionModule(0.25, self.config['r4'], _MLP([128 + 3, 128, 128, 256]))
         # self.sa_last_module = _GlobalSetAbstractionModule(_MLP([256 + 3, 256, 512, 1024]))
-        self.sa_last_module = _GlobalSetAbstractionModule(_MLP([3, 256, 512, 1024]))
+        self.sa_last_module = _GlobalSetAbstractionModule(MLP([3, 256, 512, 1024]))
 
         self.lin = nn.Linear(1024, out_size)
 
@@ -85,6 +88,7 @@ class PointNetPlusPlus(nn.Module):
         out = self.lin(out)
         return out
 
+
 # ------------- EdgeConv ----------
 # https://github.com/AnTao97/dgcnn.pytorch/blob/master/model.py
 class EdgeConvFeatures(nn.Module):
@@ -96,14 +100,14 @@ class EdgeConvFeatures(nn.Module):
             'conv_depth': 3, 
             'k_neighbors': 10, 
             'EConv_hidden': 64, 
-            'EConv_hidden_depth' : 2, 
+            'EConv_hidden_depth': 2, 
             'EConv_feature': 64, 
             'EConv_aggr': 'max', 
             'global_pool': 'max', 
             'skip_connections': True, 
             'graph_pooling': True,
             'pool_ratio': 0.5  # only used when the graph pooling is enabled
-            }  # defaults for this net
+        }  # defaults for this net
         self.config.update(config)  # from input
 
         # Node feature sizes scheme & MLP hidden layers scheme
@@ -122,13 +126,13 @@ class EdgeConvFeatures(nn.Module):
         # first is always there
         self.conv_layers.append(
             geometric.DynamicEdgeConv(
-                _MLP([2 * 3] + [hidden_by_layer[0] for _ in range(mlp_depth)] + [features_by_layer[0]]), 
+                MLP([2 * 3] + [hidden_by_layer[0] for _ in range(mlp_depth)] + [features_by_layer[0]]), 
                 k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
 
         for conv_id in range(1, self.config['conv_depth']):
             self.conv_layers.append(
                 geometric.DynamicEdgeConv(
-                    _MLP([2 * features_by_layer[conv_id - 1]] + [hidden_by_layer[conv_id] for _ in range(mlp_depth)] + [features_by_layer[conv_id]]), 
+                    MLP([2 * features_by_layer[conv_id - 1]] + [hidden_by_layer[conv_id] for _ in range(mlp_depth)] + [features_by_layer[conv_id]]), 
                     k=self.config['k_neighbors'], aggr=self.config['EConv_aggr']))
 
         # pooling layers
@@ -145,7 +149,7 @@ class EdgeConvFeatures(nn.Module):
             self.global_pool = geometric.global_mean_pool
         elif self.config['global_pool'] == 'add':
             self.global_pool = geometric.global_add_pool
-        else: # max
+        else:  # max
             raise ValueError('{} pooling is not supported'.format(self.config['global_pool']))
             
         # Output linear layer
@@ -216,20 +220,20 @@ class EdgeConvPoolingFeatures(nn.Module):
         super().__init__()
 
         self.config = {'conv_depth': 3}  # defaults for this net
-        self.config.update(n_features1 = 32, n_features2 = 128, n_features3 = 256, k=10)
+        self.config.update(n_features1=32, n_features2=128, n_features3=256, k=10)
         self.config.update(config)  # from input
 
         self.conv1 = geometric.DynamicEdgeConv(
-            _MLP([2 * 3, 64, 64, self.config['n_features1']]), 
+            MLP([2 * 3, 64, 64, self.config['n_features1']]), 
             k=self.config['k'], aggr='max')
         self.pool1 = DynamicASAPool(self.config['n_features1'], k=self.config['k'])
         self.conv2 = geometric.DynamicEdgeConv(
-            _MLP([2 * self.config['n_features1'], self.config['n_features2'], self.config['n_features2'], self.config['n_features2']]), 
+            MLP([2 * self.config['n_features1'], self.config['n_features2'], self.config['n_features2'], self.config['n_features2']]), 
             k=self.config['k'], aggr='max'
-            )
+        )
         self.pool2 = DynamicASAPool(self.config['n_features2'], k=self.config['k'])
         self.conv3 = geometric.DynamicEdgeConv(
-            _MLP([2 * self.config['n_features2'], self.config['n_features3'], self.config['n_features3'], self.config['n_features3']]), 
+            MLP([2 * self.config['n_features2'], self.config['n_features3'], self.config['n_features3'], self.config['n_features3']]), 
             k=self.config['k'], aggr='max')
 
         self.lin = nn.Linear(self.config['n_features3'], out_size)
@@ -264,12 +268,11 @@ class EdgeConvPoolingFeatures(nn.Module):
         return out
 
 
-
 # ------------- Sequence modules -----------
 def _init_tenzor(*shape, device='cpu', init_type=''):
     """shortcut to create & initialize tenzors on a given device.  """
     # TODO suport other init types 
-    if not init_type: # zeros by default
+    if not init_type:  # zeros by default
         new_tenzor = torch.zeros(shape)
     elif 'kaiming_normal' in init_type:
         new_tenzor = torch.empty(shape)
@@ -278,6 +281,7 @@ def _init_tenzor(*shape, device='cpu', init_type=''):
         raise NotImplementedError('{} tenzor initialization is not implemented'.format(init_type))
 
     return new_tenzor.to(device)
+
 
 def _init_weights(module, init_type=''):
     """Initialize weights of provided module with requested init type"""
@@ -412,8 +416,6 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
         out = out.contiguous().view(batch_size, out_len, -1)
 
         return out
-
-
 
 
 # Quick tests

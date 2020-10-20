@@ -110,7 +110,7 @@ class Trainer():
         for epoch in range(start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
-                features, gt = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
+                features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
                 loss = model.loss(features, gt)
@@ -125,7 +125,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'].to(self.device)) for batch in valid_loader]
+                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth']) for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
 
@@ -250,7 +250,9 @@ class Trainer():
             sample = loader.dataset[0]  
             # use it as "one-sample batch"
             img_files = self.datawraper.dataset.save_prediction_batch(
-                model(sample['features'].unsqueeze(0).to(self.device)), [sample['name']], save_to=self.folder_for_preds)
+                model(sample['features'].unsqueeze(0).to(self.device)), 
+                [sample['name']], 
+                save_to=self.folder_for_preds)
             
             print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
             try:

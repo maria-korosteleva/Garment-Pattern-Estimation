@@ -770,10 +770,11 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+        self.config['pattern_len'] = self[0]['ground_truth']['outlines'].shape[0]
         self.config['panel_len'] = self[0]['ground_truth']['outlines'].shape[1]
         self.config['element_size'] = self[0]['ground_truth']['outlines'].shape[2]
         self.config['rotation_size'] = self[0]['ground_truth']['rotations'].shape[1]
-        self.config['translations_size'] = self[0]['ground_truth']['translations'].shape[1]
+        self.config['translation_size'] = self[0]['ground_truth']['translations'].shape[1]
     
     def standardize(self, training=None):
         """Use mean&std for normalization of output edge features & restoring input predictions.
@@ -828,6 +829,34 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_mean'], stats['gt_std']))
         self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
 
+    def save_prediction_batch(self, predictions, datanames, save_to):
+        """Saves predicted params of the datapoint to the original data folder.
+            Returns list of paths to files with prediction visualizations
+            Assumes that the number of predictions matches the number of provided data names"""
+
+        prediction_imgs = []
+        for idx, name in enumerate(datanames):
+
+            # "unbatch" dictionary
+            prediction = {
+                'outlines': predictions['outlines'][idx], 
+                'rotations': predictions['rotations'][idx], 
+                'translations': predictions['translations'][idx]
+            }
+
+            pattern = self._pred_to_pattern(prediction, name)
+
+            # save
+            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+        return prediction_imgs
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         points = self._sample_points(datapoint_name, folder_elements)
@@ -841,13 +870,19 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
         # TODO update to account for stitches
-        prediction = prediction.cpu().numpy()
+
         pattern, rots, transls = prediction['outlines'], prediction['rotations'], prediction['translations']
 
+        # undo standardization  (outside of generinc conversion function due to custom std structure)
+        gt_means = self.config['standardize']['gt_mean']
+        gt_stds = self.config['standardize']['gt_std']
+        pattern = pattern.cpu().numpy() * gt_stds['outlines'] + gt_means['outlines']
+        rots = rots.cpu().numpy() * gt_stds['rotations'] + gt_means['rotations']
+        transls = transls.cpu().numpy() * gt_stds['translations'] + gt_means['translations']
+
         return self._pattern_from_tenzor(
-            dataname, 
-            pattern.cpu().numpy(), rots.cpu().numpy(), transls.cpu().numpy(),
-            std_config=self.config, supress_error=True)
+            dataname, pattern, rots, transls, std_config={},
+            supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):

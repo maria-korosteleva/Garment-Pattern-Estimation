@@ -110,22 +110,24 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='Pattern3D-laptop', 
+        run_name='FullPattern3D-init', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)
+    split, data_config = get_data_config(in_data_config, old_stats=False)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, 
-                                           data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment3DPatternFullDataset(Path(system_info['datasets_path']) / dataset_folder, 
+                                               data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPatternAE(dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'], 
     #     in_nn_config)
-    model = nets.GarmentPattern3D(
-        dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'], 
+    model = nets.GarmentFullPattern3D(
+        dataset.config['element_size'], dataset.config['panel_len'], dataset.config['pattern_len'], 
+        dataset.config['rotation_size'], dataset.config['translation_size'],
+        dataset.config['standardize'], 
         in_nn_config
     )
     if hasattr(model, 'config'):
@@ -143,9 +145,9 @@ if __name__ == "__main__":
 
     dataset_wrapper = trainer.datawraper
 
-    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
-    print('Test metrics: {}'.format(final_metrics))
-    experiment.add_statistic('test_on_best', final_metrics)
+    # final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
+    # print('Test metrics: {}'.format(final_metrics))
+    # experiment.add_statistic('test_on_best', final_metrics)
 
     # print(dataset[276]['features'])  # first element of validation set
 

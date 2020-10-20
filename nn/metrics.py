@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 
+
 # ------- custom metrics --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
@@ -69,10 +70,11 @@ class PanelLoopLoss():
         else:
             self.pad_tenzor = None
 
-# ------- Metrics evaluation -------------
 
+# ------- Metrics evaluation -------------
 metric_functions = {
 }  # No extra metrics are defined right now
+
 
 def eval_metrics(model, data_wrapper, section='test', loop_loss=False):
     """Evalutes all avalible metrics from metric_functions on the given dataset section"""
