@@ -12,6 +12,7 @@ import wandb as wb
 # My modules
 import data as data
 
+
 class Trainer():
     def __init__(self, experiment_tracker, dataset=None, data_split={}, with_norm=True, with_visualization=False):
         """Initialize training and dataset split (if given)
@@ -97,7 +98,7 @@ class Trainer():
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
         self.experiment.save(model.state_dict(), save_name='final')
-        print ("Trainer::Finished training")
+        print("Trainer::Finished training")
 
     # ---- Private -----
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
@@ -134,7 +135,7 @@ class Trainer():
                 self._save_checkpoint(model, epoch, 'best')
             
             # Base logging
-            print ('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
+            print('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
             wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss,
                     'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
 
@@ -262,10 +263,10 @@ class Trainer():
         """Save checkpoint that can be used to resume training"""
         self.experiment.save(
             {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict()
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'scheduler_state_dict': self.scheduler.state_dict()
             },
             save_name=save_name
         )

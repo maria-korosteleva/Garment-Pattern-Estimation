@@ -4,7 +4,10 @@ from pathlib import Path
 import torch
 
 # My modules
-import customconfig, data, metrics, nets
+import customconfig
+import data
+import metrics
+import nets
 from trainer import Trainer
 from experiment import WandbRunWrappper
 
@@ -59,9 +62,9 @@ model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
 # ------- Evaluate --------
 valid_loss = metrics.eval_metrics(model, datawrapper, 'validation', loop_loss=True)
-print ('Validation metrics: {}'.format(valid_loss))
+print('Validation metrics: {}'.format(valid_loss))
 test_metrics = metrics.eval_metrics(model, datawrapper, 'test', loop_loss=True)
-print ('Test metrics: {}'.format(test_metrics))
+print('Test metrics: {}'.format(test_metrics))
 
 # print(dataset[276]['features'])  # first element of validation set
 

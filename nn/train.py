@@ -2,7 +2,10 @@ from pathlib import Path
 import argparse
 
 # My modules
-import customconfig, data, nets, metrics
+import customconfig
+import data
+import nets
+import metrics
 from trainer import Trainer
 from experiment import WandbRunWrappper
 
@@ -56,7 +59,7 @@ def get_values_from_args():
         'conv_depth': args.conv_depth, 
         'k_neighbors': args.k_multiplier * 5, 
         'EConv_hidden': args.ec_hidden_multiplier * 8, 
-        'EConv_hidden_depth' : args.ec_hidden_depth, 
+        'EConv_hidden_depth': args.ec_hidden_depth, 
         'EConv_feature': args.ec_feature_multiplier * 8, 
         'EConv_aggr': args.ec_conv_aggr, 
         'global_pool': args.ec_global_aggr, 
@@ -74,7 +77,8 @@ def get_data_config(in_config, old_stats=False):
     if old_stats:
         # get data stats from older runs to save runtime
         # TODO Update after getting run with zeros in mean edge coordinates!!
-        old_experiment = WandbRunWrappper(system_info['wandb_username'],
+        old_experiment = WandbRunWrappper(
+            system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
             run_name='Pattern3D-capacity', run_id='3rzpdacg'
         )
@@ -83,7 +87,7 @@ def get_data_config(in_config, old_stats=False):
         data_config = {
             'standardize': data_config['standardize']  # the rest of the info is not needed here
         }
-    else: # default split for reproducibility
+    else:  # default split for reproducibility
         split = {'valid_percent': 10, 'test_percent': 10, 'random_seed': 10} 
         data_config = {}
 
@@ -113,7 +117,7 @@ if __name__ == "__main__":
     split, data_config = get_data_config(in_data_config, old_stats=True)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, 
-                                            data_config, gt_caching=True, feature_caching=True)
+                                           data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
@@ -133,7 +137,7 @@ if __name__ == "__main__":
     # On the best-performing model
     try:
         model.load_state_dict(experiment.load_best_model()['model_state_dict'])
-    except BaseException as e: # not the best to catch all the exceptions here, but should work for most of cases foe now
+    except BaseException as e:  # not the best to catch all the exceptions here, but should work for most of cases foe now
         print(e)
         print('Train::Warning::Proceeding to evaluation with the current (final) model state')
 
