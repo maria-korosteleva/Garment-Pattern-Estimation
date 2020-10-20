@@ -106,12 +106,12 @@ class Trainer():
         log_step = wb.run.step - 1
         best_valid_loss = None
         
-        for epoch in range (start_epoch, wb.config.epochs):
+        for epoch in range(start_epoch, wb.config.epochs):
             model.train()
             for i, batch in enumerate(train_loader):
                 features, gt = batch['features'].to(self.device), batch['ground_truth'].to(self.device)
                 
-                #with torch.autograd.detect_anomaly():
+                # with torch.autograd.detect_anomaly():
                 loss = model.loss(features, gt)
                 loss.backward()
                 self.optimizer.step()

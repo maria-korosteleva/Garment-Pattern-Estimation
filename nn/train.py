@@ -6,6 +6,7 @@ import customconfig, data, nets, metrics
 from trainer import Trainer
 from experiment import WandbRunWrappper
 
+
 def get_values_from_args():
     """command line arguments to control the run for running wandb Sweeps!"""
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
@@ -14,7 +15,7 @@ def get_values_from_args():
     # Default values from run 9j12qp24, best of sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=4)  # 19
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=1)  # 19
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=13)
@@ -25,7 +26,7 @@ def get_values_from_args():
     parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
     # EdgeConv
     parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=3)
-    parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=2)
+    parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=1)  # 2
     parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=8)
     parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
     parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=8)
@@ -104,8 +105,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Pattern3D-edge-parametrized', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Pattern3D-laptop', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -139,7 +140,7 @@ if __name__ == "__main__":
     dataset_wrapper = trainer.datawraper
 
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
-    print ('Test metrics: {}'.format(final_metrics))
+    print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
     # print(dataset[276]['features'])  # first element of validation set

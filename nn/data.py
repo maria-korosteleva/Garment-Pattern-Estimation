@@ -16,6 +16,7 @@ from customconfig import Properties
 from pattern.core import ParametrizedPattern, BasicPattern
 from pattern.wrappers import VisPattern
 
+
 # ---------------------- Main Wrapper ------------------
 class DatasetWrapper(object):
     """Resposible for keeping dataset, its splits, loaders & processing routines.
@@ -96,9 +97,9 @@ class DatasetWrapper(object):
             self.split_info = split_info
 
         torch.manual_seed(self.split_info['random_seed'])
-        valid_size = (int) (len(self.dataset) * self.split_info['valid_percent'] / 100)
+        valid_size = (int)(len(self.dataset) * self.split_info['valid_percent'] / 100)
         if self.split_info['test_percent']:
-            test_size = (int) (len(self.dataset) * self.split_info['test_percent'] / 100)
+            test_size = (int)(len(self.dataset) * self.split_info['test_percent'] / 100)
             self.training, self.validation, self.test = torch.utils.data.random_split(
                 self.dataset, (len(self.dataset) - valid_size - test_size, valid_size, test_size))
         else:
@@ -111,9 +112,9 @@ class DatasetWrapper(object):
         if self.batch_size is not None:
             self.new_loaders()  # s.t. loaders could be used right away
 
-        print ('{} split: {} / {} / {}'.format(self.dataset.name, len(self.training), 
-                                               len(self.validation) if self.validation else None, 
-                                               len(self.test) if self.test else None))
+        print('{} split: {} / {} / {}'.format(self.dataset.name, len(self.training), 
+                                              len(self.validation) if self.validation else None, 
+                                              len(self.test) if self.test else None))
 
         return self.training, self.validation, self.test
 
@@ -157,19 +158,37 @@ class DatasetWrapper(object):
                             self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
         return prediction_path
 
+
 # ------------------ Transforms ----------------
+def _dict_to_tensors(dict_obj):  # helper
+    """convert a dictionary with numeric values into a new dictionary with torch tensors"""
+    new_dict = dict.fromkeys(dict_obj.keys())
+    for key, value in dict_obj.items():
+        if isinstance(value, np.ndarray):
+            new_dict[key] = torch.from_numpy(value).float()
+        else:
+            new_dict[key] = torch.Tenzor(value)
+    return new_dict
+
+
 # Custom transforms -- to tensor
 class SampleToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     
     def __call__(self, sample):
         features, gt = sample['features'], sample['ground_truth']
+
+        if isinstance(gt, dict):
+            new_gt = _dict_to_tensors(gt)
+        else: 
+            new_gt = torch.from_numpy(gt).float() if gt is not None else torch.Tensor(), 
         
         return {
             'features': torch.from_numpy(features).float() if features is not None else torch.Tensor(), 
-            'ground_truth': torch.from_numpy(gt).float() if gt is not None else torch.Tensor(), 
+            'ground_truth': new_gt, 
             'name': sample['name']
         }
+
 
 class FeatureStandartization():
     """Normalize features of provided sample with given stats"""
@@ -184,18 +203,30 @@ class FeatureStandartization():
             'name': sample['name']
         }
 
+
 class GTtandartization():
     """Normalize features of provided sample with given stats"""
     def __init__(self, mean, std):
-        self.mean = torch.Tensor(mean)
-        self.std = torch.Tensor(std)
+        """If ground truth is a dictionary in itself, the provided values should also be dictionaries"""
+        
+        self.mean = _dict_to_tensors(mean) if isinstance(mean, dict) else torch.Tensor(mean)
+        self.std = _dict_to_tensors(std) if isinstance(std, dict) else torch.Tensor(std)
     
     def __call__(self, sample):
+        gt = sample['ground_truth']
+        if isinstance(gt, dict):
+            new_gt = dict.fromkeys(gt.keys())
+            for key, value in gt.items():
+                new_gt[key] = (value - self.mean[key]) / self.std[key]
+        else:
+            new_gt = (gt - self.mean) / self.std
+
         return {
             'features': sample['features'],
-            'ground_truth': (sample['ground_truth'] - self.mean) / self.std,
+            'ground_truth': new_gt,
             'name': sample['name']
         }
+
 
 # --------------------- Datasets -------------------------
 
@@ -339,12 +370,13 @@ class BaseDataset(Dataset):
     def _estimate_data_shape(self):
         """Get sizes/shapes of a datapoint for external references"""
         elem = self[0]
-        feature_size, gt_size = elem['features'].shape[0], elem['ground_truth'].shape[0]
+        feature_size = elem['features'].shape[0]
+        gt_size = elem['ground_truth'].shape[0] if hasattr(elem['ground_truth'], 'shape') else None
         # sanity checks
-        if ('feature_size' in self.config and feature_size != self.config['feature_size']
+        if ('feature_size' in self.config and feature_size != self.config['feature_size'] 
                 or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
             raise RuntimeError('BaseDataset::Error::feature shape ({}) or ground truth shape ({}) from loaded config do not match calculated values: {}, {}'.format(
-                self.config['feature_size'],  self.config['ground_truth_size'], feature_size, gt_size))
+                self.config['feature_size'], self.config['ground_truth_size'], feature_size, gt_size))
 
         self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size
 
@@ -448,16 +480,17 @@ class GarmentBaseDataset(BaseDataset):
 
         return points
 
-    def _read_pattern(self, datapoint_name, folder_elements):
+    def _read_pattern(self, datapoint_name, folder_elements, with_placement=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensors()
+        return pattern.pattern_as_tensors(with_placement=with_placement)
 
-    def _pattern_from_tenzor(self, dataname, tenzor, std_config={}, supress_error=True):
+    def _pattern_from_tenzor(self, dataname, 
+                             tenzor, rotations=None, translations=None, std_config={}, supress_error=True):
         """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
         if std_config and 'standardize' in std_config:
             tenzor = tenzor * self.config['standardize']['std'] + self.config['standardize']['mean']
@@ -465,7 +498,9 @@ class GarmentBaseDataset(BaseDataset):
         pattern = VisPattern(view_ids=False)
         pattern.name = dataname
         try: 
-            pattern.pattern_from_tensors(tenzor, padded=True)   
+            pattern.pattern_from_tensors(
+                tenzor, panel_rotations=rotations, panel_translations=translations, 
+                padded=True)   
         except RuntimeError as e:
             if not supress_error:
                 raise e
@@ -597,7 +632,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
                 feature_mean[0] = feature_mean[1] = 0
 
                 break  # only one batch out there anyway
-            self.config['standardize'] = {'mean' : feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+            self.config['standardize'] = {'mean': feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
         else:  # no info provided
             raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
@@ -655,7 +690,7 @@ class Garment2DPatternDataset(GarmentPanelDataset):
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
         prediction = prediction.cpu().numpy()
-        return self._pattern_from_tenzor(dataname, prediction, self.config, supress_error=True)
+        return self._pattern_from_tenzor(dataname, prediction, std_config=self.config, supress_error=True)
 
 
 class Garment3DPatternDataset(GarmentBaseDataset):
@@ -697,8 +732,8 @@ class Garment3DPatternDataset(GarmentBaseDataset):
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
-                'mean' : gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
-                'f_mean' : feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
+                'mean': gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
+                'f_mean': feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
         else:  # nothing is provided
             raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
@@ -721,7 +756,98 @@ class Garment3DPatternDataset(GarmentBaseDataset):
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
         prediction = prediction.cpu().numpy()
-        return self._pattern_from_tenzor(dataname, prediction, self.config, supress_error=True)
+        return self._pattern_from_tenzor(dataname, prediction, std_config=self.config, supress_error=True)
+
+
+class Garment3DPatternFullDataset(GarmentBaseDataset):
+    """Dataset with full pattern definition as ground truth
+        * it includes not only every panel outline geometry, but also 3D placement and stitches information
+        Defines 3D samples from the point cloud as features
+    """
+    # TODO add stitches
+    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+        if 'mesh_samples' not in start_config:
+            start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
+        super().__init__(root_dir, start_config, 
+                         gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+        self.config['panel_len'] = self[0]['ground_truth']['outlines'].shape[1]
+        self.config['element_size'] = self[0]['ground_truth']['outlines'].shape[2]
+        self.config['rotation_size'] = self[0]['ground_truth']['rotations'].shape[1]
+        self.config['translations_size'] = self[0]['ground_truth']['translations'].shape[1]
+    
+    def standardize(self, training=None):
+        """Use mean&std for normalization of output edge features & restoring input predictions.
+            Accepts either of two inputs: 
+            * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
+            * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided
+                => speed-up by providing stats or speeding up multiple calls to this function
+        """
+        print('Garment3DPatternFullDataset::Using data normalization for features & ground truth')
+
+        if 'standardize' in self.config:
+            print('{}::Using stats from config'.format(self.__class__.__name__))
+            stats = self.config['standardize']
+        elif training is not None:
+            loader = DataLoader(training, batch_size=len(training), shuffle=False)
+            for batch in loader:
+                feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
+
+                gt = batch['ground_truth']
+                panel_mean, panel_stds = self._get_stats(gt['outlines'], padded=True)
+                # NOTE mean values for panels are zero due to loop property 
+                # panel components CANNOT be shifted to keep the loop property intact 
+                # hence enforce zeros in mean value for edge coordinates
+                panel_mean[0] = panel_mean[1] = 0
+
+                transl_mean, transl_stds = self._get_stats(gt['translations'], padded=True)
+                
+                break  # only one batch out there anyway
+
+            self.config['standardize'] = {
+                'f_mean': feature_mean.cpu().numpy(), 
+                'f_std': feature_stds.cpu().numpy(),
+                'gt_mean': {
+                    'outlines': panel_mean.cpu().numpy(), 
+                    'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
+                    'translations': transl_mean.cpu().numpy(), 
+                },
+                'gt_std': {
+                    'outlines': panel_stds.cpu().numpy(), 
+                    'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
+                    'translations': transl_stds.cpu().numpy(),
+                }
+            }
+            stats = self.config['standardize']
+        else:  # nothing is provided
+            raise ValueError('Garment3DPatternFullDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
+
+        # clean-up tranform list to avoid duplicates
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
+
+        self.transforms.append(GTtandartization(stats['gt_mean'], stats['gt_std']))
+        self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
+
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        points = self._sample_points(datapoint_name, folder_elements)
+        return points  # return in 3D
+      
+    def _get_ground_truth(self, datapoint_name, folder_elements):
+        """Get the pattern representation with 3D placement"""
+        pattern, rots, tranls = self._read_pattern(datapoint_name, folder_elements, with_placement=True)
+        return {'outlines': pattern, 'rotations': rots, 'translations': tranls}
+
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        # TODO update to account for stitches
+        prediction = prediction.cpu().numpy()
+        pattern, rots, transls = prediction['outlines'], prediction['rotations'], prediction['translations']
+
+        return self._pattern_from_tenzor(
+            dataname, 
+            pattern.cpu().numpy(), rots.cpu().numpy(), transls.cpu().numpy(),
+            std_config=self.config, supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -756,7 +882,7 @@ class ParametrizedShirtDataSet(BaseDataset):
             prediction = prediction.tolist()
             with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
                 f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
-                print ('Saved ' + name)
+                print('Saved ' + name)
             prediction_files.append(str(path_to_prediction / self.pattern_params_filename))
         return prediction_files
 
@@ -783,7 +909,7 @@ class ParametrizedShirtDataSet(BaseDataset):
         # assuming that we need the numbers from the last line in file
         with open(self.root_path / datapoint_name / self.pattern_params_filename) as f:
             lines = f.readlines()
-            params = np.fromstring(lines[-1],  sep = ' ')
+            params = np.fromstring(lines[-1], sep=' ')
         return params
        
 
@@ -794,19 +920,21 @@ if __name__ == "__main__":
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
-    data_location = Path(system['output']) / dataset_folder
+    data_location = Path(system['datasets_path']) / dataset_folder
 
-    dataset = Garment3DPatternDataset(data_location)
+    dataset = Garment3DPatternFullDataset(data_location)
 
     print(len(dataset), dataset.config)
-    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['ground_truth'].shape)
+    print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
 
-    print(dataset[5]['features'])
+    # print(dataset[5]['features'])
 
     datawrapper = DatasetWrapper(dataset)
     datawrapper.new_split(10, 10, 300)
 
     datawrapper.standardize_data()
 
-    print(dataset[0]['ground_truth'])
-    print(dataset[5]['features'])
+    # print(dataset.config['standardize'])
+
+    # print(dataset[0]['ground_truth'])
+    # print(dataset[5]['features'])
