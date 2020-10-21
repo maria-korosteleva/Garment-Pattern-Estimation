@@ -102,7 +102,7 @@ def eval_metrics(model, data_wrapper, section='test', loop_loss=False):
                 if gt is None or gt.nelement() == 0:  # assume reconstruction task
                     gt = features
                 # basic metric
-                model_defined += model.loss(features, gt)
+                model_defined += model.loss(features, gt)[0]
                 # other metrics from this module
                 preds = model(features)
                 for metric in current_metrics:

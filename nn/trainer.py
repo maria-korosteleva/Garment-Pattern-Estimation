@@ -113,19 +113,20 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss = model.loss(features, gt)
+                loss, loss_dict = model.loss(features, gt)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 
                 # logging
                 log_step += 1
-                wb.log({'epoch': epoch, 'batch': i, 'loss': loss}, step=log_step)
+                loss_dict.update({'epoch': epoch, 'batch': i, 'loss': loss})
+                wb.log(loss_dict, step=log_step)
 
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth']) for batch in valid_loader]
+                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'])[0] for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
             self.scheduler.step(valid_loss)
 

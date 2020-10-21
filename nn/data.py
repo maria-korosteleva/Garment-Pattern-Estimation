@@ -167,7 +167,7 @@ def _dict_to_tensors(dict_obj):  # helper
         if isinstance(value, np.ndarray):
             new_dict[key] = torch.from_numpy(value).float()
         else:
-            new_dict[key] = torch.Tenzor(value)
+            new_dict[key] = torch.Tensor(value)
     return new_dict
 
 

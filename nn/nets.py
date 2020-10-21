@@ -398,13 +398,11 @@ class GarmentFullPattern3D(BaseModule):
         self.rotation_decoder = blocks.MLP([
             self.config['pattern_encoding_size'] + self.config['panel_encoding_size'],
             100,
-            100, 
             rotation_size
         ])
         self.translation_decoder = blocks.MLP([
             self.config['pattern_encoding_size'] + self.config['panel_encoding_size'],
             100,
-            100, 
             translation_size
         ])
 
@@ -453,7 +451,11 @@ class GarmentFullPattern3D(BaseModule):
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
-        return pattern_loss + self.config['loop_loss_weight'] * loop_loss + rot_loss + translation_loss
+        loss_dict = dict(
+            pattern_loss=pattern_loss, loop_loss=loop_loss, 
+            rotation_loss=rot_loss, translation_loss=translation_loss)
+
+        return pattern_loss + self.config['loop_loss_weight'] * loop_loss + rot_loss + translation_loss, loss_dict
 
 
 
