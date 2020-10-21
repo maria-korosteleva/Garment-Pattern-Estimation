@@ -19,7 +19,8 @@ class BaseModule(nn.Module):
         """Default loss for my neural networks. Takes pne batch of data"""
         preds = self(features)
         ground_truth = ground_truth.to(features.device)  # make sure device is correct
-        return self.regression_loss(preds, ground_truth)
+        loss = self.regression_loss(preds, ground_truth)
+        return loss, {'regression loss': loss}  # second term is for compound losses
 
 
 # -------- Nets architectures -----------
@@ -252,7 +253,10 @@ class GarmentPatternAE(BaseModule):
         # ---- Loop loss -----
         loop_loss = self.loop_loss(preds, features)
 
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
+        # return format
+        loss_dict = dict(pattern_loss=reconstruction_loss, loop_loss=loop_loss)
+        
+        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict
 
 
 class GarmentPattern3D(BaseModule):
@@ -337,7 +341,10 @@ class GarmentPattern3D(BaseModule):
         # Loop loss per panel
         loop_loss = self.loop_loss(preds, ground_truth)
 
-        return pattern_loss + self.config['loop_loss_weight'] * loop_loss
+        # return format
+        loss_dict = dict(pattern_loss=pattern_loss, loop_loss=loop_loss)
+
+        return pattern_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict
 
 
 class GarmentFullPattern3D(BaseModule):
