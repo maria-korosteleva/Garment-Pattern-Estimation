@@ -71,43 +71,36 @@ class PanelLoopLoss():
             self.pad_tenzor = None
 
 
-# ------- Metrics evaluation -------------
-metric_functions = {
-}  # No extra metrics are defined right now
+# ------- Model evaluation shortcut -------------
 
-
-def eval_metrics(model, data_wrapper, section='test', loop_loss=False):
-    """Evalutes all avalible metrics from metric_functions on the given dataset section"""
+def eval_metrics(model, data_wrapper, section='test'):
+    """Evalutes current model on the given dataset section"""
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
-
-    if loop_loss:
-        # modify loss object according to the data stats
-        if 'standardize' in data_wrapper.dataset.config:
-            # NOTE assuming shift&scale is applied to padding
-            metric_functions['loop_loss'] = PanelLoopLoss(data_stats=data_wrapper.dataset.config['standardize'])
-        else:
-            metric_functions['loop_loss'] = PanelLoopLoss()  # no padding == zero padding assumed
 
     with torch.no_grad():
         current_metrics = {}
         loader = data_wrapper.get_loader(section)
         if loader:
-            current_metrics = dict.fromkeys(metric_functions, 0)
+            current_metrics = dict.fromkeys(['full_loss'], 0)
             model_defined = 0
             loop_loss = 0
             for batch in loader:
-                features, gt = batch['features'].to(device), batch['ground_truth'].to(device)
-                if gt is None or gt.nelement() == 0:  # assume reconstruction task
+                features, gt = batch['features'].to(device), batch['ground_truth']
+                if gt is None or (hasattr(gt, 'nelement') and gt.nelement() == 0):  # assume reconstruction task
                     gt = features
-                # basic metric
-                model_defined += model.loss(features, gt)[0]
-                # other metrics from this module
-                preds = model(features)
-                for metric in current_metrics:
-                    current_metrics[metric] += metric_functions[metric](preds, gt)
-            current_metrics['model_defined'] = model_defined
+
+                # loss evaluation
+                full_loss, loss_dict = model.loss(features, gt)
+
+                # summing up
+                current_metrics['full_loss'] += full_loss
+                for key, value in loss_dict.items():
+                    if key not in current_metrics:
+                        current_metrics[key] = 0  # init new metric
+                    current_metrics[key] += value
+
             # normalize & convert
             for metric in current_metrics:
                 current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu

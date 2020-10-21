@@ -110,7 +110,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='FullPattern3D-multiloss', 
+        run_name='Placement-2nets-metrics', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -145,9 +145,9 @@ if __name__ == "__main__":
 
     dataset_wrapper = trainer.datawraper
 
-    # final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test', loop_loss=True)
-    # print('Test metrics: {}'.format(final_metrics))
-    # experiment.add_statistic('test_on_best', final_metrics)
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
+    print('Test metrics: {}'.format(final_metrics))
+    experiment.add_statistic('test_on_best', final_metrics)
 
     # print(dataset[276]['features'])  # first element of validation set
 

@@ -971,5 +971,5 @@ if __name__ == "__main__":
 
     # print(dataset.config['standardize'])
 
-    # print(dataset[0]['ground_truth'])
+    print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])
