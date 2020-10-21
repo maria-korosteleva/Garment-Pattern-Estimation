@@ -18,6 +18,7 @@ class BaseModule(nn.Module):
     def loss(self, features, ground_truth):
         """Default loss for my neural networks. Takes pne batch of data"""
         preds = self(features)
+        ground_truth = ground_truth.to(features.device)  # make sure device is correct
         return self.regression_loss(preds, ground_truth)
 
 
@@ -328,6 +329,7 @@ class GarmentPattern3D(BaseModule):
     def loss(self, features, ground_truth):
         """Evalute loss when predicting patterns"""
         preds = self(features)
+        ground_truth = ground_truth.to(features.device)  # make sure device is correct
 
         # Base extraction loss 
         pattern_loss = self.regression_loss(preds, ground_truth) 
@@ -443,9 +445,10 @@ class GarmentFullPattern3D(BaseModule):
         device = features.device
 
         # Loss for panel shapes
-        pattern_loss = self.regression_loss(preds['outlines'], ground_truth['outlines'].to(device))   
+        outlines = ground_truth['outlines'].to(device)
+        pattern_loss = self.regression_loss(preds['outlines'], outlines)   
         # Loop loss per panel
-        loop_loss = self.loop_loss(preds['outlines'], ground_truth['outlines'].to(device))
+        loop_loss = self.loop_loss(preds['outlines'], outlines)
 
         # panel placement
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
