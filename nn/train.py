@@ -79,8 +79,8 @@ def get_data_config(in_config, old_stats=False):
         # TODO Update after getting run with zeros in mean edge coordinates!!
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Test-Garments-Reconstruction', 
-            run_name='FullPattern3D-init', run_id='23ou1hsg'
+            project_name='Garments-Reconstruction', 
+            run_name='Placement-2nets-euler', run_id='37hpqtod'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -110,11 +110,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Placement-2nets-transl_norm', 
+        run_name='Placement-2nets-no-skip', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)
+    split, data_config = get_data_config(in_data_config, old_stats=True)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(Path(system_info['datasets_path']) / dataset_folder, 
                                                data_config, gt_caching=True, feature_caching=True)

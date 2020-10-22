@@ -594,10 +594,10 @@ class ParametrizedPattern(BasicPattern):
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
 
-    def panel_from_numeric(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
+    def panel_from_numeric(self, panel_name, edge_sequence, rotation=None, translation=None, padded=False):
         """When direct update is applied to parametrized pattern panels, 
             all the parameter settings become invalid"""
-        super().panel_from_numeric(panel_name, edge_sequence, rotation_6, translation, padded)
+        super().panel_from_numeric(panel_name, edge_sequence, rotation, translation, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
