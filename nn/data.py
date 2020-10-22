@@ -535,6 +535,26 @@ class GarmentBaseDataset(BaseDataset):
 
         return mean, stds
 
+    def _get_norm_stats(self, input_batch, padded=False):
+        """Calculate shift & scaling values needed to normalize input tenzor 
+            along the last dimention to [0, 1] range"""
+        input_batch = input_batch.view(-1, input_batch.shape[-1])
+        if padded:
+            input_batch = self._unpad(input_batch)  # remove rows with zeros
+
+        # per dimention means
+        min_vector, _ = torch.min(input_batch, 0)
+        max_vector, _ = torch.max(input_batch, 0)
+        scale = torch.empty_like(min_vector)
+        # avoid division by zero
+        for idx, (tmin, tmax) in enumerate(zip(min_vector, max_vector)): 
+            if torch.isclose(tmin, tmax):
+                scale[idx] = tmin if not torch.isclose(tmin, 0) else 1.
+            else:
+                scale[idx] = tmax - tmin
+        
+        return min_vector, scale
+
 
 class GarmentParamsDataset(GarmentBaseDataset):
     """
@@ -798,11 +818,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 panel_mean, panel_stds = self._get_stats(gt['outlines'], padded=True)
                 # NOTE mean values for panels are zero due to loop property 
                 # panel components CANNOT be shifted to keep the loop property intact 
-                # hence enforce zeros in mean value for edge coordinates
                 panel_mean[0] = panel_mean[1] = 0
 
-                transl_mean, transl_stds = self._get_stats(gt['translations'], padded=True)
-                
+                # Use min\scale (normalization) instead of Gaussian stats for translation
+                # No padding as zero translation is a valid value
+                transl_min, transl_scale = self._get_norm_stats(gt['translations'])
+
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
@@ -811,12 +832,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 'gt_mean': {
                     'outlines': panel_mean.cpu().numpy(), 
                     'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
-                    'translations': transl_mean.cpu().numpy(), 
+                    'translations': transl_min.cpu().numpy(), 
                 },
                 'gt_std': {
                     'outlines': panel_stds.cpu().numpy(), 
                     'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
-                    'translations': transl_stds.cpu().numpy(),
+                    'translations': transl_scale.cpu().numpy(),
                 }
             }
             stats = self.config['standardize']
@@ -969,7 +990,7 @@ if __name__ == "__main__":
 
     datawrapper.standardize_data()
 
-    # print(dataset.config['standardize'])
+    print(dataset.config['standardize'])
 
     print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])

@@ -233,10 +233,11 @@ class BasicPattern(object):
 
         # Global Translation with compensative update for local origin change (shift)
         shift = np.append(shift, 0)  # translation to 3D
+
         comenpensating_shift = - panel_rotation.dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
-
         rotation_representation = panel_rotation.flatten(order='F')[:6]  # first two columns
+
         return np.stack(edge_sequence, axis=0), rotation_representation, translation
 
     def panel_from_numeric(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
@@ -945,15 +946,17 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = VisPattern()
     # empty_pattern = BasicPattern()
     print(pattern.panel_order())
 
     tensor, rot, transl = pattern.pattern_as_tensors(with_placement=True)
-    panel_name = 'right'
-    print(pattern.pattern['panels'][panel_name])
+    print(rot, transl)
+
+    # panel_name = 'right'
+    # print(pattern.pattern['panels'][panel_name])
     # edges, rot, transl = pattern.panel_as_sequence(panel_name)
     # print(edges, rot, transl)
 
@@ -965,5 +968,5 @@ if __name__ == "__main__":
     print(pattern.pattern['panels']['panel_0'])
     print(pattern.panel_order())
 
-    # pattern.name += '_placement_upd_1'
-    # pattern.serialize(system_config['output'], to_subfolder=True)
+    pattern.name += '_placement_upd_1'
+    pattern.serialize(system_config['output'], to_subfolder=True)
