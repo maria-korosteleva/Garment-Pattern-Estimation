@@ -549,7 +549,7 @@ class GarmentBaseDataset(BaseDataset):
         # avoid division by zero
         for idx, (tmin, tmax) in enumerate(zip(min_vector, max_vector)): 
             if torch.isclose(tmin, tmax):
-                scale[idx] = tmin if not torch.isclose(tmin, 0) else 1.
+                scale[idx] = tmin if not torch.isclose(tmin, torch.zeros(1)) else 1.
             else:
                 scale[idx] = tmax - tmin
         
@@ -823,6 +823,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 # Use min\scale (normalization) instead of Gaussian stats for translation
                 # No padding as zero translation is a valid value
                 transl_min, transl_scale = self._get_norm_stats(gt['translations'])
+                rot_min, rot_scale = self._get_norm_stats(gt['rotations'])
 
                 break  # only one batch out there anyway
 
@@ -831,12 +832,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 'f_std': feature_stds.cpu().numpy(),
                 'gt_mean': {
                     'outlines': panel_mean.cpu().numpy(), 
-                    'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
+                    # 'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
+                    'rotations': rot_min.cpu().numpy(),
                     'translations': transl_min.cpu().numpy(), 
                 },
                 'gt_std': {
                     'outlines': panel_stds.cpu().numpy(), 
-                    'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
+                    # 'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
+                    'rotations': rot_scale.cpu().numpy(),
                     'translations': transl_scale.cpu().numpy(),
                 }
             }
