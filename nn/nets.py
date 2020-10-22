@@ -406,10 +406,15 @@ class GarmentFullPattern3D(BaseModule):
         )
 
         # decoding the panel placement
-        self.placement_decoder = blocks.MLP([
+        self.rotation_decoder = blocks.MLP([
             self.config['pattern_encoding_size'] + self.config['panel_encoding_size'],
             100,
-            rotation_size + translation_size
+            rotation_size
+        ])
+        self.translation_decoder = blocks.MLP([
+            self.config['pattern_encoding_size'] + self.config['panel_encoding_size'],
+            100,
+            translation_size
         ])
 
         # TODO add stitches prediction modules
@@ -433,11 +438,9 @@ class GarmentFullPattern3D(BaseModule):
         propagated_pattern_enc = pattern_encoding.repeat(1, self.max_pattern_size).view(-1, pattern_encoding.shape[-1])
         concatenated_pattern_panel = torch.cat([flat_panel_encodings, propagated_pattern_enc], -1)
 
-        flat_placement = self.placement_decoder(concatenated_pattern_panel) 
-        print(flat_placement.shape)
-        flat_rotations = flat_placement[:, :self.rotation_size]
-        flat_translations = flat_placement[:, self.rotation_size:]
-        print(flat_rotations.shape, flat_translations.shape)
+        flat_rotations = self.rotation_decoder(concatenated_pattern_panel) 
+        flat_translations = self.translation_decoder(concatenated_pattern_panel)
+
 
         # reshape to per-pattern predictions
         outlines = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
