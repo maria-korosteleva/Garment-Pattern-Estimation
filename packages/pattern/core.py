@@ -171,7 +171,7 @@ class BasicPattern(object):
             self.panel_from_numeric(
                 'panel_' + str(idx), 
                 pattern_representation[idx], 
-                rotation_6=panel_rotations[idx] if panel_rotations is not None else None,
+                rotation=panel_rotations[idx] if panel_rotations is not None else None,
                 translation=panel_translations[idx] if panel_translations is not None else None,
                 padded=padded)
 
@@ -236,11 +236,11 @@ class BasicPattern(object):
 
         comenpensating_shift = - panel_rotation.dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
-        rotation_representation = panel_rotation.flatten(order='F')[:6]  # first two columns
+        rotation_representation = np.array(panel['rotation'])
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation
 
-    def panel_from_numeric(self, panel_name, edge_sequence, rotation_6=None, translation=None, padded=False):
+    def panel_from_numeric(self, panel_name, edge_sequence, rotation=None, translation=None, padded=False):
         """ Updates or creates panel from NN-compatible numeric representation
             * Set panel vertex (local) positions & edge dictionaries from given edge sequence
             * Set panel 3D translation and orientation if given. Accepts 6-element rotation representation -- first two colomns of rotation matrix"""
@@ -288,15 +288,8 @@ class BasicPattern(object):
             # simply set as is
             panel['translation'] = translation.tolist()
         
-        if rotation_6 is not None:
-            # convert from 6-elements representation
-            col_1 = rotation_6[:3] / np.linalg.norm(rotation_6[:3])
-            col_2 = rotation_6[3:] / np.linalg.norm(rotation_6[3:])
-            col_3 = np.cross(col_1, col_2)
-            rot_mat = np.column_stack((col_1, col_2, col_3))
-            rotation = Rotation.from_matrix(rot_mat)
-            # Follows the Maya convention: intrinsic xyz Euler Angles
-            panel['rotation'] = rotation.as_euler('xyz', degrees=True).tolist()
+        if rotation is not None:
+            panel['rotation'] = rotation.tolist()
         
         print('BasicPattern::Warning::{}::Edge and vertex info updated for panel {}. Stitches might be broken'.format(self.name, panel_name))
 
