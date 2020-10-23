@@ -406,8 +406,9 @@ class GarmentFullPattern3D(BaseModule):
         )
 
         # decoding the panel placement
-        self.rotation_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size)
-        self.translation_decoder = nn.Linear(self.config['panel_encoding_size'], translation_size)
+        # self.rotation_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size)
+        # self.translation_decoder = nn.Linear(self.config['panel_encoding_size'], translation_size)
+        self.placement_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size + translation_size)
 
         # TODO add stitches prediction modules
 
@@ -426,8 +427,9 @@ class GarmentFullPattern3D(BaseModule):
         flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
         
         # Placement
-        flat_rotations = self.rotation_decoder(flat_panel_encodings) 
-        flat_translations = self.translation_decoder(flat_panel_encodings)
+        flat_placement = self.placement_decoder(flat_panel_encodings)
+        flat_rotations = flat_placement[:, :self.rotation_size]
+        flat_translations = flat_placement[:, self.rotation_size:]
 
         # reshape to per-pattern predictions
         outlines = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
