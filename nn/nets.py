@@ -406,16 +406,8 @@ class GarmentFullPattern3D(BaseModule):
         )
 
         # decoding the panel placement
-        self.rotation_decoder = blocks.MLP([
-            self.config['panel_encoding_size'],
-            100,
-            rotation_size
-        ])
-        self.translation_decoder = blocks.MLP([
-            self.config['panel_encoding_size'],
-            100,
-            translation_size
-        ])
+        self.rotation_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size)
+        self.translation_decoder = nn.Linear(self.config['panel_encoding_size'], translation_size)
 
         # TODO add stitches prediction modules
 
