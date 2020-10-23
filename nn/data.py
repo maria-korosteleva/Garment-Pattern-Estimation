@@ -192,13 +192,13 @@ class SampleToTensor(object):
 
 class FeatureStandartization():
     """Normalize features of provided sample with given stats"""
-    def __init__(self, mean, std):
-        self.mean = torch.Tensor(mean)
-        self.std = torch.Tensor(std)
+    def __init__(self, shift, scale):
+        self.shift = torch.Tensor(shift)
+        self.scale = torch.Tensor(scale)
     
     def __call__(self, sample):
         return {
-            'features': (sample['features'] - self.mean) / self.std,
+            'features': (sample['features'] - self.shift) / self.scale,
             'ground_truth': sample['ground_truth'],
             'name': sample['name']
         }
@@ -206,20 +206,20 @@ class FeatureStandartization():
 
 class GTtandartization():
     """Normalize features of provided sample with given stats"""
-    def __init__(self, mean, std):
+    def __init__(self, shift, scale):
         """If ground truth is a dictionary in itself, the provided values should also be dictionaries"""
         
-        self.mean = _dict_to_tensors(mean) if isinstance(mean, dict) else torch.Tensor(mean)
-        self.std = _dict_to_tensors(std) if isinstance(std, dict) else torch.Tensor(std)
+        self.shift = _dict_to_tensors(shift) if isinstance(shift, dict) else torch.Tensor(shift)
+        self.scale = _dict_to_tensors(scale) if isinstance(scale, dict) else torch.Tensor(scale)
     
     def __call__(self, sample):
         gt = sample['ground_truth']
         if isinstance(gt, dict):
             new_gt = dict.fromkeys(gt.keys())
             for key, value in gt.items():
-                new_gt[key] = (value - self.mean[key]) / self.std[key]
+                new_gt[key] = (value - self.shift[key]) / self.scale[key]
         else:
-            new_gt = (gt - self.mean) / self.std
+            new_gt = (gt - self.shift) / self.scale
 
         return {
             'features': sample['features'],
@@ -493,7 +493,7 @@ class GarmentBaseDataset(BaseDataset):
                              tenzor, rotations=None, translations=None, std_config={}, supress_error=True):
         """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
         if std_config and 'standardize' in std_config:
-            tenzor = tenzor * self.config['standardize']['std'] + self.config['standardize']['mean']
+            tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
 
         pattern = VisPattern(view_ids=False)
         pattern.name = dataname
@@ -520,7 +520,7 @@ class GarmentBaseDataset(BaseDataset):
             selection = ~np.all(np.isclose(element, 0, atol=tolerance), axis=1)  # only non-zero rows
         return element[selection]
 
-    def _get_stats(self, input_batch, padded=False):
+    def _get_distribution_stats(self, input_batch, padded=False):
         """Calculates mean & std values for the input tenzor along the last dimention"""
 
         input_batch = input_batch.view(-1, input_batch.shape[-1])
@@ -542,7 +542,7 @@ class GarmentBaseDataset(BaseDataset):
         if padded:
             input_batch = self._unpad(input_batch)  # remove rows with zeros
 
-        # per dimention means
+        # per dimention info
         min_vector, _ = torch.min(input_batch, 0)
         max_vector, _ = torch.max(input_batch, 0)
         scale = torch.empty_like(min_vector)
@@ -631,7 +631,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         self.config['element_size'] = self[0]['features'].shape[1]
     
     def standardize(self, training=None):
-        """Use mean&std for normalization of output features & restoring input predictions.
+        """Use shift and scaling for normalization of output features & restoring input predictions.
             Accepts either of two inputs: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
             * if stats info is given, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
@@ -645,14 +645,14 @@ class GarmentPanelDataset(GarmentBaseDataset):
         elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
-                feature_mean, feature_stds = self._get_stats(batch['features'], padded=True)
+                feature_mean, feature_stds = self._get_distribution_stats(batch['features'], padded=True)
                 # NOTE mean values for panels are zero due to loop property 
                 # panel components CANNOT be shifted to keep the loop property intact 
                 # hence enforce zeros in mean value for edge coordinates
                 feature_mean[0] = feature_mean[1] = 0
 
                 break  # only one batch out there anyway
-            self.config['standardize'] = {'mean': feature_mean.cpu().numpy(), 'std': feature_stds.cpu().numpy()}
+            self.config['standardize'] = {'shift': feature_mean.cpu().numpy(), 'scale': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
         else:  # no info provided
             raise ValueError('GarmentPanelDataset::Error::Standardization cannot be applied: supply either stats or training set to use standardization')
@@ -660,7 +660,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         # clean-up tranform list to avoid duplicates
         self.transforms = [transform for transform in self.transforms if not isinstance(transform, FeatureStandartization)]
 
-        self.transforms.append(FeatureStandartization(stats['mean'], stats['std']))
+        self.transforms.append(FeatureStandartization(stats['shift'], stats['scale']))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -680,7 +680,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         prediction = prediction.cpu().numpy()
 
         if 'standardize' in self.config:
-            prediction = prediction * self.config['standardize']['std'] + self.config['standardize']['mean']
+            prediction = prediction * self.config['standardize']['scale'] + self.config['standardize']['shift']
 
         pattern = VisPattern(str(self.root_path / dataname / 'specification.json'), view_ids=False)  # with correct pattern name
 
@@ -726,7 +726,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         self.config['element_size'] = self[0]['ground_truth'].shape[2]
     
     def standardize(self, training=None):
-        """Use mean&std for normalization of output edge features & restoring input predictions.
+        """Use mean&std for standardization of output edge features & restoring input predictions.
             Accepts either of two inputs: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
             * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
@@ -741,9 +741,9 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
-                feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
+                feature_mean, feature_stds = self._get_distribution_stats(batch['features'], padded=False)
 
-                gt_mean, gt_stds = self._get_stats(batch['ground_truth'], padded=True)
+                gt_mean, gt_stds = self._get_distribution_stats(batch['ground_truth'], padded=True)
                 # NOTE mean values for panels are zero due to loop property 
                 # panel components CANNOT be shifted to keep the loop property intact 
                 # hence enforce zeros in mean value for edge coordinates
@@ -752,8 +752,8 @@ class Garment3DPatternDataset(GarmentBaseDataset):
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
-                'mean': gt_mean.cpu().numpy(), 'std': gt_stds.cpu().numpy(), 
-                'f_mean': feature_mean.cpu().numpy(), 'f_std': feature_stds.cpu().numpy()}
+                'shift': gt_mean.cpu().numpy(), 'scale': gt_stds.cpu().numpy(), 
+                'f_shift': feature_mean.cpu().numpy(), 'f_scale': feature_stds.cpu().numpy()}
             stats = self.config['standardize']
         else:  # nothing is provided
             raise ValueError('Garment3DPatternDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
@@ -761,8 +761,8 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         # clean-up tranform list to avoid duplicates
         self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
 
-        self.transforms.append(GTtandartization(stats['mean'], stats['std']))
-        self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
+        self.transforms.append(GTtandartization(stats['shift'], stats['scale']))
+        self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
@@ -797,7 +797,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.config['translation_size'] = self[0]['ground_truth']['translations'].shape[1]
     
     def standardize(self, training=None):
-        """Use mean&std for normalization of output edge features & restoring input predictions.
+        """Use shifting and scaling for fitting data to interval comfortable for NN training.
             Accepts either of two inputs: 
             * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
             * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
@@ -812,10 +812,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
-                feature_mean, feature_stds = self._get_stats(batch['features'], padded=False)
+                feature_mean, feature_stds = self._get_distribution_stats(batch['features'], padded=False)
 
                 gt = batch['ground_truth']
-                panel_mean, panel_stds = self._get_stats(gt['outlines'], padded=True)
+                panel_mean, panel_stds = self._get_distribution_stats(gt['outlines'], padded=True)
                 # NOTE mean values for panels are zero due to loop property 
                 # panel components CANNOT be shifted to keep the loop property intact 
                 panel_mean[0] = panel_mean[1] = 0
@@ -828,15 +828,15 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
-                'f_mean': feature_mean.cpu().numpy(), 
-                'f_std': feature_stds.cpu().numpy(),
-                'gt_mean': {
+                'f_shift': feature_mean.cpu().numpy(), 
+                'f_scale': feature_stds.cpu().numpy(),
+                'gt_shift': {
                     'outlines': panel_mean.cpu().numpy(), 
                     # 'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_min.cpu().numpy(),
                     'translations': transl_min.cpu().numpy(), 
                 },
-                'gt_std': {
+                'gt_scale': {
                     'outlines': panel_stds.cpu().numpy(), 
                     # 'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_scale.cpu().numpy(),
@@ -850,8 +850,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # clean-up tranform list to avoid duplicates
         self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
 
-        self.transforms.append(GTtandartization(stats['gt_mean'], stats['gt_std']))
-        self.transforms.append(FeatureStandartization(stats['f_mean'], stats['f_std']))
+        self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
+        self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
     def save_prediction_batch(self, predictions, datanames, save_to):
         """Saves predicted params of the datapoint to the original data folder.
@@ -898,11 +898,11 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         pattern, rots, transls = prediction['outlines'], prediction['rotations'], prediction['translations']
 
         # undo standardization  (outside of generinc conversion function due to custom std structure)
-        gt_means = self.config['standardize']['gt_mean']
-        gt_stds = self.config['standardize']['gt_std']
-        pattern = pattern.cpu().numpy() * gt_stds['outlines'] + gt_means['outlines']
-        rots = rots.cpu().numpy() * gt_stds['rotations'] + gt_means['rotations']
-        transls = transls.cpu().numpy() * gt_stds['translations'] + gt_means['translations']
+        gt_shifts = self.config['standardize']['gt_shift']
+        gt_scales = self.config['standardize']['gt_scale']
+        pattern = pattern.cpu().numpy() * gt_scales['outlines'] + gt_shifts['outlines']
+        rots = rots.cpu().numpy() * gt_scales['rotations'] + gt_shifts['rotations']
+        transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
 
         return self._pattern_from_tenzor(
             dataname, pattern, rots, transls, std_config={},

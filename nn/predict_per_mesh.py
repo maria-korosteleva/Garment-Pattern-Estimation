@@ -86,7 +86,7 @@ if __name__ == "__main__":
         verts, faces = igl.read_triangle_mesh(str(mesh))
         points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
         if 'standardize' in data_config:
-            points = (points - data_config['standardize']['f_mean']) / data_config['standardize']['f_std']
+            points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
         points_list.append(torch.Tensor(points))
 
     # -------- Predict ---------
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     # ---- save ----
     for pred, mesh in zip(preds, mesh_paths):
         if 'standardize' in data_config:
-            pred = pred * data_config['standardize']['std'] + data_config['standardize']['mean']
+            pred = pred * data_config['standardize']['scale'] + data_config['standardize']['shift']
 
         pattern = VisPattern(view_ids=False)
         pattern.name = VisPattern.name_from_path(mesh)

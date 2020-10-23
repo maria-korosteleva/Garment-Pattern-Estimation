@@ -383,7 +383,7 @@ class GarmentFullPattern3D(BaseModule):
 
         # extra loss object
         self.loop_loss = metrics.PanelLoopLoss(
-            data_stats={'mean': data_norm['gt_mean']['outlines'], 'std': data_norm['gt_std']['outlines']})
+            data_stats={'shift': data_norm['gt_shift']['outlines'], 'scale': data_norm['gt_scale']['outlines']})
 
         # Feature extractor definition
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -472,7 +472,7 @@ if __name__ == "__main__":
     gt_batch = a.view(2, -1, 2, 3)  # ~ 2 examples in batch
     # print(gt_batch)
     net = GarmentFullPattern3D(
-        gt_batch.shape[3], gt_batch.shape[2], gt_batch.shape[1], 6, 3)  # {'mean': dataset_gt.mean(), 'std': dataset_gt.std()})
+        gt_batch.shape[3], gt_batch.shape[2], gt_batch.shape[1], 6, 3)  # {'shift': dataset_gt.mean(), 'scale': dataset_gt.std()})
 
     positions = torch.arange(1, 37, dtype=torch.float)
     features_batch = positions.view(2, -1, 3)  # note for the same batch size

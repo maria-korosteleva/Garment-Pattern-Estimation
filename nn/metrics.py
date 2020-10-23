@@ -33,7 +33,7 @@ class PanelLoopLoss():
             # flatten if not already 
             if len(original_panels.shape) > 3:
                 original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
-            if data_stats: # update pad vector
+            if data_stats:  # update pad vector
                 self._eval_pad_vector(data_stats)
             if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
                 self.pad_tenzor = torch.zeros(original_panels.shape[-1])
@@ -64,9 +64,9 @@ class PanelLoopLoss():
     def _eval_pad_vector(self, data_stats={}):
         # prepare padding vector for unpadding the panel data on call
         if data_stats:
-            mean = torch.Tensor(data_stats['mean'])
-            std = torch.Tensor(data_stats['std'])
-            self.pad_tenzor = - mean / std
+            shift = torch.Tensor(data_stats['shift'])
+            scale = torch.Tensor(data_stats['scale'])
+            self.pad_tenzor = - shift / scale
         else:
             self.pad_tenzor = None
 
