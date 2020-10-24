@@ -812,13 +812,13 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         elif training is not None:
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
-                feature_mean, feature_stds = self._get_distribution_stats(batch['features'], padded=False)
+                feature_shift, feature_scale = self._get_distribution_stats(batch['features'], padded=False)
 
                 gt = batch['ground_truth']
-                panel_mean, panel_stds = self._get_distribution_stats(gt['outlines'], padded=True)
+                panel_shift, panel_scale = self._get_distribution_stats(gt['outlines'], padded=True)
                 # NOTE mean values for panels are zero due to loop property 
-                # panel components CANNOT be shifted to keep the loop property intact 
-                panel_mean[0] = panel_mean[1] = 0
+                # panel components SHOULD NOT be shifted to keep the loop property intact 
+                panel_shift[0] = panel_shift[1] = 0
 
                 # Use min\scale (normalization) instead of Gaussian stats for translation
                 # No padding as zero translation is a valid value
@@ -828,16 +828,16 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
-                'f_shift': feature_mean.cpu().numpy(), 
-                'f_scale': feature_stds.cpu().numpy(),
+                'f_shift': feature_shift.cpu().numpy(), 
+                'f_scale': feature_scale.cpu().numpy(),
                 'gt_shift': {
-                    'outlines': panel_mean.cpu().numpy(), 
+                    'outlines': panel_shift.cpu().numpy(), 
                     # 'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_min.cpu().numpy(),
                     'translations': transl_min.cpu().numpy(), 
                 },
                 'gt_scale': {
-                    'outlines': panel_stds.cpu().numpy(), 
+                    'outlines': panel_scale.cpu().numpy(), 
                     # 'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_scale.cpu().numpy(),
                     'translations': transl_scale.cpu().numpy(),
