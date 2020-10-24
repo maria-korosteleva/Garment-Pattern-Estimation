@@ -365,6 +365,7 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_encoding_size': 130, 
             'pattern_n_layers': 3, 
             'loop_loss_weight': 0.1, 
+            'placement_loss_weight': 1.,
             'dropout': 0,
             'loss': 'MSE with loop',
             'lstm_init': 'kaiming_normal_', 
@@ -456,8 +457,12 @@ class GarmentFullPattern3D(BaseModule):
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
+        
+        full_loss = pattern_loss \
+            + self.config['loop_loss_weight'] * loop_loss \
+            + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
 
-        return pattern_loss + self.config['loop_loss_weight'] * loop_loss + rot_loss + translation_loss, loss_dict
+        return full_loss, loss_dict
 
 
 
