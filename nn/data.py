@@ -205,7 +205,10 @@ class FeatureStandartization():
 
 
 class GTtandartization():
-    """Normalize features of provided sample with given stats"""
+    """Normalize features of provided sample with given stats
+        * Supports multimodal gt represented as dictionary
+        * For dictionary gts, only those values are updated for which the stats are provided
+    """
     def __init__(self, shift, scale):
         """If ground truth is a dictionary in itself, the provided values should also be dictionaries"""
         
@@ -217,7 +220,13 @@ class GTtandartization():
         if isinstance(gt, dict):
             new_gt = dict.fromkeys(gt.keys())
             for key, value in gt.items():
-                new_gt[key] = (value - self.shift[key]) / self.scale[key]
+                new_gt[key] = value
+                if key in self.shift:
+                    new_gt[key] = new_gt[key] - self.shift[key]
+                if key in self.scale:
+                    new_gt[key] = new_gt[key] / self.scale[key]
+                
+                # if shift and scale are not set, the value is kept as it is
         else:
             new_gt = (gt - self.shift) / self.scale
 
@@ -480,17 +489,19 @@ class GarmentBaseDataset(BaseDataset):
 
         return points
 
-    def _read_pattern(self, datapoint_name, folder_elements, with_placement=False):
+    def _read_pattern(self, datapoint_name, folder_elements, with_placement=False, with_stitches=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensors(with_placement=with_placement)
+        return pattern.pattern_as_tensors(with_placement=with_placement, with_stitches=with_stitches)
 
     def _pattern_from_tenzor(self, dataname, 
-                             tenzor, rotations=None, translations=None, std_config={}, supress_error=True):
+                             tenzor, 
+                             rotations=None, translations=None, stitches=None,
+                             std_config={}, supress_error=True):
         """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
         if std_config and 'standardize' in std_config:
             tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
@@ -499,7 +510,7 @@ class GarmentBaseDataset(BaseDataset):
         pattern.name = dataname
         try: 
             pattern.pattern_from_tensors(
-                tenzor, panel_rotations=rotations, panel_translations=translations, 
+                tenzor, panel_rotations=rotations, panel_translations=translations, stitches=stitches,
                 padded=True)   
         except RuntimeError as e:
             if not supress_error:
@@ -784,7 +795,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         * it includes not only every panel outline geometry, but also 3D placement and stitches information
         Defines 3D samples from the point cloud as features
     """
-    # TODO add stitches
     def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
@@ -865,7 +875,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             prediction = {
                 'outlines': predictions['outlines'][idx], 
                 'rotations': predictions['rotations'][idx], 
-                'translations': predictions['translations'][idx]
+                'translations': predictions['translations'][idx],
+                'stitch_tags': predictions['stitch_tags'][idx]
             }
 
             pattern = self._pred_to_pattern(prediction, name)
@@ -888,14 +899,15 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
       
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
-        pattern, rots, tranls = self._read_pattern(datapoint_name, folder_elements, with_placement=True)
-        return {'outlines': pattern, 'rotations': rots, 'translations': tranls}
+        pattern, rots, tranls, stitches = self._read_pattern(
+            datapoint_name, folder_elements, with_placement=True, with_stitches=True)
+        return {'outlines': pattern, 'rotations': rots, 'translations': tranls, 'stitches': stitches}
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
-        # TODO update to account for stitches
 
         pattern, rots, transls = prediction['outlines'], prediction['rotations'], prediction['translations']
+        stitch_tags = prediction['stitch_tags']
 
         # undo standardization  (outside of generinc conversion function due to custom std structure)
         gt_shifts = self.config['standardize']['gt_shift']
@@ -904,9 +916,29 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         rots = rots.cpu().numpy() * gt_scales['rotations'] + gt_shifts['rotations']
         transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
 
-        return self._pattern_from_tenzor(
-            dataname, pattern, rots, transls, std_config={},
-            supress_error=True)
+        # stitch tags to stitch list
+        zero_tag = torch.zeros(stitch_tags.shape[-1])
+        non_zero_tags = []
+        for panel_id in range(len(stitch_tags.shape[0])):
+            for edge_id in range(len(stitch_tags.shape[1])):
+                # TODO Adjust tolerance! Take a look at the unpadding
+                if not torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.001):
+                    non_zero_tags.append((panel_id, edge_id))
+        
+        # NOTE this part could be implemented smarter
+        # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
+        stitches = []
+        for tag1_id in range(len(non_zero_tags)):
+            edge_1 = non_zero_tags[tag1_id]
+            tag1 = stitch_tags[edge_1[0]][edge_1[1]]
+            for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
+                edge_2 = non_zero_tags[tag2_id]
+                # TODO Adjust tolerance!
+                if torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.001):  # stitch found!
+                    stitches.append([edge_1, edge_2])
+
+        return self._pattern_from_tenzor(dataname, pattern, rots, transls, stitches, 
+                                         std_config={}, supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -986,7 +1018,7 @@ if __name__ == "__main__":
     print(len(dataset), dataset.config)
     print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
 
-    # print(dataset[5]['features'])
+    print(dataset[5]['ground_truth'])
 
     datawrapper = DatasetWrapper(dataset)
     datawrapper.new_split(10, 10, 300)
