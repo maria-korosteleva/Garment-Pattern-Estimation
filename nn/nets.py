@@ -371,12 +371,14 @@ class GarmentFullPattern3D(BaseModule):
             'lstm_init': 'kaiming_normal_', 
             'feature_extractor': 'EdgeConvFeatures',
             'panel_decoder': 'LSTMDecoderModule', 
-            'pattern_decoder': 'LSTMDecoderModule'
+            'pattern_decoder': 'LSTMDecoderModule', 
+            'stitch_tag_dim': 3
         })
         # update with input settings
         self.config.update(config) 
 
         # output props
+        self.panel_elem_len = panel_elem_len
         self.max_panel_len = max_panel_len
         self.max_pattern_size = max_pattern_size
         self.rotation_size = rotation_size
@@ -395,7 +397,8 @@ class GarmentFullPattern3D(BaseModule):
         # Decode into pattern definition
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
+            self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
+            self.panel_elem_len + self.config['stitch_tag_dim'], self.config['panel_n_layers'], 
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
@@ -424,7 +427,7 @@ class GarmentFullPattern3D(BaseModule):
         panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
         flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
 
-        # Panel outlines
+        # Panel outlines & stitch info
         flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
         
         # Placement
@@ -434,10 +437,13 @@ class GarmentFullPattern3D(BaseModule):
 
         # reshape to per-pattern predictions
         outlines = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        stitch_tags = outlines[:, :, :, self.panel_elem_len:]
+        outlines = outlines[:, :, :, :self.panel_elem_len]
+
         rotations = flat_rotations.contiguous().view(batch_size, self.max_pattern_size, -1)
         translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
 
-        return {'outlines': outlines, 'rotations': rotations, 'translations': translations}
+        return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags}
 
     def loss(self, features, ground_truth):
         """Evalute loss when predicting patterns"""

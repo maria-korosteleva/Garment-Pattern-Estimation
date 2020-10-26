@@ -917,12 +917,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
 
         # stitch tags to stitch list
-        zero_tag = torch.zeros(stitch_tags.shape[-1])
+        zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
         non_zero_tags = []
-        for panel_id in range(len(stitch_tags.shape[0])):
-            for edge_id in range(len(stitch_tags.shape[1])):
+        for panel_id in range(stitch_tags.shape[0]):
+            for edge_id in range(stitch_tags.shape[1]):
                 # TODO Adjust tolerance! Take a look at the unpadding
-                if not torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.001):
+                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.001)):
                     non_zero_tags.append((panel_id, edge_id))
         
         # NOTE this part could be implemented smarter
@@ -934,7 +934,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
                 edge_2 = non_zero_tags[tag2_id]
                 # TODO Adjust tolerance!
-                if torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.001):  # stitch found!
+                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.001)):  # stitch found!
                     stitches.append([edge_1, edge_2])
 
         return self._pattern_from_tenzor(dataname, pattern, rots, transls, stitches, 
