@@ -124,7 +124,7 @@ class BasicPattern(object):
         return name
 
     # --------- Special representations -----
-    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False):
+    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
@@ -141,39 +141,77 @@ class BasicPattern(object):
         panel_lens = [len(panel['edges']) for name, panel in self.pattern['panels'].items()]
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
+        # Main info per panel
         panel_seqs = []
         panel_translations = []
         panel_rotations = []
+        panel_edge_ids_map = {}
         for panel_name in panel_order:
-            edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
+            edges, rot, transl, edge_ids = self.panel_as_numeric(panel_name, pad_to_len=max_len)
             panel_seqs.append(edges)
             panel_translations.append(transl)
             panel_rotations.append(rot)
+            panel_edge_ids_map[panel_name] = edge_ids
+
+        # order of stitches doesn't matter
+        stitches_indicies = []
+        for stitch in self.pattern['stitches']:
+            stitch_sides = []
+            for side in stitch:
+                panel_id = panel_order.index(side['panel'])
+                edge_id = panel_edge_ids_map[side['panel']][side['edge']]
+                stitch_sides.append((panel_id, edge_id))
+            stitches_indicies.append(stitch_sides)
         
         # format result as requested
         result = [np.stack(panel_seqs)]
         if with_placement:
             result.append(np.stack(panel_rotations))
             result.append(np.stack(panel_translations))
+        if with_stitches:
+            result.append(stitches_indicies)
 
         return tuple(result) if len(result) > 1 else result[0]
 
-    def pattern_from_tensors(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
+    def pattern_from_tensors(
+            self, pattern_representation, 
+            panel_rotations=None, panel_translations=None, stitches=None,
+            padded=False):
         """Create panels from given panel representation. 
             Assuming that representation uses cm as units"""
-        # TODO updating stitches?
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::pattern_from_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
 
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
+        in_panel_order = []
         for idx in range(len(pattern_representation)):
+            panel_name = 'panel_' + str(idx)
+            in_panel_order.append(panel_name)
+            
             self.panel_from_numeric(
-                'panel_' + str(idx), 
+                panel_name, 
                 pattern_representation[idx], 
                 rotation=panel_rotations[idx] if panel_rotations is not None else None,
                 translation=panel_translations[idx] if panel_translations is not None else None,
                 padded=padded)
+
+        # remove existing stitches -- start anew
+        self.pattern['stitches'] = []
+        if stitches is not None:
+            for stitch_numeric in stitches:
+                stitch_object = []
+                for side in stitch_numeric:
+                    stitch_object.append(
+                        {
+                            "panel": in_panel_order[side[0]],
+                            "edge": side[1], 
+                        }
+                    )
+                self.pattern['stitches'].append(stitch_object)
+        else:
+            print('BasicPattern::Warning::{}::Panels were updated but new stitches info was not provided. Stitches are removed.'.format(self.name))
+
 
     def panel_as_numeric(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
@@ -211,8 +249,11 @@ class BasicPattern(object):
         first_edge = first_edge[0]
 
         # iterate over edges starting from the chosen origin
-        # https://stackoverflow.com/questions/2150108/efficient-way-to-rotate-a-list-in-python
         rotated_edges = panel['edges'][first_edge:] + panel['edges'][:first_edge]
+        # map from old ids to new ids
+        edge_ids = list(range(len(rotated_edges)))
+        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge):] + edge_ids[:(len(rotated_edges) - first_edge)]
+        # Construct the edge sequence
         edge_sequence = []
         for edge in rotated_edges:
             edge_sequence.append(self._edge_as_vector(vertices, edge))
@@ -238,7 +279,7 @@ class BasicPattern(object):
         translation = np.array(panel['translation']) + comenpensating_shift
         rotation_representation = np.array(panel['rotation'])
 
-        return np.stack(edge_sequence, axis=0), rotation_representation, translation
+        return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
     def panel_from_numeric(self, panel_name, edge_sequence, rotation=None, translation=None, padded=False):
         """ Updates or creates panel from NN-compatible numeric representation
@@ -272,7 +313,6 @@ class BasicPattern(object):
         if all(np.isclose(fin_vert, 0)):
             edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
         else:
-            # TODO raise RuntimeError('BasicPattern::Error::Edge sequence do not return to origin')
             print('BasicPattern::Warning::{} with panel {}::Edge sequence do not return to origin. '
                 ' Creating extra vertex'.format(self.name, panel_name))
             vertices = np.vstack([vertices, fin_vert])
@@ -291,8 +331,6 @@ class BasicPattern(object):
         if rotation is not None:
             panel['rotation'] = rotation.tolist()
         
-        print('BasicPattern::Warning::{}::Edge and vertex info updated for panel {}. Stitches might be broken'.format(self.name, panel_name))
-
     def panel_order(self, name_list=None, dim=0, tolerance=5):
         """Ordering of the panels based on their 3D translation values.
             * Using cm as units for tolerance
@@ -586,10 +624,13 @@ class ParametrizedPattern(BasicPattern):
         self.parameters = self.spec['parameters']
     
     # ------- Direct pattern update -------
-    def pattern_from_tensors(self, pattern_representation, panel_rotations=None, panel_translations=None, padded=False):
+    def pattern_from_tensors(
+            self, pattern_representation, 
+            panel_rotations=None, panel_translations=None, stitches=None,
+            padded=False):
         """When direct update is applied to parametrized pattern, 
             all the parameter settings become invalid"""
-        super().pattern_from_tensors(pattern_representation, panel_rotations, panel_translations, padded)
+        super().pattern_from_tensors(pattern_representation, panel_rotations, panel_translations, stitches, padded)
 
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
@@ -945,8 +986,8 @@ if __name__ == "__main__":
     # empty_pattern = BasicPattern()
     print(pattern.panel_order())
 
-    tensor, rot, transl = pattern.pattern_as_tensors(with_placement=True)
-    print(rot, transl)
+    tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
+    print(stitches)
 
     # panel_name = 'right'
     # print(pattern.pattern['panels'][panel_name])
@@ -956,10 +997,10 @@ if __name__ == "__main__":
     # tensor[2][0][0] -= 10
 
     # # tensor = tensor[:-1]
-    pattern.pattern_from_tensors(tensor, rot, transl, padded=True)
+    pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
-    print(pattern.pattern['panels']['panel_0'])
+    print(pattern.pattern['stitches'])
     print(pattern.panel_order())
 
-    pattern.name += '_placement_upd_1'
+    pattern.name += '_stitches_upd_1'
     pattern.serialize(system_config['output'], to_subfolder=True)
