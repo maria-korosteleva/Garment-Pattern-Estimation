@@ -101,15 +101,15 @@ def get_data_config(in_config, old_stats=False):
 
 if __name__ == "__main__":
     
-    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     in_data_config, in_nn_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Placement-weight', 
+        run_name='Placement-skirts', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
