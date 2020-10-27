@@ -71,8 +71,65 @@ class PanelLoopLoss():
             self.pad_tenzor = None
 
 
-# ------- Model evaluation shortcut -------------
+class PatternStitchLoss():
+    """Evalute the quality of stitching tags provided for every edge of a pattern:
+        * Free edges have tags close to zero
+        * Edges connected by a stitch have the same tag
+        * Edges belonging to different stitches have 
+    """
+    def __init__(self, triplet_margin=0.1):
+        self.triplet_margin = triplet_margin
 
+    def __call__(self, stitch_tags, gt_stitches):
+        """
+        * stitch_tags contain tags for every panel in every pattern in the batch
+        * gt_stitches contains the list of edge pairs that are stitches together.
+            * with every edge indicated as (panel_id, edge_id) 
+        """
+        stitch_losses = []
+        free_edge_losses = []
+        for pattern_idx in range(stitch_tags.shape[0]):
+            pattern = stitch_tags[pattern_idx]
+    
+            # build up losses for every stitch
+            for stitch_id in range(gt_stitches[pattern_idx].shape[0]):
+                # same stitch -- same tags
+                stitch = gt_stitches[pattern_idx][stitch_id]
+                similarity_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[stitch[1][0]][stitch[1][1]]) ** 2
+                similarity_loss = similarity_loss.sum()
+
+                neg_losses = []
+                # different stitches -- different tags
+                for other_id in range(gt_stitches[pattern_idx].shape[0]):
+                    if stitch_id != other_id:
+                        other_stitch = gt_stitches[pattern_idx][other_id]
+                        neg_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
+                        neg_losses.append(neg_loss)
+
+                tot_neg_loss = torch.cat(neg_losses).sum()
+                stitch_losses.append(max(similarity_loss - tot_neg_loss + self.triplet_margin, 0))
+                
+            # Find out which edges are not connected to anything
+            connectivity_mat = torch.zeros((pattern.shape[0], pattern.shape[1]), dtype=torch.bool)
+            for stitch in gt_stitches[pattern_idx]:
+                connectivity_mat[stitch[0][0]][stitch[0][1]] = True
+                connectivity_mat[stitch[1][0]][stitch[1][1]] = True
+
+            for panel_id in range(connectivity_mat.shape[0]):
+                for edge_id in range(connectivity_mat.shape[1]):
+                    if not connectivity_mat[panel_id][edge_id]:
+                        # free edge to have zero tags
+                        free_edge_losses.append(pattern[panel_id][edge_id] ** 2)
+            
+            
+        # batch mean losses
+        fin_stitch_losses = sum(stitch_losses) / stitch_tags.shape[0]
+        fin_free_losses = torch.cat(free_edge_losses).sum() / stitch_tags.shape[0]
+
+        return fin_stitch_losses, fin_free_losses
+
+
+# ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

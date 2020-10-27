@@ -372,7 +372,8 @@ class GarmentFullPattern3D(BaseModule):
             'feature_extractor': 'EdgeConvFeatures',
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule', 
-            'stitch_tag_dim': 3
+            'stitch_tag_dim': 3, 
+            'stitch_tags_margin': 0.1
         })
         # update with input settings
         self.config.update(config) 
@@ -384,9 +385,10 @@ class GarmentFullPattern3D(BaseModule):
         self.rotation_size = rotation_size
         self.translation_size = translation_size
 
-        # extra loss object
+        # extra losses objects
         self.loop_loss = metrics.PanelLoopLoss(
             data_stats={'shift': data_norm['gt_shift']['outlines'], 'scale': data_norm['gt_scale']['outlines']})
+        self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
 
         # Feature extractor definition
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -413,8 +415,6 @@ class GarmentFullPattern3D(BaseModule):
         # self.rotation_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size)
         # self.translation_decoder = nn.Linear(self.config['panel_encoding_size'], translation_size)
         self.placement_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size + translation_size)
-
-        # TODO add stitches prediction modules
 
     def forward(self, positions_batch):
         self.device = positions_batch.device
@@ -460,13 +460,19 @@ class GarmentFullPattern3D(BaseModule):
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
+        # stitches
+        stitch_loss, free_loss = self.stitch_loss(preds['stitch_tags'], ground_truth['stitches'].type(torch.IntTensor))
+
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
-            rotation_loss=rot_loss, translation_loss=translation_loss)
+            rotation_loss=rot_loss, translation_loss=translation_loss, 
+            stitch_loss=stitch_loss, 
+            free_edges_loss=free_loss)
         
         full_loss = pattern_loss \
             + self.config['loop_loss_weight'] * loop_loss \
-            + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
+            + self.config['placement_loss_weight'] * (rot_loss + translation_loss) \
+            + stitch_loss + free_loss
 
         return full_loss, loss_dict
 
