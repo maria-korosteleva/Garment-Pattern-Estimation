@@ -160,7 +160,8 @@ def eval_metrics(model, data_wrapper, section='test'):
 
             # normalize & convert
             for metric in current_metrics:
-                current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu
+                if isinstance(current_metrics[metric], torch.Tensor):
+                    current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu
                 current_metrics[metric] /= len(loader)
     
     return current_metrics
