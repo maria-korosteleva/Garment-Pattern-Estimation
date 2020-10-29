@@ -892,6 +892,36 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
 
+    @staticmethod
+    def tags_to_stitches(stitch_tags):
+        """
+        Convert per-edge per panel stitch tags into the list of connected edge pairs
+        """
+        print(stitch_tags)
+
+        zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
+        print(zero_tag)
+
+        non_zero_tags = []
+        for panel_id in range(stitch_tags.shape[0]):
+            for edge_id in range(stitch_tags.shape[1]):
+                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.01)):
+                    non_zero_tags.append((panel_id, edge_id))
+        
+        print(len(non_zero_tags), non_zero_tags)
+        
+        # NOTE this part could be implemented smarter
+        # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
+        stitches = []
+        for tag1_id in range(len(non_zero_tags)):
+            edge_1 = non_zero_tags[tag1_id]
+            tag1 = stitch_tags[edge_1[0]][edge_1[1]]
+            for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
+                edge_2 = non_zero_tags[tag2_id]
+                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.1)):  # stitch found!
+                    stitches.append([edge_1, edge_2])
+        return stitches
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         points = self._sample_points(datapoint_name, folder_elements)
@@ -917,25 +947,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
 
         # stitch tags to stitch list
-        zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
-        non_zero_tags = []
-        for panel_id in range(stitch_tags.shape[0]):
-            for edge_id in range(stitch_tags.shape[1]):
-                # TODO Adjust tolerance! Take a look at the unpadding
-                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.001)):
-                    non_zero_tags.append((panel_id, edge_id))
-        
-        # NOTE this part could be implemented smarter
-        # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
-        stitches = []
-        for tag1_id in range(len(non_zero_tags)):
-            edge_1 = non_zero_tags[tag1_id]
-            tag1 = stitch_tags[edge_1[0]][edge_1[1]]
-            for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
-                edge_2 = non_zero_tags[tag2_id]
-                # TODO Adjust tolerance!
-                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.001)):  # stitch found!
-                    stitches.append([edge_1, edge_2])
+        stitches = self.tags_to_stitches(stitch_tags)
 
         return self._pattern_from_tenzor(dataname, pattern, rots, transls, stitches, 
                                          std_config={}, supress_error=True)
@@ -1009,23 +1021,85 @@ if __name__ == "__main__":
     # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
     system = Properties('./system.json')
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
-    data_location = Path(system['datasets_path']) / dataset_folder
+    # data_location = Path(system['datasets_path']) / dataset_folder
 
-    dataset = Garment3DPatternFullDataset(data_location)
+    # dataset = Garment3DPatternFullDataset(data_location)
 
-    print(len(dataset), dataset.config)
-    print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
+    # print(len(dataset), dataset.config)
+    # print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
 
-    print(dataset[5]['ground_truth'])
+    # print(dataset[5]['ground_truth'])
 
-    datawrapper = DatasetWrapper(dataset)
-    datawrapper.new_split(10, 10, 300)
+    # datawrapper = DatasetWrapper(dataset)
+    # datawrapper.new_split(10, 10, 300)
 
-    datawrapper.standardize_data()
+    # datawrapper.standardize_data()
 
-    print(dataset.config['standardize'])
+    # print(dataset.config['standardize'])
 
-    print(dataset[0]['ground_truth'])
+    # print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])
+
+    stitch_tags = torch.Tensor([[[-4.7732e-01,  5.2743e-01,  5.7846e-02],
+         [-1.0317e+00,  9.7064e-01,  3.0478e-01],
+         [ 4.0752e-01,  5.7923e-01,  2.0723e-03],
+         [-1.0661e-02,  1.9779e-03, -3.6985e-03],
+         [-6.2923e-03,  1.2806e-03,  4.1377e-03],
+         [ 5.0416e-04,  2.9007e-03,  3.6366e-03],
+         [ 6.6723e-04,  4.3958e-03,  4.5902e-03],
+         [ 1.0667e-03,  4.9522e-03,  4.9037e-03],
+         [ 1.6380e-03,  4.2972e-03,  7.1949e-03]],
+
+        [[ 8.7757e-02,  6.4274e-01,  4.6296e-01],
+         [-2.8895e-02,  5.9110e-01,  6.1186e-01],
+         [-3.5284e-01,  3.8004e-01,  2.0254e-02],
+         [ 1.1227e-01,  1.7332e-01, -5.7697e-04],
+         [-2.7311e-04,  3.6193e-03,  1.3721e-03],
+         [-3.5853e-03,  8.0185e-03,  4.7167e-03],
+         [ 1.1996e-03,  8.8283e-03,  6.0051e-03],
+         [ 2.7664e-03,  7.6386e-03,  5.8009e-03],
+         [ 4.3352e-03,  6.9330e-03,  6.5485e-03]],
+
+        [[ 7.5046e-01,  2.4409e-01,  7.9030e-01],
+         [-1.0306e+00,  9.8453e-01,  3.0250e-01],
+         [-3.3723e-01, -2.8226e-01, -5.8897e-01],
+         [ 1.8906e-02, -1.3832e-02,  5.5172e-03],
+         [-9.8226e-01, -2.1431e-02, -1.9767e-01],
+         [ 2.9255e-01, -7.0595e-01,  1.2018e-01],
+         [-5.2501e-01, -4.5708e-01,  3.0568e-01],
+         [ 1.7425e-03, -2.6523e-03, -3.2320e-03],
+         [ 3.4501e-03,  2.4877e-03,  1.5023e-04]],
+
+        [[ 3.5013e-03, -2.4229e-04,  1.7040e-02],
+         [-5.2547e-01, -4.3172e-01,  3.3254e-01],
+         [ 7.4213e-01, -1.2066e+00, -3.2575e-01],  # Here
+         [-9.6715e-01, -1.5716e-02, -1.8207e-01],
+         [ 8.1369e-03, -9.7913e-03, -4.5263e-03],
+         [ 4.6673e-03, -1.0336e-02, -3.8493e-03],
+         [-3.3719e-01, -2.7093e-01, -5.9384e-01],
+         [ 3.0050e-02,  6.0369e-01,  5.8586e-01],
+         [ 7.6712e-01,  2.4150e-01,  7.9097e-01]],
+
+        [[ 5.8924e-01, -3.3213e-01,  3.2885e-01],
+         [ 1.6048e-01, -8.3018e-01,  6.7562e-02],
+         [ 4.2251e-01, -3.7204e-01, -4.2598e-01],
+         [ 3.1887e-02, -2.1434e-02,  3.5033e-02],
+         [ 9.4733e-03,  3.4869e-03,  2.3111e-03],
+         [ 3.9466e-03,  1.5404e-03, -1.0325e-03],
+         [ 5.3823e-03,  2.9728e-03, -1.0817e-04],
+         [ 4.3724e-03,  2.2851e-03,  1.7486e-04],
+         [ 2.9140e-03,  3.8158e-03, -2.0858e-04]],
+
+        [[ 3.3217e-01, -5.3243e-01, -2.8784e-01],
+         [ 7.3228e-01, -1.2096e+00, -3.4954e-01], # Here
+         [ 4.3159e-01, -2.4361e-01,  2.4041e-01],
+         [ 1.3506e-02, -1.6694e-03,  6.6847e-03],
+         [ 7.6342e-03,  2.6294e-03,  3.8481e-03],
+         [ 5.8650e-03,  2.0788e-03, -2.5582e-03],
+         [ 4.0614e-03,  4.7357e-03, -4.6884e-04],
+         [ 4.8211e-03,  8.9094e-04, -1.8303e-03],
+         [ 4.0147e-03,  2.1679e-03, -1.1023e-03]]])
+
+    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags))

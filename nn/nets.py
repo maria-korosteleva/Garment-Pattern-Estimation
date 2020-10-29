@@ -373,7 +373,7 @@ class GarmentFullPattern3D(BaseModule):
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
-            'stitch_tags_margin': 0.1
+            'stitch_tags_margin': 0.5
         })
         # update with input settings
         self.config.update(config) 

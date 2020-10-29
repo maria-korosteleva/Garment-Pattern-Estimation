@@ -90,6 +90,9 @@ class PatternStitchLoss():
         free_edge_losses = []
         for pattern_idx in range(stitch_tags.shape[0]):
             pattern = stitch_tags[pattern_idx]
+
+            # print(pattern)
+            # print(gt_stitches[pattern_idx])
     
             # build up losses for every stitch
             for stitch_id in range(gt_stitches[pattern_idx].shape[0]):
@@ -104,10 +107,11 @@ class PatternStitchLoss():
                     if stitch_id != other_id:
                         other_stitch = gt_stitches[pattern_idx][other_id]
                         neg_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
-                        neg_losses.append(neg_loss)
+                        neg_losses.append(max(self.triplet_margin - neg_loss.sum(), 0))  # ensure minimal distanse
+                # Compare to zero too
+                neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum(), 0))
 
-                tot_neg_loss = torch.cat(neg_losses).sum()
-                stitch_losses.append(max(similarity_loss - tot_neg_loss + self.triplet_margin, 0))
+                stitch_losses.append(similarity_loss + sum(neg_losses))
                 
             # Find out which edges are not connected to anything
             connectivity_mat = torch.zeros((pattern.shape[0], pattern.shape[1]), dtype=torch.bool)
@@ -120,7 +124,6 @@ class PatternStitchLoss():
                     if not connectivity_mat[panel_id][edge_id]:
                         # free edge to have zero tags
                         free_edge_losses.append(pattern[panel_id][edge_id] ** 2)
-            
             
         # batch mean losses
         fin_stitch_losses = sum(stitch_losses) / stitch_tags.shape[0]
