@@ -127,7 +127,7 @@ class Trainer():
             model.eval()
             with torch.no_grad():
                 losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'])[0] for batch in valid_loader]
-            valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a meacn for its batch
+            valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
             self.scheduler.step(valid_loss)
 
             # compare with previous best

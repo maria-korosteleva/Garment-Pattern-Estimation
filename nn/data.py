@@ -893,22 +893,19 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return prediction_imgs
 
     @staticmethod
-    def tags_to_stitches(stitch_tags):
+    def tags_to_stitches(stitch_tags, zero_tag_tol=0.01, similarity_tol=0.1):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
         """
-        print(stitch_tags)
-
         zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
-        print(zero_tag)
 
         non_zero_tags = []
         for panel_id in range(stitch_tags.shape[0]):
             for edge_id in range(stitch_tags.shape[1]):
-                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, 0.01)):
+                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, zero_tag_tol)):
                     non_zero_tags.append((panel_id, edge_id))
         
-        print(len(non_zero_tags), non_zero_tags)
+        # print(len(non_zero_tags), non_zero_tags)
         
         # NOTE this part could be implemented smarter
         # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
@@ -918,7 +915,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             tag1 = stitch_tags[edge_1[0]][edge_1[1]]
             for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
                 edge_2 = non_zero_tags[tag2_id]
-                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], 0.1)):  # stitch found!
+                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], similarity_tol)):  # stitch found!
                     stitches.append([edge_1, edge_2])
         return stitches
 

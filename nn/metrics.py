@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+from data import Garment3DPatternFullDataset as PatternDataset
 
 
 # ------- custom metrics --------
@@ -133,6 +134,57 @@ class PatternStitchLoss():
         return fin_stitch_losses, fin_free_losses
 
 
+class PatternStitchPrecisionRecall():
+    """Evaluate Precision and Recall scores for pattern stitches prediction
+        NOTE: It's NOT a diffentiable evaluation
+    """
+
+    def __init__(self):
+        pass
+
+    def __call__(self, stitch_tags, gt_stitches):
+        """
+         Evaluate on the batch of stitch tags
+        """
+        tot_precision = 0
+        tot_recall = 0
+        for pattern_idx in range(stitch_tags.shape[0]):
+            stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx])
+            stitch_list = torch.IntTensor(stitch_list).to(gt_stitches.device)
+
+            print(stitch_list)
+
+            correct_stitches = 0
+            # compare stitches
+            for detected in stitch_list:
+                for actual in gt_stitches[pattern_idx]:
+                    # order-invariant comparison of stitch sides
+                    if (all(detected[0] == actual[0]) and all(detected[1] == actual[1])) \
+                            or (all(detected[1] == actual[0]) and all(detected[0] == actual[1])):
+                        correct_stitches += 1
+
+            # precision -- how many of the detected stitches are actually there
+            tot_precision += correct_stitches / len(stitch_list) if len(stitch_list) else 0
+            # recall -- how many of the actual stitches were detected
+            tot_recall += correct_stitches / len(gt_stitches[pattern_idx])
+        
+        # evrage by batch
+        return tot_precision / stitch_tags.shape[0], tot_recall / stitch_tags.shape[0]
+
+    def on_loader(self, data_loader, model):
+        """Evaluate recall&precision of stitch detection on the full data loader"""
+
+        with torch.no_grad():
+            tot_precision = tot_recall = 0
+            for batch in data_loader:
+                predictions = model(batch['features'])
+                batch_precision, batch_recall = self(predictions['stitch_tags'], batch['ground_truth']['stitches'])
+                tot_precision += batch_precision
+                tot_recall += batch_recall
+
+        return tot_precision / len(data_loader), tot_recall / len(data_loader)
+
+
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""
@@ -169,3 +221,31 @@ def eval_metrics(model, data_wrapper, section='test'):
                 current_metrics[metric] /= len(loader)
     
     return current_metrics
+
+
+if __name__ == "__main__":
+    # debug
+
+    stitch_eval = PatternStitchPrecisionRecall()
+
+    tags = torch.FloatTensor(
+        [[
+            [
+                [0, 0, 0],
+                [1.2, 3., 0],
+                [0, 0, 0]
+            ],
+            [
+                [0, 3., 0],
+                [0, 0, 0],
+                [1.2, 3., 0],
+            ]
+        ]]
+    )
+    stitches = torch.IntTensor([
+        [
+            [[0, 1], [1, 2]]
+        ]
+    ])
+
+    print(stitch_eval(tags, stitches))

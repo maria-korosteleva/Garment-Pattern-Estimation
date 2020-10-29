@@ -389,6 +389,7 @@ class GarmentFullPattern3D(BaseModule):
         self.loop_loss = metrics.PanelLoopLoss(
             data_stats={'shift': data_norm['gt_shift']['outlines'], 'scale': data_norm['gt_scale']['outlines']})
         self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
+        self.stitch_quality = metrics.PatternStitchPrecisionRecall()
 
         # Feature extractor definition
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -445,7 +446,7 @@ class GarmentFullPattern3D(BaseModule):
 
         return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags}
 
-    def loss(self, features, ground_truth):
+    def loss(self, features, ground_truth, with_quality_eval=True):
         """Evalute loss when predicting patterns"""
         preds = self(features)
         device = features.device
@@ -466,17 +467,19 @@ class GarmentFullPattern3D(BaseModule):
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss, 
-            stitch_loss=stitch_loss, 
-            free_edges_loss=free_loss)
-        
+            stitch_loss=stitch_loss, free_edges_loss=free_loss)
+
+        # qualitative evaluation
+        if with_quality_eval:        
+            stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], ground_truth['stitches'].type(torch.IntTensor))
+            loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
+
         full_loss = pattern_loss \
             + self.config['loop_loss_weight'] * loop_loss \
             + self.config['placement_loss_weight'] * (rot_loss + translation_loss) \
             + stitch_loss + free_loss
 
         return full_loss, loss_dict
-
-
 
 
 if __name__ == "__main__":

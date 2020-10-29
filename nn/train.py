@@ -109,7 +109,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='Stitches-loss-both-sides', 
+        run_name='Stitches-recall', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -144,6 +144,9 @@ if __name__ == "__main__":
 
     dataset_wrapper = trainer.datawraper
 
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'validation')
+    print('Validation metrics: {}'.format(final_metrics))
+    experiment.add_statistic('valid_on_best', final_metrics)
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
