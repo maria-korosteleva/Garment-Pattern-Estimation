@@ -91,16 +91,13 @@ class PatternStitchLoss():
         free_edge_losses = []
         for pattern_idx in range(stitch_tags.shape[0]):
             pattern = stitch_tags[pattern_idx]
-
-            # print(pattern)
-            # print(gt_stitches[pattern_idx])
     
             # build up losses for every stitch
             for stitch_id in range(gt_stitches[pattern_idx].shape[0]):
                 # same stitch -- same tags
                 stitch = gt_stitches[pattern_idx][stitch_id]
                 similarity_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[stitch[1][0]][stitch[1][1]]) ** 2
-                similarity_loss = similarity_loss.sum() * 2  # one for every side of the stitch
+                similarity_loss = similarity_loss.sum()
 
                 neg_losses = []
                 # different stitches -- different tags
@@ -110,9 +107,11 @@ class PatternStitchLoss():
                         for side in [0, 1]:
                             neg_loss = (pattern[stitch[side][0]][stitch[side][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
                             neg_losses.append(max(self.triplet_margin - neg_loss.sum(), 0))  # ensure minimal distanse
-                # Compare to zero too
+                # Compare to zero too (both sides)
                 neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum(), 0))
+                neg_losses.append(max(self.triplet_margin - (pattern[stitch[1][0]][stitch[1][1]] ** 2).sum(), 0))
 
+                # neg losses normalized by quantity
                 stitch_losses.append(similarity_loss + sum(neg_losses))
                 
             # Find out which edges are not connected to anything
@@ -151,8 +150,6 @@ class PatternStitchPrecisionRecall():
         for pattern_idx in range(stitch_tags.shape[0]):
             stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx])
             stitch_list = torch.IntTensor(stitch_list).to(gt_stitches.device)
-
-            print(stitch_list)
 
             correct_stitches = 0
             # compare stitches
