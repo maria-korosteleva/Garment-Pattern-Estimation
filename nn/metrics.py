@@ -99,15 +99,16 @@ class PatternStitchLoss():
                 # same stitch -- same tags
                 stitch = gt_stitches[pattern_idx][stitch_id]
                 similarity_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[stitch[1][0]][stitch[1][1]]) ** 2
-                similarity_loss = similarity_loss.sum()
+                similarity_loss = similarity_loss.sum() * 2  # one for every side of the stitch
 
                 neg_losses = []
                 # different stitches -- different tags
                 for other_id in range(gt_stitches[pattern_idx].shape[0]):
                     if stitch_id != other_id:
                         other_stitch = gt_stitches[pattern_idx][other_id]
-                        neg_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
-                        neg_losses.append(max(self.triplet_margin - neg_loss.sum(), 0))  # ensure minimal distanse
+                        for side in [0, 1]:
+                            neg_loss = (pattern[stitch[side][0]][stitch[side][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
+                            neg_losses.append(max(self.triplet_margin - neg_loss.sum(), 0))  # ensure minimal distanse
                 # Compare to zero too
                 neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum(), 0))
 
