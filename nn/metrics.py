@@ -89,6 +89,7 @@ class PatternStitchLoss():
         """
         stitch_losses = []
         free_edge_losses = []
+        tag_len = stitch_tags.shape[-1]
         for pattern_idx in range(stitch_tags.shape[0]):
             pattern = stitch_tags[pattern_idx]
     
@@ -97,7 +98,7 @@ class PatternStitchLoss():
                 # same stitch -- same tags
                 stitch = gt_stitches[pattern_idx][stitch_id]
                 similarity_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[stitch[1][0]][stitch[1][1]]) ** 2
-                similarity_loss = similarity_loss.sum()
+                similarity_loss = similarity_loss.sum() / tag_len  # average
 
                 neg_losses = []
                 # different stitches -- different tags
@@ -106,13 +107,13 @@ class PatternStitchLoss():
                         other_stitch = gt_stitches[pattern_idx][other_id]
                         for side in [0, 1]:
                             neg_loss = (pattern[stitch[side][0]][stitch[side][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
-                            neg_losses.append(max(self.triplet_margin - neg_loss.sum(), 0))  # ensure minimal distanse
+                            neg_losses.append(max(self.triplet_margin - neg_loss.sum() / tag_len, 0))  # ensure minimal distanse on average
                 # Compare to zero too (both sides)
-                neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum(), 0))
-                neg_losses.append(max(self.triplet_margin - (pattern[stitch[1][0]][stitch[1][1]] ** 2).sum(), 0))
+                neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum() / tag_len, 0))
+                neg_losses.append(max(self.triplet_margin - (pattern[stitch[1][0]][stitch[1][1]] ** 2).sum() / tag_len, 0))
 
                 # neg losses normalized by quantity
-                stitch_losses.append(similarity_loss + sum(neg_losses))
+                stitch_losses.append(similarity_loss + sum(neg_losses) / len(neg_losses))
                 
             # Find out which edges are not connected to anything
             connectivity_mat = torch.zeros((pattern.shape[0], pattern.shape[1]), dtype=torch.bool)
@@ -124,11 +125,11 @@ class PatternStitchLoss():
                 for edge_id in range(connectivity_mat.shape[1]):
                     if not connectivity_mat[panel_id][edge_id]:
                         # free edge to have zero tags
-                        free_edge_losses.append(pattern[panel_id][edge_id] ** 2)
+                        free_edge_losses.append(pattern[panel_id][edge_id] ** 2 / tag_len)  # average error
             
         # batch mean losses
-        fin_stitch_losses = sum(stitch_losses) / stitch_tags.shape[0]
-        fin_free_losses = torch.cat(free_edge_losses).sum() / stitch_tags.shape[0]
+        fin_stitch_losses = sum(stitch_losses) / len(stitch_losses)
+        fin_free_losses = torch.cat(free_edge_losses).sum() / len(free_edge_losses)  # average per edge
 
         return fin_stitch_losses, fin_free_losses
 
