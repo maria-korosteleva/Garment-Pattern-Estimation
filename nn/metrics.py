@@ -105,9 +105,10 @@ class PatternStitchLoss():
                 for other_id in range(gt_stitches[pattern_idx].shape[0]):
                     if stitch_id != other_id:
                         other_stitch = gt_stitches[pattern_idx][other_id]
-                        for side in [0, 1]:
-                            neg_loss = (pattern[stitch[side][0]][stitch[side][1]] - pattern[other_stitch[0][0]][other_stitch[0][1]]) ** 2
-                            neg_losses.append(max(self.triplet_margin - neg_loss.sum() / tag_len, 0))  # ensure minimal distanse on average
+                        for side_1 in [0, 1]:
+                            for side_2 in [0, 1]:
+                                neg_loss = (pattern[stitch[side_1][0]][stitch[side_1][1]] - pattern[other_stitch[side_2][0]][other_stitch[side_2][1]]) ** 2
+                                neg_losses.append(max(self.triplet_margin - neg_loss.sum() / tag_len, 0))  # ensure minimal distanse on average
                 # Compare to zero too (both sides)
                 neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum() / tag_len, 0))
                 neg_losses.append(max(self.triplet_margin - (pattern[stitch[1][0]][stitch[1][1]] ** 2).sum() / tag_len, 0))
