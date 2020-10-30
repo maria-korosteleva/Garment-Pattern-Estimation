@@ -115,24 +115,19 @@ class PatternStitchLoss():
 
                 # neg losses normalized by quantity
                 stitch_losses.append(similarity_loss + sum(neg_losses) / len(neg_losses))
-                
-            # Find out which edges are not connected to anything
-            connectivity_mat = torch.zeros((pattern.shape[0], pattern.shape[1]), dtype=torch.bool)
-            for stitch in gt_stitches[pattern_idx]:
-                connectivity_mat[stitch[0][0]][stitch[0][1]] = True
-                connectivity_mat[stitch[1][0]][stitch[1][1]] = True
-
-            for panel_id in range(connectivity_mat.shape[0]):
-                for edge_id in range(connectivity_mat.shape[1]):
-                    if not connectivity_mat[panel_id][edge_id]:
-                        # free edge to have zero tags
-                        free_edge_losses.append(pattern[panel_id][edge_id] ** 2 / tag_len)  # average error
             
         # batch mean losses
         fin_stitch_losses = sum(stitch_losses) / len(stitch_losses)
-        fin_free_losses = torch.cat(free_edge_losses).sum() / len(free_edge_losses)  # average per edge
 
-        return fin_stitch_losses, fin_free_losses
+        return fin_stitch_losses
+
+    def free_edges(self, stitch_tags, gt_free_mask):
+        """Calculate loss for free edges (not part of any stitch)"""
+        
+        free_edges_slice = stitch_tags[gt_free_mask]
+        # average norm per edge
+        free_edge_loss = (free_edges_slice ** 2).sum() / free_edges_slice.shape[0]
+        return free_edge_loss
 
 
 class PatternStitchPrecisionRecall():

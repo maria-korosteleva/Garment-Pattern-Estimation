@@ -165,7 +165,9 @@ def _dict_to_tensors(dict_obj):  # helper
     new_dict = dict.fromkeys(dict_obj.keys())
     for key, value in dict_obj.items():
         if isinstance(value, np.ndarray):
-            new_dict[key] = torch.from_numpy(value).float()
+            new_dict[key] = torch.from_numpy(value)
+            if value.dtype not in [np.int, np.bool]:
+                new_dict[key] = new_dict[key].float()  # cast all doubles and ofther stuff to floats
         else:
             new_dict[key] = torch.Tensor(value)
     return new_dict
@@ -919,6 +921,18 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                     stitches.append([edge_1, edge_2])
         return stitches
 
+    @staticmethod
+    def free_edges_mask(pattern, stitches):
+        """
+        Construct the mask to identify edges that are not connected to any other
+        """
+        mask = np.ones((pattern.shape[0], pattern.shape[1]), dtype=np.bool)
+        for stitch in stitches:
+            mask[stitch[0][0]][stitch[0][1]] = False
+            mask[stitch[1][0]][stitch[1][1]] = False
+        
+        return mask
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         points = self._sample_points(datapoint_name, folder_elements)
@@ -928,7 +942,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """Get the pattern representation with 3D placement"""
         pattern, rots, tranls, stitches = self._read_pattern(
             datapoint_name, folder_elements, with_placement=True, with_stitches=True)
-        return {'outlines': pattern, 'rotations': rots, 'translations': tranls, 'stitches': stitches}
+        stitches = np.array(stitches, dtype=np.int)
+        mask = self.free_edges_mask(pattern, stitches)
+        return {'outlines': pattern, 'rotations': rots, 'translations': tranls, 'stitches': stitches, 'free_edges_mask': mask}
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
