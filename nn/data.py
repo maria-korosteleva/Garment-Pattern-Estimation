@@ -901,25 +901,26 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """
         zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
 
-        non_zero_tags = []
-        for panel_id in range(stitch_tags.shape[0]):
-            for edge_id in range(stitch_tags.shape[1]):
-                if not all(torch.isclose(stitch_tags[panel_id][edge_id], zero_tag, zero_tag_tol)):
-                    non_zero_tags.append((panel_id, edge_id))
+        flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
+        non_zero_tag_edges = []
+        for edge_id in range(flat_tags.shape[0]):
+            if not all(torch.isclose(flat_tags[edge_id], zero_tag, zero_tag_tol)):
+                non_zero_tag_edges.append(edge_id)
         
         # print(len(non_zero_tags), non_zero_tags)
         
         # NOTE this part could be implemented smarter
         # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
         stitches = []
-        for tag1_id in range(len(non_zero_tags)):
-            edge_1 = non_zero_tags[tag1_id]
-            tag1 = stitch_tags[edge_1[0]][edge_1[1]]
-            for tag2_id in range(tag1_id + 1, len(non_zero_tags)):
-                edge_2 = non_zero_tags[tag2_id]
-                if all(torch.isclose(tag1, stitch_tags[edge_2[0]][edge_2[1]], similarity_tol)):  # stitch found!
+        for tag1_id in range(len(non_zero_tag_edges)):
+            edge_1 = non_zero_tag_edges[tag1_id]
+            tag1 = flat_tags[edge_1]
+            for tag2_id in range(tag1_id + 1, len(non_zero_tag_edges)):
+                edge_2 = non_zero_tag_edges[tag2_id]
+                if all(torch.isclose(tag1, flat_tags[edge_2], similarity_tol)):  # stitch found!
                     stitches.append([edge_1, edge_2])
-        return stitches
+        
+        return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
 
     @staticmethod
     def free_edges_mask(pattern, stitches):
@@ -927,9 +928,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         Construct the mask to identify edges that are not connected to any other
         """
         mask = np.ones((pattern.shape[0], pattern.shape[1]), dtype=np.bool)
-        for stitch in stitches:
-            mask[stitch[0][0]][stitch[0][1]] = False
-            mask[stitch[1][0]][stitch[1][1]] = False
+        max_edge = pattern.shape[1]
+        for side in stitches:
+            for edge_id in side:
+                mask[edge_id // max_edge][edge_id % max_edge] = False
         
         return mask
 
@@ -942,7 +944,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """Get the pattern representation with 3D placement"""
         pattern, rots, tranls, stitches = self._read_pattern(
             datapoint_name, folder_elements, with_placement=True, with_stitches=True)
-        stitches = np.array(stitches, dtype=np.int)
         mask = self.free_edges_mask(pattern, stitches)
         return {'outlines': pattern, 'rotations': rots, 'translations': tranls, 'stitches': stitches, 'free_edges_mask': mask}
 

@@ -154,15 +154,13 @@ class BasicPattern(object):
             panel_edge_ids_map[panel_name] = edge_ids
 
         # order of stitches doesn't matter
-        stitches_indicies = []
-        for stitch in self.pattern['stitches']:
-            stitch_sides = []
-            for side in stitch:
+        stitches_indicies = np.empty((2, len(self.pattern['stitches'])), dtype=np.int)
+        for idx, stitch in enumerate(self.pattern['stitches']):
+            for id_side, side in enumerate(stitch):
                 panel_id = panel_order.index(side['panel'])
                 edge_id = panel_edge_ids_map[side['panel']][side['edge']]
-                stitch_sides.append((panel_id, edge_id))
-            stitches_indicies.append(stitch_sides)
-        
+                stitches_indicies[id_side][idx] = panel_id * max_len + edge_id  # pattern-level edge id
+
         # format result as requested
         result = [np.stack(panel_seqs)]
         if with_placement:
@@ -198,14 +196,20 @@ class BasicPattern(object):
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
-        if stitches is not None:
-            for stitch_numeric in stitches:
+        if stitches is not None and len(stitche) > 0:
+            if not padded:
+                # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for non-padded panels
+                raise NotImplementedError('BasicPattern::Recovering stitches for unpadded pattern is not supported')
+            
+            edges_per_panel = pattern_representation.shape[1]
+            for stitch_id in range(stitches.shape[1]):
                 stitch_object = []
-                for side in stitch_numeric:
+                for side_id in range(stitches.shape[0]):
+                    pattern_edge_id = stitches[side_id][stitch_id]
                     stitch_object.append(
                         {
-                            "panel": in_panel_order[side[0]],
-                            "edge": side[1], 
+                            "panel": in_panel_order[int(pattern_edge_id // edges_per_panel)],
+                            "edge": int(pattern_edge_id % edges_per_panel), 
                         }
                     )
                 self.pattern['stitches'].append(stitch_object)
@@ -986,6 +990,7 @@ if __name__ == "__main__":
     # empty_pattern = BasicPattern()
     print(pattern.panel_order())
 
+    print(pattern.pattern['stitches'])
     tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
     print(stitches)
 

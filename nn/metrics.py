@@ -88,33 +88,70 @@ class PatternStitchLoss():
             * with every edge indicated as (panel_id, edge_id) 
         """
         stitch_losses = []
-        free_edge_losses = []
         tag_len = stitch_tags.shape[-1]
+        gt_stitches = gt_stitches.long()
+
         for pattern_idx in range(stitch_tags.shape[0]):
-            pattern = stitch_tags[pattern_idx]
-    
-            # build up losses for every stitch
-            for stitch_id in range(gt_stitches[pattern_idx].shape[0]):
-                # same stitch -- same tags
-                stitch = gt_stitches[pattern_idx][stitch_id]
-                similarity_loss = (pattern[stitch[0][0]][stitch[0][1]] - pattern[stitch[1][0]][stitch[1][1]]) ** 2
-                similarity_loss = similarity_loss.sum() / tag_len  # average
+            pattern_tags = stitch_tags[pattern_idx].view(-1, stitch_tags.shape[-1])  # flat view
+            left_sides = pattern_tags[gt_stitches[pattern_idx][0]]
+            right_sides = pattern_tags[gt_stitches[pattern_idx][1]]
+            total_tags = torch.cat([left_sides, right_sides])
+            
+            # similarily losses
+            similarity_loss = (left_sides - right_sides) ** 2
+            similarity_loss = similarity_loss.sum() / (len(total_tags) * tag_len)
 
-                neg_losses = []
-                # different stitches -- different tags
-                for other_id in range(gt_stitches[pattern_idx].shape[0]):
-                    if stitch_id != other_id:
-                        other_stitch = gt_stitches[pattern_idx][other_id]
-                        for side_1 in [0, 1]:
-                            for side_2 in [0, 1]:
-                                neg_loss = (pattern[stitch[side_1][0]][stitch[side_1][1]] - pattern[other_stitch[side_2][0]][other_stitch[side_2][1]]) ** 2
-                                neg_losses.append(max(self.triplet_margin - neg_loss.sum() / tag_len, 0))  # ensure minimal distanse on average
-                # Compare to zero too (both sides)
-                neg_losses.append(max(self.triplet_margin - (pattern[stitch[0][0]][stitch[0][1]] ** 2).sum() / tag_len, 0))
-                neg_losses.append(max(self.triplet_margin - (pattern[stitch[1][0]][stitch[1][1]] ** 2).sum() / tag_len, 0))
+            # Negative losses
+            total_neg_loss = []
+            for tag_id, tag in enumerate(total_tags):
+                # Evaluate distance to other tags
+                neg_loss = (tag - total_tags) ** 2
 
-                # neg losses normalized by quantity
-                stitch_losses.append(similarity_loss + sum(neg_losses) / len(neg_losses))
+                # compare with margin
+                neg_loss = self.triplet_margin - neg_loss.sum(dim=-1) / tag_len  # single value per other tag
+
+                # zero out losses for entries that should be equal to current tag
+                neg_loss[tag_id] = 0  # torch.zeros_like(neg_loss[tag_id]).to(neg_loss.device)
+                brother_id = tag_id + len(left_sides) if tag_id < len(left_sides) else tag_id - len(left_sides)
+                neg_loss[brother_id] = 0  # torch.zeros_like(neg_loss[tag_id]).to(neg_loss.device)
+
+                # ignore elements far enough from current tag
+                neg_loss = torch.max(neg_loss, torch.zeros_like(neg_loss))
+
+                # fin total
+                total_neg_loss.append(neg_loss.sum() / len(neg_loss))
+
+            # average per tag
+            total_neg_loss = sum(total_neg_loss) / len(total_neg_loss)
+
+            # Push tags away from zero
+            non_zero_loss = self.triplet_margin - (total_tags ** 2).sum(dim=-1) / tag_len
+            non_zero_loss = torch.max(non_zero_loss, torch.zeros_like(non_zero_loss)).sum() / len(non_zero_loss)
+
+            stitch_losses.append(similarity_loss + total_neg_loss + non_zero_loss)
+
+            # # build up losses for every stitch
+            # for stitch_id in range(gt_stitches[pattern_idx].shape[0]):
+            #     # same stitch -- same tags
+            #     stitch = gt_stitches[pattern_idx][stitch_id]
+            #     similarity_loss = (pattern_tags[stitch[0][0]][stitch[0][1]] - pattern_tags[stitch[1][0]][stitch[1][1]]) ** 2
+            #     similarity_loss = similarity_loss.sum() / tag_len  # average
+
+            #     neg_losses = []
+            #     # different stitches -- different tags
+            #     for other_id in range(gt_stitches[pattern_idx].shape[0]):
+            #         if stitch_id != other_id:
+            #             other_stitch = gt_stitches[pattern_idx][other_id]
+            #             for side_1 in [0, 1]:
+            #                 for side_2 in [0, 1]:
+            #                     neg_loss = (pattern_tags[stitch[side_1][0]][stitch[side_1][1]] - pattern_tags[other_stitch[side_2][0]][other_stitch[side_2][1]]) ** 2
+            #                     neg_losses.append(max(self.triplet_margin - neg_loss.sum() / tag_len, 0))  # ensure minimal distanse on average
+            #     # Compare to zero too (both sides)
+            #     neg_losses.append(max(self.triplet_margin - (pattern_tags[stitch[0][0]][stitch[0][1]] ** 2).sum() / tag_len, 0))
+            #     neg_losses.append(max(self.triplet_margin - (pattern_tags[stitch[1][0]][stitch[1][1]] ** 2).sum() / tag_len, 0))
+
+            #     # neg losses normalized by quantity
+               
             
         # batch mean losses
         fin_stitch_losses = sum(stitch_losses) / len(stitch_losses)
@@ -123,7 +160,7 @@ class PatternStitchLoss():
 
     def free_edges(self, stitch_tags, gt_free_mask):
         """Calculate loss for free edges (not part of any stitch)"""
-        
+
         free_edges_slice = stitch_tags[gt_free_mask]
         # average norm per edge
         free_edge_loss = (free_edges_slice ** 2).sum() / free_edges_slice.shape[0]
@@ -145,22 +182,23 @@ class PatternStitchPrecisionRecall():
         tot_precision = 0
         tot_recall = 0
         for pattern_idx in range(stitch_tags.shape[0]):
-            stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx])
-            stitch_list = torch.IntTensor(stitch_list).to(gt_stitches.device)
-
-            correct_stitches = 0
+            stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx]).to(gt_stitches.device)
+            num_detected_stitches = stitch_list.shape[1] if stitch_list.numel() > 0 else 0
+            if not num_detected_stitches:  # no stitches detected -- zero recall & precision
+                continue
+            num_actual_stitches = gt_stitches[pattern_idx].shape[-1]
+            
             # compare stitches
-            for detected in stitch_list:
-                for actual in gt_stitches[pattern_idx]:
+            correct_stitches = 0
+            for detected in stitch_list.transpose(0, 1):
+                for actual in gt_stitches[pattern_idx].transpose(0, 1):
                     # order-invariant comparison of stitch sides
-                    if (all(detected[0] == actual[0]) and all(detected[1] == actual[1])) \
-                            or (all(detected[1] == actual[0]) and all(detected[0] == actual[1])):
-                        correct_stitches += 1
+                    correct_stitches += (all(detected == actual) or all(detected == actual.flip([0])))
 
             # precision -- how many of the detected stitches are actually there
-            tot_precision += correct_stitches / len(stitch_list) if len(stitch_list) else 0
+            tot_precision += correct_stitches / num_detected_stitches if num_detected_stitches else 0
             # recall -- how many of the actual stitches were detected
-            tot_recall += correct_stitches / len(gt_stitches[pattern_idx])
+            tot_recall += correct_stitches / num_actual_stitches if num_actual_stitches else 0
         
         # evrage by batch
         return tot_precision / stitch_tags.shape[0], tot_recall / stitch_tags.shape[0]
@@ -238,8 +276,8 @@ if __name__ == "__main__":
     )
     stitches = torch.IntTensor([
         [
-            [[0, 1], [1, 2]]
+            [1, 5]
         ]
-    ])
+    ]).transpose(0, 1)
 
     print(stitch_eval(tags, stitches))
