@@ -906,7 +906,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # compare every row with zeros -- which tags are potential edges?
         non_zero_tag_mask = flat_tags.isclose(torch.zeros_like(flat_tags), atol=zero_tag_tol)
         non_zero_tag_mask = ~torch.all(non_zero_tag_mask, dim=-1)
-        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask).squeeze()
+        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze()
         
         if non_zero_tag_edges.numel() == 0:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
