@@ -75,7 +75,7 @@ if __name__ == "__main__":
         data_config['element_size'], data_config['panel_len'], data_config['ground_truth_size'], data_config['standardize'],
         experiment.NN_config()
     )
-    # model.load_state_dict(experiment.load_final_model())
+    # model.load_state_dict(experiment.load_final_model()['model_state_dict'])
     # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
     model = model.to(device=device)

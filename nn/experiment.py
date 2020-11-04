@@ -170,8 +170,10 @@ class WandbRunWrappper(object):
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
         try:
-            art_path = self._load_artifact(self.artifactname(self.final_filetag), to_path=to_path)
-            return torch.load(str(Path(art_path) / self.final_filename()))
+            art_path = self._load_artifact(self.artifactname('checkpoint'), to_path=to_path)  # loading latest
+            for file in art_path.iterdir():
+                print(file)
+                return torch.load(file)
 
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
@@ -191,29 +193,20 @@ class WandbRunWrappper(object):
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
     
-    def save(self, state, save_name='checkpoint', aliases=[]):
+    def save_checkpoint(self, state, aliases=[]):
         """Save given state dict as torch checkpoint to local run dir
-            save_name parameter controls saving names (multiple could be used):
-            * 'checkpoint' -> state is saved as a new checkpoint file
-            * 'final' -> state is saved as final model file
-            * all other options -> type is interpreted as filename, and state is simply saved with ginen filename"""
+            aliases assign labels to checkpoints for easy retrieval
+        """
 
         if not self.initialized:
             raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
 
-        print('Experiment::Saving model state artifact {}'.format(save_name))
+        print('Experiment::Saving model state -- checkpoint artifact')
 
         # Using artifacts to store important files for this run
-        if 'checkpoint' in save_name:
-            filename = self.checkpoint_filename(self.checkpoint_counter)
-            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='checkpoint')
-            self.checkpoint_counter += 1  # ensure all checkpoints have unique names 
-        elif save_name == 'final':
-            artifact = wb.Artifact(self.artifactname(self.final_filetag, with_version=False), type='result')
-            filename = self.final_filename()
-        else:
-            artifact = wb.Artifact(self.artifactname(save_name, with_version=False), type='other')
-            filename = save_name
+        filename = self.checkpoint_filename(self.checkpoint_counter)
+        artifact = wb.Artifact(self.artifactname('checkpoint', with_version=False), type='checkpoint')
+        self.checkpoint_counter += 1  # ensure all checkpoints have unique names 
 
         torch.save(state, self.local_artifact_path() / filename)
         artifact.add_file(str(self.local_artifact_path() / filename))

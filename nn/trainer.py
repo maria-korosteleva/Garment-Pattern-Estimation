@@ -97,7 +97,6 @@ class Trainer():
         
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
-        self.experiment.save(model.state_dict(), save_name='final')
         print("Trainer::Finished training")
 
     # ---- Private -----
@@ -261,16 +260,15 @@ class Trainer():
                 print(e)
                 pass
 
-    def _save_checkpoint(self, model, epoch, save_name='checkpoint', best=False):
+    def _save_checkpoint(self, model, epoch, best=False):
         """Save checkpoint that can be used to resume training"""
-        self.experiment.save(
+        self.experiment.save_checkpoint(
             {
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'scheduler_state_dict': self.scheduler.state_dict()
             },
-            save_name=save_name, 
             aliases=['best'] if best else []
         )
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training

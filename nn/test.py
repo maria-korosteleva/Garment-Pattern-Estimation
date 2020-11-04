@@ -56,7 +56,7 @@ model = nets.GarmentPattern3D(
 # model_state = torch.load('./wandb/artifacts/2lunqzha/checkpoint_227.pth')['model_state_dict']  # debug
 # model.load_state_dict(model_state)
 
-# model.load_state_dict(experiment.load_final_model())
+# model.load_state_dict(experiment.load_final_model()['model_state_dict'])
 # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
 model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
