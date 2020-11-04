@@ -902,14 +902,17 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
 
         flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
-        non_zero_tag_edges = []
-        for edge_id in range(flat_tags.shape[0]):
-            if not all(torch.isclose(flat_tags[edge_id], zero_tag, zero_tag_tol)):
-                non_zero_tag_edges.append(edge_id)
         
-        # print(len(non_zero_tags), non_zero_tags)
+        # compare every row with zeros -- which tags are potential edges?
+        non_zero_tag_mask = flat_tags.isclose(torch.zeros_like(flat_tags), atol=zero_tag_tol)
+        non_zero_tag_mask = ~torch.all(non_zero_tag_mask, dim=-1)
+        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask).squeeze()
         
-        # NOTE this part could be implemented smarter
+        if non_zero_tag_edges.numel() == 0:  # -> no stitches
+            print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
+            return torch.tensor([])
+
+        # NOTE this part could be implemented smarter with fancy indexing
         # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
         stitches = []
         for tag1_id in range(len(non_zero_tag_edges)):
@@ -917,7 +920,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             tag1 = flat_tags[edge_1]
             for tag2_id in range(tag1_id + 1, len(non_zero_tag_edges)):
                 edge_2 = non_zero_tag_edges[tag2_id]
-                if all(torch.isclose(tag1, flat_tags[edge_2], similarity_tol)):  # stitch found!
+                if all(torch.isclose(tag1, flat_tags[edge_2], atol=similarity_tol)):  # stitch found!
                     stitches.append([edge_1, edge_2])
         
         return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
