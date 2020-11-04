@@ -462,13 +462,14 @@ class GarmentFullPattern3D(BaseModule):
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
         # stitches
-        stitch_loss = self.stitch_loss(preds['stitch_tags'], ground_truth['stitches'])  # stitches gotta be IntTensor
-        free_loss = self.stitch_loss.free_edges(preds['stitch_tags'], ground_truth['free_edges_mask'])  # Mask should be BoolTensor
+        # stitches gotta be IntTensor, Mask should be BoolTensor
+        stitch_loss, stitch_loss_breakdown = self.stitch_loss(
+            preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask'])  
 
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
-            rotation_loss=rot_loss, translation_loss=translation_loss, 
-            stitch_loss=stitch_loss, free_edges_loss=free_loss)
+            rotation_loss=rot_loss, translation_loss=translation_loss)
+        loss_dict.update(stitch_loss_breakdown)
 
         # qualitative evaluation
         if with_quality_eval:        
@@ -478,7 +479,7 @@ class GarmentFullPattern3D(BaseModule):
         full_loss = pattern_loss \
             + self.config['loop_loss_weight'] * loop_loss \
             + self.config['placement_loss_weight'] * (rot_loss + translation_loss) \
-            + stitch_loss + free_loss
+            + stitch_loss
 
         return full_loss, loss_dict
 

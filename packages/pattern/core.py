@@ -196,7 +196,7 @@ class BasicPattern(object):
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
-        if stitches is not None and len(stitche) > 0:
+        if stitches is not None and len(stitches) > 0:
             if not padded:
                 # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for non-padded panels
                 raise NotImplementedError('BasicPattern::Recovering stitches for unpadded pattern is not supported')
