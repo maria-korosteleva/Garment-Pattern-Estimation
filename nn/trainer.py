@@ -26,7 +26,7 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=10,  # 600
+            epochs=3,  # 600
             batch_size=10,
             learning_rate=0.001,
             optimizer='Adam',
@@ -130,11 +130,6 @@ class Trainer():
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
             self.scheduler.step(valid_loss)
 
-            # compare with previous best
-            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
-                best_valid_loss = valid_loss
-                self._save_checkpoint(model, epoch, 'best')
-            
             # Base logging
             print('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
             wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss,
@@ -144,8 +139,12 @@ class Trainer():
             if self.log_with_visualization:
                 self._log_an_image(model, valid_loader, epoch, log_step)
 
-            # checkpoint
-            self._save_checkpoint(model, epoch)
+            # Checkpoints: & compare with previous best
+            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
+                best_valid_loss = valid_loss
+                self._save_checkpoint(model, epoch, best=True)
+            else:
+                self._save_checkpoint(model, epoch, best=False)
 
             # check for early stoping
             if self._early_stopping(loss, valid_loss, self.optimizer.param_groups[0]['lr']):
@@ -262,7 +261,7 @@ class Trainer():
                 print(e)
                 pass
 
-    def _save_checkpoint(self, model, epoch, save_name='checkpoint'):
+    def _save_checkpoint(self, model, epoch, save_name='checkpoint', best=False):
         """Save checkpoint that can be used to resume training"""
         self.experiment.save(
             {
@@ -271,6 +270,7 @@ class Trainer():
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'scheduler_state_dict': self.scheduler.state_dict()
             },
-            save_name=save_name
+            save_name=save_name, 
+            aliases=['best'] if best else []
         )
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
