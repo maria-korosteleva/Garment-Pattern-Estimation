@@ -210,6 +210,9 @@ def eval_metrics(model, data_wrapper, section='test'):
     model.to(device)
     model.eval()
 
+    if hasattr(model, 'with_quality_eval'):
+        model.with_quality_eval = True  # force quality evaluation for models that support it
+
     with torch.no_grad():
         current_metrics = {}
         loader = data_wrapper.get_loader(section)
