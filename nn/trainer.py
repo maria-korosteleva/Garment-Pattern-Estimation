@@ -129,6 +129,13 @@ class Trainer():
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
             self.scheduler.step(valid_loss)
 
+            # Checkpoints: & compare with previous best
+            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
+                best_valid_loss = valid_loss
+                self._save_checkpoint(model, epoch, best=True)
+            else:
+                self._save_checkpoint(model, epoch, best=False)
+
             # Base logging
             print('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
             wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss,
@@ -137,13 +144,6 @@ class Trainer():
             # prediction for visual reference
             if self.log_with_visualization:
                 self._log_an_image(model, valid_loader, epoch, log_step)
-
-            # Checkpoints: & compare with previous best
-            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
-                best_valid_loss = valid_loss
-                self._save_checkpoint(model, epoch, best=True)
-            else:
-                self._save_checkpoint(model, epoch, best=False)
 
             # check for early stoping
             if self._early_stopping(loss, valid_loss, self.optimizer.param_groups[0]['lr']):
