@@ -101,10 +101,10 @@ class PatternStitchLoss():
 
         # tags on both sides of the stitch -- together
         similarity_loss = (left_sides - right_sides) ** 2
-        similarity_loss = similarity_loss.sum() / (batch_size * num_stitches * 2 * tag_len)
+        similarity_loss = similarity_loss.sum() / (batch_size * num_stitches)
 
         # Push tags to be non-zero
-        non_zero_loss = self.triplet_margin - (total_tags ** 2).sum(dim=-1) / tag_len
+        non_zero_loss = self.triplet_margin - (total_tags ** 2).sum(dim=-1)
         non_zero_loss = torch.max(non_zero_loss, torch.zeros_like(non_zero_loss)).sum() / (batch_size * num_stitches * 2)
 
         # Push tags away from each other
@@ -115,7 +115,7 @@ class PatternStitchLoss():
                 neg_loss = (tag - pattern_tags) ** 2
 
                 # compare with margin
-                neg_loss = self.triplet_margin - neg_loss.sum(dim=-1) / tag_len  # single value per other tag
+                neg_loss = self.triplet_margin - neg_loss.sum(dim=-1)  # single value per other tag
 
                 # zero out losses for entries that should be equal to current tag
                 neg_loss[tag_id] = 0  # torch.zeros_like(neg_loss[tag_id]).to(neg_loss.device)
