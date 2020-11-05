@@ -15,8 +15,10 @@ class BaseModule(nn.Module):
         self.config = {'loss': 'MSELoss'}
         self.regression_loss = nn.MSELoss()
     
-    def loss(self, features, ground_truth):
-        """Default loss for my neural networks. Takes pne batch of data"""
+    def loss(self, features, ground_truth, **kwargs):
+        """Default loss for my neural networks. Takes pne batch of data. 
+            Children can use additional arguments as needed
+        """
         preds = self(features)
         ground_truth = ground_truth.to(features.device)  # make sure device is correct
         loss = self.regression_loss(preds, ground_truth)
@@ -153,7 +155,7 @@ class GarmentPanelsAE(BaseModule):
         out = self.seq_decoder(encoding, x.shape[-2])  # -2 corresponds to len of paddel panel
         return out
 
-    def loss(self, features, ground_truth):
+    def loss(self, features, ground_truth, **kwargs):
         """Override base class loss calculation to use reconstruction loss"""
         preds = self(features)
 
@@ -243,7 +245,7 @@ class GarmentPatternAE(BaseModule):
         
         return prediction
 
-    def loss(self, features, ground_truth):
+    def loss(self, features, ground_truth, **kwargs):
         """Override base class loss calculation to use reconstruction loss"""
         preds = self(features)
 
@@ -330,7 +332,7 @@ class GarmentPattern3D(BaseModule):
         
         return prediction
 
-    def loss(self, features, ground_truth):
+    def loss(self, features, ground_truth, **kwargs):
         """Evalute loss when predicting patterns"""
         preds = self(features)
         ground_truth = ground_truth.to(features.device)  # make sure device is correct
@@ -373,7 +375,8 @@ class GarmentFullPattern3D(BaseModule):
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
-            'stitch_tags_margin': 0.3
+            'stitch_tags_margin': 0.3,
+            'epoch_with_stitches': 40
         })
         # update with input settings
         self.config.update(config) 
@@ -416,8 +419,6 @@ class GarmentFullPattern3D(BaseModule):
         )
 
         # decoding the panel placement
-        # self.rotation_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size)
-        # self.translation_decoder = nn.Linear(self.config['panel_encoding_size'], translation_size)
         self.placement_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size + translation_size)
 
     def forward(self, positions_batch):
@@ -449,8 +450,10 @@ class GarmentFullPattern3D(BaseModule):
 
         return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags}
 
-    def loss(self, features, ground_truth):
-        """Evalute loss when predicting patterns"""
+    def loss(self, features, ground_truth, epoch=1000):
+        """Evalute loss when predicting patterns.
+            default epoch is some large value to trigger stitch evaluation
+        """
         preds = self(features)
         device = features.device
 
@@ -464,25 +467,29 @@ class GarmentFullPattern3D(BaseModule):
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
-        # stitches
-        # stitches gotta be IntTensor, Mask should be BoolTensor
-        stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-            preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask'])  
-
+        # total loss
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
-        loss_dict.update(stitch_loss_breakdown)
-
-        # qualitative evaluation
-        if self.with_quality_eval:        
-            stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], ground_truth['stitches'].type(torch.IntTensor))
-            loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
-
+        
         full_loss = pattern_loss \
             + self.config['loop_loss_weight'] * loop_loss \
-            + self.config['placement_loss_weight'] * (rot_loss + translation_loss) \
-            + stitch_loss
+            + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
+
+        # if we are far enough in the training, evaluate stitch loss too
+        if epoch >= self.config['epoch_with_stitches']:
+            # stitches gotta be IntTensor, Mask should be BoolTensor
+            stitch_loss, stitch_loss_breakdown = self.stitch_loss(
+                preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask'])  
+            
+            loss_dict.update(stitch_loss_breakdown)
+            full_loss += stitch_loss
+
+            # qualitative evaluation
+            if self.with_quality_eval:        
+                stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], ground_truth['stitches'].type(torch.IntTensor))
+                loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
+
 
         return full_loss, loss_dict
 

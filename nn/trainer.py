@@ -26,7 +26,7 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=10,  # 600
+            epochs=600,
             batch_size=10,
             learning_rate=0.001,
             optimizer='Adam',
@@ -112,7 +112,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict = model.loss(features, gt)
+                loss, loss_dict = model.loss(features, gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -125,7 +125,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'])[0] for batch in valid_loader]
+                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
             self.scheduler.step(valid_loss)
 
