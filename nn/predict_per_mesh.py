@@ -71,10 +71,8 @@ if __name__ == "__main__":
 
     # ----- Model architecture -----
     # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
-    model = nets.GarmentPattern3D(
-        data_config['element_size'], data_config['panel_len'], data_config['ground_truth_size'], data_config['standardize'],
-        experiment.NN_config()
-    )
+    model = nets.GarmentPattern3D(data_config, experiment.NN_config())
+    
     # model.load_state_dict(experiment.load_final_model()['model_state_dict'])
     # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])

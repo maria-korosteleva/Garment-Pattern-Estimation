@@ -802,11 +802,16 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-        self.config['pattern_len'] = self[0]['ground_truth']['outlines'].shape[0]
-        self.config['panel_len'] = self[0]['ground_truth']['outlines'].shape[1]
-        self.config['element_size'] = self[0]['ground_truth']['outlines'].shape[2]
-        self.config['rotation_size'] = self[0]['ground_truth']['rotations'].shape[1]
-        self.config['translation_size'] = self[0]['ground_truth']['translations'].shape[1]
+        
+        self.config.update(
+            pattern_len=self[0]['ground_truth']['outlines'].shape[0],
+            panel_len=self[0]['ground_truth']['outlines'].shape[1],
+            element_size=self[0]['ground_truth']['outlines'].shape[2],
+            rotation_size=self[0]['ground_truth']['rotations'].shape[1],
+            translation_size=self[0]['ground_truth']['translations'].shape[1],
+            stitch_zero_tag_tol=0.01,
+            stitch_similarity_tag_tol=0.1
+        )
     
     def standardize(self, training=None):
         """Use shifting and scaling for fitting data to interval comfortable for NN training.
@@ -899,8 +904,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
         """
-        zero_tag = torch.zeros(stitch_tags.shape[-1]).to(stitch_tags.device)
-
         flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
         
         # compare every row with zeros -- which tags are potential edges?
@@ -964,7 +967,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
 
         # stitch tags to stitch list
-        stitches = self.tags_to_stitches(stitch_tags)
+        stitches = self.tags_to_stitches(stitch_tags, 
+            zero_tag_tol=self.config['stitch_zero_tag_tol'], 
+            similarity_tol=self.config['stitch_similarity_tag_tol']
+            )
 
         return self._pattern_from_tenzor(dataname, pattern, rots, transls, stitches, 
                                          std_config={}, supress_error=True)

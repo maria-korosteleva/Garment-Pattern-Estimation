@@ -49,7 +49,7 @@ datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_s
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], experiment.NN_config())
 # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
 model = nets.GarmentPattern3D(
-    dataset.config['element_size'], dataset.config['panel_len'], dataset.config['ground_truth_size'], dataset.config['standardize'],
+    dataset.config,
     experiment.NN_config()
 )
 

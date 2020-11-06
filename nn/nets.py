@@ -266,7 +266,7 @@ class GarmentPattern3D(BaseModule):
         Predicting 2D pattern geometry (panels outlines) from 3D garment geometry 
         Constists of (interchangeable) feature extractor and pattern decoder from GarmentPatternAE
     """
-    def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, data_norm={}, config={}):
+    def __init__(self, data_config, config={}):
         super().__init__()
 
         # defaults for this net
@@ -287,11 +287,11 @@ class GarmentPattern3D(BaseModule):
         self.config.update(config) 
 
         # output props
-        self.max_panel_len = max_panel_len
-        self.max_pattern_size = max_pattern_size
+        self.max_panel_len = data_config['panel_len']
+        self.max_pattern_size = data_config['pattern_len']
 
         # extra loss object
-        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
+        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_config['standardize'])
 
         # Feature extractor definition
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -303,7 +303,7 @@ class GarmentPattern3D(BaseModule):
         # Decode into pattern definition
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], panel_elem_len, self.config['panel_n_layers'], 
+            self.config['panel_encoding_size'], self.config['panel_encoding_size'], data_config['element_size'], self.config['panel_n_layers'], 
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
@@ -357,7 +357,7 @@ class GarmentFullPattern3D(BaseModule):
             * pattern decoder from GarmentPatternAE
             * MLP modules to predict panel 3D placement & stitches
     """
-    def __init__(self, panel_elem_len, max_panel_len, max_pattern_size, rotation_size, translation_size, data_norm={}, config={}):
+    def __init__(self, data_config, config={}):
         super().__init__()
 
         # defaults for this net
@@ -382,20 +382,25 @@ class GarmentFullPattern3D(BaseModule):
         self.config.update(config) 
 
         # output props
-        self.panel_elem_len = panel_elem_len
-        self.max_panel_len = max_panel_len
-        self.max_pattern_size = max_pattern_size
-        self.rotation_size = rotation_size
-        self.translation_size = translation_size
+        self.panel_elem_len = data_config['element_size']
+        self.max_panel_len = data_config['panel_len']
+        self.max_pattern_size = data_config['pattern_len']
+        self.rotation_size = data_config['rotation_size']
+        self.translation_size = data_config['translation_size']
 
         # extra losses objects
         self.loop_loss = metrics.PanelLoopLoss(
-            data_stats={'shift': data_norm['gt_shift']['outlines'], 'scale': data_norm['gt_scale']['outlines']})
+            data_stats={
+                'shift': data_config['standardize']['gt_shift']['outlines'], 
+                'scale': data_config['standardize']['gt_scale']['outlines']})
         self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
-        self.stitch_quality = metrics.PatternStitchPrecisionRecall()
+        self.stitch_quality = metrics.PatternStitchPrecisionRecall(
+            data_config['stitch_zero_tag_tol'], 
+            data_config['stitch_similarity_tag_tol']
+        )
 
         # Feature extractor definition
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -419,7 +424,9 @@ class GarmentFullPattern3D(BaseModule):
         )
 
         # decoding the panel placement
-        self.placement_decoder = nn.Linear(self.config['panel_encoding_size'], rotation_size + translation_size)
+        self.placement_decoder = nn.Linear(
+            self.config['panel_encoding_size'], 
+            self.rotation_size + self.translation_size)
 
     def forward(self, positions_batch):
         self.device = positions_batch.device
