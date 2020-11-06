@@ -123,6 +123,44 @@ class BasicPattern(object):
             name = os.path.basename(os.path.normpath(path))
         return name
 
+    # --------- Info ------------------------
+    def panel_order(self, name_list=None, location_dict=None, dim=0, tolerance=5):
+        """ (Recursive) Ordering of the panels based on their 3D translation values.
+            * Using cm as units for tolerance (when the two coordinates are considered equal)
+            * Sorting by all dims as keys X -> Y -> Z (left-right (looking from Z) then down-up then back-front)
+            * based on the fuzzysort suggestion here https://stackoverflow.com/a/24024801/11206726"""
+
+        if name_list is None:  # start from beginning
+            name_list = self.pattern['panels'].keys() 
+        if location_dict is None:  # obtain location for all panels to use in sorting further
+            location_dict = {}
+            for name in name_list:
+                location_dict[name] = self._panel_universal_transtation(name)
+
+        # consider only translations of the requested panel names
+        reference = [location_dict[panel_n][dim] for panel_n in name_list]
+        sorted_couple = sorted(zip(reference, name_list))  # sorts according to the first list
+        sorted_reference, sorted_names = zip(*sorted_couple)
+        sorted_names = list(sorted_names)
+
+        if (dim + 1) < 3:  # 3D is max
+            # re-sort values by next dimention if they have similar values in current dimention
+            fuzzy_start = 0
+            for fuzzy_end in range(1, len(sorted_reference)):
+                if sorted_reference[fuzzy_end] - sorted_reference[fuzzy_start] >= tolerance:
+                    # the range of similar values is completed
+                    if fuzzy_end - fuzzy_start > 1:
+                        sorted_names[fuzzy_start:fuzzy_end] = self.panel_order(
+                            sorted_names[fuzzy_start:fuzzy_end], location_dict, dim + 1, tolerance)
+                    fuzzy_start = fuzzy_end  # start counting similar values anew
+
+            # take care of the tail
+            if fuzzy_start != fuzzy_end:
+                sorted_names[fuzzy_start:] = self.panel_order(
+                    sorted_names[fuzzy_start:], location_dict, dim + 1, tolerance)
+
+        return sorted_names
+
     # --------- Special representations -----
     def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False):
         """Return pattern in format suitable for NN inputs/outputs
@@ -215,7 +253,6 @@ class BasicPattern(object):
                 self.pattern['stitches'].append(stitch_object)
         else:
             print('BasicPattern::Warning::{}::Panels were updated but new stitches info was not provided. Stitches are removed.'.format(self.name))
-
 
     def panel_as_numeric(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
@@ -318,7 +355,7 @@ class BasicPattern(object):
             edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
         else:
             print('BasicPattern::Warning::{} with panel {}::Edge sequence do not return to origin. '
-                ' Creating extra vertex'.format(self.name, panel_name))
+                'Creating extra vertex'.format(self.name, panel_name))
             vertices = np.vstack([vertices, fin_vert])
             edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
 
@@ -335,38 +372,6 @@ class BasicPattern(object):
         if rotation is not None:
             panel['rotation'] = rotation.tolist()
         
-    def panel_order(self, name_list=None, dim=0, tolerance=5):
-        """Ordering of the panels based on their 3D translation values.
-            * Using cm as units for tolerance
-            * Sorting X -> Y -> Z (left-right (looking from Z) then down-up then back-front)
-            * based on the fuzzysort suggestion here https://stackoverflow.com/a/24024801/11206726"""
-
-        if name_list is None:  # start from beginning
-            name_list = self.pattern['panels'].keys() 
-        # consider only translations of the requested panel names
-        reference = [self.pattern['panels'][panel_n]['translation'][dim] for panel_n in name_list]
-        sorted_couple = sorted(zip(reference, name_list))  # sorts according to the first list
-        sorted_reference, sorted_names = zip(*sorted_couple)
-        sorted_names = list(sorted_names)
-
-        if (dim + 1) < 3:  # 3D is max
-            # re-sort values by next dimention if they have similar values in current dimention
-            fuzzy_start = 0
-            for fuzzy_end in range(1, len(sorted_reference)):
-                if sorted_reference[fuzzy_end] - sorted_reference[fuzzy_start] >= tolerance:
-                    # the range of similar values is completed
-                    if fuzzy_end - fuzzy_start > 1:
-                        sorted_names[fuzzy_start:fuzzy_end] = self.panel_order(
-                            sorted_names[fuzzy_start:fuzzy_end], dim + 1, tolerance)
-                    fuzzy_start = fuzzy_end  # start counting similar values anew
-
-            # take care of the tail
-            if fuzzy_start != fuzzy_end:
-                sorted_names[fuzzy_start:] = self.panel_order(
-                    sorted_names[fuzzy_start:], dim + 1, tolerance)
-
-        return sorted_names
-
     def _edge_as_vector(self, vertices, edge_dict):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
@@ -387,6 +392,44 @@ class BasicPattern(object):
         if not all(np.isclose(curvature, 0)):  # curvature part
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
+
+    @staticmethod
+    def _point_in_3D(local_coord, rotation, translation):
+        """Apply 3D transformation to the point given in 2D local coordinated, e.g. on the panel
+        * rotation is expected to be given in 'xyz' Euler anges (as in Autodesk Maya) or as 3x3 matrix"""
+
+        # 2D->3D local
+        local_coord = np.append(local_coord, 0)
+
+        # Rotate
+        rotation = np.array(rotation)
+        if rotation.size == 3:  # transform Euler angles to matrix
+            rotation = Rotation.from_euler('xyz', rotation, degrees=True).as_matrix()
+            # otherwise we already have the matrix
+        elif rotation.size != 9:
+            raise ValueError('BasicPattern::Error::You need to provide Euler angles or Rotation matrix for _point_in_3D(..)')
+        rotated_point = rotation.dot(local_coord)
+
+        # translate
+        return rotated_point + translation
+
+    def _panel_universal_transtation(self, panel_name):
+        """Return a universal 3D translation of the panel (e.g. to be used in judging the panel order).
+            Universal translation it defined as world 3D location of mid-point of the top of the panel bounding box.
+            * Assumption: 
+                In most cases, top-mid-point of a panel corresponds to body landmarks (e.g. neck, middle of an arm, waist) 
+                and thus is mostly stable across garment designs.
+            * Function result is independent from the current choice of the local coordinate system of the panel
+        """
+        panel = self.pattern['panels'][panel_name]
+        vertices = np.array(panel['vertices'])
+
+        top_right = vertices.max(axis=0)
+        low_left = vertices.min(axis=0)
+        mid_x = (top_right[0] + low_left[0]) / 2
+
+        return self._point_in_3D([mid_x, top_right[1]], panel['rotation'], panel['translation'])
+
 
     # --------- Pattern operations ----------
     def _normalize_template(self):
@@ -980,32 +1023,44 @@ class ParametrizedPattern(BasicPattern):
 # ---------- test -------------
 if __name__ == "__main__":
     import customconfig
-    # from pattern.wrappers import VisPattern
+    from pattern.wrappers import VisPattern
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
+    pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
     # empty_pattern = BasicPattern()
-    print(pattern.panel_order())
+    print('Initial')
+    print(pattern_init.panel_order())
+    print('Original translation {}: {}'.format('lfsleeve', pattern_init.pattern['panels']['lfsleeve']['translation']))
+    print('Original translation {}: {}'.format('lbsleeve', pattern_init.pattern['panels']['lbsleeve']['translation']))
+    print('Universal translation {}: {}'.format('lfsleeve', pattern_init._panel_universal_transtation('lfsleeve')))
+    print('Universal translation {}: {}'.format('lbsleeve', pattern_init._panel_universal_transtation('lbsleeve')))
 
-    print(pattern.pattern['stitches'])
-    tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
-    print(stitches)
 
-    # panel_name = 'right'
-    # print(pattern.pattern['panels'][panel_name])
-    # edges, rot, transl = pattern.panel_as_sequence(panel_name)
-    # print(edges, rot, transl)
+    print('Predicted')
+    print(pattern_predicted.panel_order())
+    print(pattern_predicted.pattern['panels']['panel_3']['translation'])
+    print(pattern_predicted._panel_universal_transtation('panel_3'))
 
-    # tensor[2][0][0] -= 10
+    # print(pattern.pattern['stitches'])
+    # tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
+    # print(stitches)
 
-    # # tensor = tensor[:-1]
-    pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
-    # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
-    print(pattern.pattern['stitches'])
-    print(pattern.panel_order())
+    # # panel_name = 'right'
+    # # print(pattern.pattern['panels'][panel_name])
+    # # edges, rot, transl = pattern.panel_as_sequence(panel_name)
+    # # print(edges, rot, transl)
 
-    pattern.name += '_stitches_upd_1'
-    pattern.serialize(system_config['output'], to_subfolder=True)
+    # # tensor[2][0][0] -= 10
+
+    # # # tensor = tensor[:-1]
+    # pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    # # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
+    # print(pattern.pattern['stitches'])
+    # print(pattern.panel_order())
+
+    # pattern.name += '_stitches_upd_1'
+    # pattern.serialize(system_config['output'], to_subfolder=True)
