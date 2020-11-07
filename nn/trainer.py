@@ -112,7 +112,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict = model.loss(features, gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.loss(features, gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -130,7 +130,7 @@ class Trainer():
             self.scheduler.step(valid_loss)
 
             # Checkpoints: & compare with previous best
-            if best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
+            if loss_structure_update or best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
                 best_valid_loss = valid_loss
                 self._save_checkpoint(model, epoch, best=True)
             else:

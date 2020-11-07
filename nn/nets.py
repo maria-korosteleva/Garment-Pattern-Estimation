@@ -22,7 +22,7 @@ class BaseModule(nn.Module):
         preds = self(features)
         ground_truth = ground_truth.to(features.device)  # make sure device is correct
         loss = self.regression_loss(preds, ground_truth)
-        return loss, {'regression loss': loss}  # second term is for compound losses
+        return loss, {'regression loss': loss}, False  # second term is for compound losses, third -- to indicate dynamic update of loss structure
 
 
 # -------- Nets architectures -----------
@@ -164,7 +164,7 @@ class GarmentPanelsAE(BaseModule):
         # ensuring edges within panel loop & return to origin
         loop_loss = self.loop_loss(preds, features)
 
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss
+        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, False
 
 
 class GarmentPatternAE(BaseModule):
@@ -258,7 +258,7 @@ class GarmentPatternAE(BaseModule):
         # return format
         loss_dict = dict(pattern_loss=reconstruction_loss, loop_loss=loop_loss)
 
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict
+        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict, False
 
 
 class GarmentPattern3D(BaseModule):
@@ -346,7 +346,7 @@ class GarmentPattern3D(BaseModule):
         # return format
         loss_dict = dict(pattern_loss=pattern_loss, loop_loss=loop_loss)
 
-        return pattern_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict
+        return pattern_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict, False
 
 
 class GarmentFullPattern3D(BaseModule):
@@ -459,7 +459,8 @@ class GarmentFullPattern3D(BaseModule):
 
     def loss(self, features, ground_truth, epoch=1000):
         """Evalute loss when predicting patterns.
-            default epoch is some large value to trigger stitch evaluation
+           * default epoch is some large value to trigger stitch evaluation
+           * Fucntion returns True in third parameter at the moment of the loss stucture update
         """
         preds = self(features)
         device = features.device
@@ -498,7 +499,7 @@ class GarmentFullPattern3D(BaseModule):
                 loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
 
 
-        return full_loss, loss_dict
+        return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
 
 
 if __name__ == "__main__":
