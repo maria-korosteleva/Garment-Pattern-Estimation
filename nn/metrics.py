@@ -229,7 +229,7 @@ def eval_metrics(model, data_wrapper, section='test'):
                     gt = features
 
                 # loss evaluation
-                full_loss, loss_dict = model.loss(features, gt)
+                full_loss, loss_dict, _ = model.loss(features, gt)
 
                 # summing up
                 current_metrics['full_loss'] += full_loss
