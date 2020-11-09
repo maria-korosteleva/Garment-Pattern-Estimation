@@ -415,20 +415,31 @@ class BasicPattern(object):
 
     def _panel_universal_transtation(self, panel_name):
         """Return a universal 3D translation of the panel (e.g. to be used in judging the panel order).
-            Universal translation it defined as world 3D location of mid-point of the top of the panel bounding box.
-            * Assumption: 
-                In most cases, top-mid-point of a panel corresponds to body landmarks (e.g. neck, middle of an arm, waist) 
+            Universal translation it defined as world 3D location of mid-point of the top (in 3D) of the panel (2D) bounding box.
+            * Assumptions: 
+                * In most cases, top-mid-point of a panel corresponds to body landmarks (e.g. neck, middle of an arm, waist) 
                 and thus is mostly stable across garment designs.
+                * 3D location of a panel is placing this panel around the body in T-pose
             * Function result is independent from the current choice of the local coordinate system of the panel
         """
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
 
+        # out of 2D bounding box sides' midpoints choose the one that is highest in 3D
         top_right = vertices.max(axis=0)
         low_left = vertices.min(axis=0)
         mid_x = (top_right[0] + low_left[0]) / 2
+        mid_y = (top_right[1] + low_left[1]) / 2
+        rot_matrix = Rotation.from_euler('xyz', panel['rotation'], degrees=True).as_matrix()  # calculate once for all points
+        mid_points = np.vstack((
+            self._point_in_3D([mid_x, top_right[1]], rot_matrix, panel['translation']), 
+            self._point_in_3D([mid_x, low_left[1]], rot_matrix, panel['translation']), 
+            self._point_in_3D([top_right[0], mid_y], rot_matrix, panel['translation']), 
+            self._point_in_3D([low_left[0], mid_y], rot_matrix, panel['translation'])
+        ))
+        top_mid_point = mid_points[:, 1].argmax()
 
-        return self._point_in_3D([mid_x, top_right[1]], panel['rotation'], panel['translation'])
+        return mid_points[top_mid_point]
 
 
     # --------- Pattern operations ----------
@@ -1027,38 +1038,25 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
-    pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
-    pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
+    # pattern_init = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern_init = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
+    # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
     # empty_pattern = BasicPattern()
     print('Initial')
     print(pattern_init.panel_order())
-    print('Original translation {}: {}'.format('lfsleeve', pattern_init.pattern['panels']['lfsleeve']['translation']))
-    print('Original translation {}: {}'.format('lbsleeve', pattern_init.pattern['panels']['lbsleeve']['translation']))
-    print('Universal translation {}: {}'.format('lfsleeve', pattern_init._panel_universal_transtation('lfsleeve')))
-    print('Universal translation {}: {}'.format('lbsleeve', pattern_init._panel_universal_transtation('lbsleeve')))
+    print('Original translation {}: {}'.format('front', pattern_init.pattern['panels']['front']['translation']))
+    print('Original translation {}: {}'.format('back', pattern_init.pattern['panels']['back']['translation']))
+    print('Universal translation {}: {}'.format('front', pattern_init._panel_universal_transtation('front')))
+    print('Universal translation {}: {}'.format('back', pattern_init._panel_universal_transtation('back')))
 
-
-    print('Predicted')
-    print(pattern_predicted.panel_order())
-    print(pattern_predicted.pattern['panels']['panel_3']['translation'])
-    print(pattern_predicted._panel_universal_transtation('panel_3'))
 
     # print(pattern.pattern['stitches'])
     # tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
     # print(stitches)
 
-    # # panel_name = 'right'
-    # # print(pattern.pattern['panels'][panel_name])
-    # # edges, rot, transl = pattern.panel_as_sequence(panel_name)
-    # # print(edges, rot, transl)
-
-    # # tensor[2][0][0] -= 10
-
-    # # # tensor = tensor[:-1]
     # pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
-    # # pattern.panel_from_sequence(panel_name, edges, rot, transl, padded=True)
     # print(pattern.pattern['stitches'])
     # print(pattern.panel_order())
 
