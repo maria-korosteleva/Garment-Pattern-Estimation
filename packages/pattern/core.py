@@ -162,7 +162,7 @@ class BasicPattern(object):
         return sorted_names
 
     # --------- Special representations -----
-    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False):
+    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
@@ -180,9 +180,7 @@ class BasicPattern(object):
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         # Main info per panel
-        panel_seqs = []
-        panel_translations = []
-        panel_rotations = []
+        panel_seqs, panel_translations, panel_rotations = [], [], []
         panel_edge_ids_map = {}
         for panel_name in panel_order:
             edges, rot, transl, edge_ids = self.panel_as_numeric(panel_name, pad_to_len=max_len)
@@ -191,13 +189,18 @@ class BasicPattern(object):
             panel_rotations.append(rot)
             panel_edge_ids_map[panel_name] = edge_ids
 
-        # order of stitches doesn't matter
+        # Stitches info. Order of stitches doesn't matter
         stitches_indicies = np.empty((2, len(self.pattern['stitches'])), dtype=np.int)
+        if with_stitch_tags:
+            stitch_tags = self.stitches_as_tags()
+            tags_per_edge = np.zeros((len(panel_seqs), len(panel_seqs[0]), stitch_tags.shape[-1]))
         for idx, stitch in enumerate(self.pattern['stitches']):
             for id_side, side in enumerate(stitch):
                 panel_id = panel_order.index(side['panel'])
                 edge_id = panel_edge_ids_map[side['panel']][side['edge']]
                 stitches_indicies[id_side][idx] = panel_id * max_len + edge_id  # pattern-level edge id
+                if with_stitch_tags:
+                    tags_per_edge[panel_id][edge_id] = stitch_tags[idx]
 
         # format result as requested
         result = [np.stack(panel_seqs)]
@@ -206,6 +209,8 @@ class BasicPattern(object):
             result.append(np.stack(panel_translations))
         if with_stitches:
             result.append(stitches_indicies)
+        if with_stitch_tags:
+            result.append(tags_per_edge)
 
         return tuple(result) if len(result) > 1 else result[0]
 
@@ -372,6 +377,41 @@ class BasicPattern(object):
         if rotation is not None:
             panel['rotation'] = rotation.tolist()
         
+    def stitches_as_tags(self, panel_order=None, pad_to_len=None):
+        """For every stitch, assign an approximate identifier (tag) of the stitch to the edges that are part of that stitch
+            * tags are calculated as ~3D locations of the stitch when the garment is draed on the body in T-pose
+            * It's calculated as average of the participating edges' endpoint -- Although very approximate, this should be enough
+            to separate stitches from each other and from free edges
+        Return
+            * List of stitch tags for every stitch in the panel
+            TODO Update description
+            * per-edge, per-panel list of 3D tags
+            * If pad_to_len is provided, per-edge lists of tags are padded to this len s.t. all panels have the same number of (padded) edges
+
+        """
+        # NOTE stitch tags values are independent from the choice of origin & edge order within a panel
+        # iterate over stitches
+        stitch_tags = []
+        for stitch in self.pattern['stitches']:
+            edge_tags = np.empty((2, 3))  # two 3D tags per edge
+            for side_idx, side in enumerate(stitch):
+                panel = self.pattern['panels'][side['panel']]
+                edge_endpoints = panel['edges'][side['edge']]['endpoints']
+                # get 2D locations of participating vertices -- per panel
+                edge_endpoints = np.array([
+                    panel['vertices'][edge_endpoints[side]] for side in [0, 1]
+                ])
+                # Get edges midpoints (2D)
+                edge_mean = edge_endpoints.mean(axis=0)
+
+                # calculate their 3D locations
+                edge_tags[side_idx] = self._point_in_3D(edge_mean, panel['rotation'], panel['translation'])
+
+            # take average
+            stitch_tags.append(edge_tags.mean(axis=0))
+
+        return np.array(stitch_tags)
+
     def _edge_as_vector(self, vertices, edge_dict):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
@@ -440,7 +480,6 @@ class BasicPattern(object):
         top_mid_point = mid_points[:, 1].argmax()
 
         return mid_points[top_mid_point]
-
 
     # --------- Pattern operations ----------
     def _normalize_template(self):
@@ -1038,23 +1077,20 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern_init = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
-    pattern_init = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
     # empty_pattern = BasicPattern()
-    print('Initial')
-    print(pattern_init.panel_order())
-    print('Original translation {}: {}'.format('front', pattern_init.pattern['panels']['front']['translation']))
-    print('Original translation {}: {}'.format('back', pattern_init.pattern['panels']['back']['translation']))
-    print('Universal translation {}: {}'.format('front', pattern_init._panel_universal_transtation('front')))
-    print('Universal translation {}: {}'.format('back', pattern_init._panel_universal_transtation('back')))
+    print(pattern.panel_order())
+    print(pattern.pattern['stitches'])
+
+    # print(pattern.stitches_as_tags())
 
 
-    # print(pattern.pattern['stitches'])
-    # tensor, rot, transl, stitches = pattern.pattern_as_tensors(with_placement=True, with_stitches=True)
-    # print(stitches)
+    tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
+    print(stitch_tags)
 
     # pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # print(pattern.pattern['stitches'])
