@@ -376,7 +376,7 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40
+            'epoch_with_stitches': 0
         })
         # update with input settings
         self.config.update(config) 
@@ -393,13 +393,23 @@ class GarmentFullPattern3D(BaseModule):
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['outlines'], 
                 'scale': data_config['standardize']['gt_scale']['outlines']})
-        self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
+        if data_config['explicit_stitch_tags']:
+            self.stitch_loss = nn.MSELoss()
+            # tags provided by data are controlled from data -- force the values to be the same
+            self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
+            
+        else:
+            self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
             data_config['stitch_zero_tag_tol'], 
-            data_config['stitch_similarity_tag_tol']
+            data_config['stitch_similarity_tag_tol'], 
+            data_stats={
+                'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
+                'scale': data_config['standardize']['gt_scale']['stitch_tags']
+            } if data_config['explicit_stitch_tags'] else {} 
         )
 
         # Feature extractor definition
@@ -486,11 +496,15 @@ class GarmentFullPattern3D(BaseModule):
 
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
-            # stitches gotta be IntTensor, Mask should be BoolTensor
-            stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask'])  
+            if isinstance(self.stitch_loss, metrics.PatternStitchLoss):
+                # stitches gotta be IntTensor, Mask should be BoolTensor
+                stitch_loss, stitch_loss_breakdown = self.stitch_loss(
+                    preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask']) 
+                loss_dict.update(stitch_loss_breakdown)
+            else:
+                stitch_loss = self.stitch_loss(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
+                loss_dict.update(stitch_supervised_loss=stitch_loss)
             
-            loss_dict.update(stitch_loss_breakdown)
             full_loss += stitch_loss
 
             # qualitative evaluation

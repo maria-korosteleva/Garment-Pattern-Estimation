@@ -491,14 +491,17 @@ class GarmentBaseDataset(BaseDataset):
 
         return points
 
-    def _read_pattern(self, datapoint_name, folder_elements, with_placement=False, with_stitches=False):
+    def _read_pattern(self, datapoint_name, folder_elements, 
+                      with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
-        return pattern.pattern_as_tensors(with_placement=with_placement, with_stitches=with_stitches)
+        return pattern.pattern_as_tensors(
+            with_placement=with_placement, with_stitches=with_stitches, 
+            with_stitch_tags=with_stitch_tags)
 
     def _pattern_from_tenzor(self, dataname, 
                              tenzor, 
@@ -556,9 +559,10 @@ class GarmentBaseDataset(BaseDataset):
             input_batch = self._unpad(input_batch)  # remove rows with zeros
 
         # per dimention info
-        min_vector, _ = torch.min(input_batch, 0)
-        max_vector, _ = torch.max(input_batch, 0)
+        min_vector, _ = torch.min(input_batch, dim=0)
+        max_vector, _ = torch.max(input_batch, dim=0)
         scale = torch.empty_like(min_vector)
+
         # avoid division by zero
         for idx, (tmin, tmax) in enumerate(zip(min_vector, max_vector)): 
             if torch.isclose(tmin, tmax):
@@ -809,8 +813,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             element_size=self[0]['ground_truth']['outlines'].shape[2],
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
-            stitch_zero_tag_tol=0.15,
-            stitch_similarity_tag_tol=0.1
+            stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
+            stitch_zero_tag_tol=5,
+            stitch_similarity_tag_tol=5, 
+            explicit_stitch_tags=True
         )
     
     def standardize(self, training=None):
@@ -842,6 +848,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 transl_min, transl_scale = self._get_norm_stats(gt['translations'])
                 rot_min, rot_scale = self._get_norm_stats(gt['rotations'])
 
+                # stitch tags if given
+                st_tags_min, st_tags_scale = self._get_norm_stats(gt['stitch_tags'])
+
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
@@ -849,15 +858,15 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 'f_scale': feature_scale.cpu().numpy(),
                 'gt_shift': {
                     'outlines': panel_shift.cpu().numpy(), 
-                    # 'rotations': np.zeros(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_min.cpu().numpy(),
                     'translations': transl_min.cpu().numpy(), 
+                    'stitch_tags': st_tags_min.cpu().numpy()
                 },
                 'gt_scale': {
                     'outlines': panel_scale.cpu().numpy(), 
-                    # 'rotations': np.ones(self.config['rotation_size']),  # not applying std to rotation
                     'rotations': rot_scale.cpu().numpy(),
                     'translations': transl_scale.cpu().numpy(),
+                    'stitch_tags': st_tags_scale.cpu().numpy()
                 }
             }
             stats = self.config['standardize']
@@ -903,15 +912,16 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     def tags_to_stitches(stitch_tags, zero_tag_tol=0.01, similarity_tol=0.1):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
+        NOTE: expects input to be a torch tensor, numpy is not supported
         """
         flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
         
         # compare every row with zeros -- which tags are potential edges?
         non_zero_tag_mask = flat_tags.isclose(torch.zeros_like(flat_tags), atol=zero_tag_tol)
         non_zero_tag_mask = ~torch.all(non_zero_tag_mask, dim=-1)
-        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze()
+        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze(-1)
         
-        if non_zero_tag_edges.numel() == 0:  # -> no stitches
+        if not any(non_zero_tag_mask) or non_zero_tag_edges.shape[0] < 2:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
             return torch.tensor([])
 
@@ -925,7 +935,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 edge_2 = non_zero_tag_edges[tag2_id]
                 if all(torch.isclose(tag1, flat_tags[edge_2], atol=similarity_tol)):  # stitch found!
                     stitches.append([edge_1, edge_2])
-        
         return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
 
     @staticmethod
@@ -948,32 +957,38 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
       
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
-        pattern, rots, tranls, stitches = self._read_pattern(
-            datapoint_name, folder_elements, with_placement=True, with_stitches=True)
+        pattern, rots, tranls, stitches, stitch_tags = self._read_pattern(
+            datapoint_name, folder_elements, with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
-        return {'outlines': pattern, 'rotations': rots, 'translations': tranls, 'stitches': stitches, 'free_edges_mask': mask}
+        return {
+            'outlines': pattern, 'rotations': rots, 'translations': tranls, 
+            'stitches': stitches, 'free_edges_mask': mask, 'stitch_tags': stitch_tags}
 
     def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-
-        pattern, rots, transls = prediction['outlines'], prediction['rotations'], prediction['translations']
-        stitch_tags = prediction['stitch_tags']
+        """Convert given predicted value to pattern object
+        """
 
         # undo standardization  (outside of generinc conversion function due to custom std structure)
         gt_shifts = self.config['standardize']['gt_shift']
         gt_scales = self.config['standardize']['gt_scale']
-        pattern = pattern.cpu().numpy() * gt_scales['outlines'] + gt_shifts['outlines']
-        rots = rots.cpu().numpy() * gt_scales['rotations'] + gt_shifts['rotations']
-        transls = transls.cpu().numpy() * gt_scales['translations'] + gt_shifts['translations']
+        for key in gt_shifts:
+            if key == 'stitch_tags' and not self.config['explicit_stitch_tags']:  
+                # ignore stitch tags update if explicit tags were not used
+                continue
+            prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
         # stitch tags to stitch list
-        stitches = self.tags_to_stitches(stitch_tags, 
+        stitches = self.tags_to_stitches(
+            torch.from_numpy(prediction['stitch_tags']), 
             zero_tag_tol=self.config['stitch_zero_tag_tol'], 
             similarity_tol=self.config['stitch_similarity_tag_tol']
-            )
+        )
 
-        return self._pattern_from_tenzor(dataname, pattern, rots, transls, stitches, 
-                                         std_config={}, supress_error=True)
+        return self._pattern_from_tenzor(
+            dataname, 
+            prediction['outlines'], prediction['rotations'], prediction['translations'], 
+            stitches, 
+            std_config={}, supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):
@@ -1065,64 +1080,66 @@ if __name__ == "__main__":
     # print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])
 
-    stitch_tags = torch.Tensor([[[-4.7732e-01,  5.2743e-01,  5.7846e-02],
-         [-1.0317e+00,  9.7064e-01,  3.0478e-01],
-         [ 4.0752e-01,  5.7923e-01,  2.0723e-03],
-         [-1.0661e-02,  1.9779e-03, -3.6985e-03],
-         [-6.2923e-03,  1.2806e-03,  4.1377e-03],
-         [ 5.0416e-04,  2.9007e-03,  3.6366e-03],
-         [ 6.6723e-04,  4.3958e-03,  4.5902e-03],
-         [ 1.0667e-03,  4.9522e-03,  4.9037e-03],
-         [ 1.6380e-03,  4.2972e-03,  7.1949e-03]],
+    stitch_tags = torch.Tensor(
+        [[
+            [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
+            [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
+            [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
+            [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
+            [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
+            [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
+            [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
+            [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
+            [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
 
-        [[ 8.7757e-02,  6.4274e-01,  4.6296e-01],
-         [-2.8895e-02,  5.9110e-01,  6.1186e-01],
-         [-3.5284e-01,  3.8004e-01,  2.0254e-02],
-         [ 1.1227e-01,  1.7332e-01, -5.7697e-04],
-         [-2.7311e-04,  3.6193e-03,  1.3721e-03],
-         [-3.5853e-03,  8.0185e-03,  4.7167e-03],
-         [ 1.1996e-03,  8.8283e-03,  6.0051e-03],
-         [ 2.7664e-03,  7.6386e-03,  5.8009e-03],
-         [ 4.3352e-03,  6.9330e-03,  6.5485e-03]],
+            [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
+            [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
+            [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
+            [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
+            [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
+            [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
+            [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
+            [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
+            [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
 
-        [[ 7.5046e-01,  2.4409e-01,  7.9030e-01],
-         [-1.0306e+00,  9.8453e-01,  3.0250e-01],
-         [-3.3723e-01, -2.8226e-01, -5.8897e-01],
-         [ 1.8906e-02, -1.3832e-02,  5.5172e-03],
-         [-9.8226e-01, -2.1431e-02, -1.9767e-01],
-         [ 2.9255e-01, -7.0595e-01,  1.2018e-01],
-         [-5.2501e-01, -4.5708e-01,  3.0568e-01],
-         [ 1.7425e-03, -2.6523e-03, -3.2320e-03],
-         [ 3.4501e-03,  2.4877e-03,  1.5023e-04]],
+        [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
+        [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
+        [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
+        [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
+        [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
+        [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
+        [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
+        [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
+        [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
 
-        [[ 3.5013e-03, -2.4229e-04,  1.7040e-02],
-         [-5.2547e-01, -4.3172e-01,  3.3254e-01],
-         [ 7.4213e-01, -1.2066e+00, -3.2575e-01],  # Here
-         [-9.6715e-01, -1.5716e-02, -1.8207e-01],
-         [ 8.1369e-03, -9.7913e-03, -4.5263e-03],
-         [ 4.6673e-03, -1.0336e-02, -3.8493e-03],
-         [-3.3719e-01, -2.7093e-01, -5.9384e-01],
-         [ 3.0050e-02,  6.0369e-01,  5.8586e-01],
-         [ 7.6712e-01,  2.4150e-01,  7.9097e-01]],
+        [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
+        [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
+        [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
+        [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
+        [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
+        [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
+        [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
+        [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
+        [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
 
-        [[ 5.8924e-01, -3.3213e-01,  3.2885e-01],
-         [ 1.6048e-01, -8.3018e-01,  6.7562e-02],
-         [ 4.2251e-01, -3.7204e-01, -4.2598e-01],
-         [ 3.1887e-02, -2.1434e-02,  3.5033e-02],
-         [ 9.4733e-03,  3.4869e-03,  2.3111e-03],
-         [ 3.9466e-03,  1.5404e-03, -1.0325e-03],
-         [ 5.3823e-03,  2.9728e-03, -1.0817e-04],
-         [ 4.3724e-03,  2.2851e-03,  1.7486e-04],
-         [ 2.9140e-03,  3.8158e-03, -2.0858e-04]],
+        [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
+        [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
+        [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
+        [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
+        [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
+        [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
+        [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
+        [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
+        [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
 
-        [[ 3.3217e-01, -5.3243e-01, -2.8784e-01],
-         [ 7.3228e-01, -1.2096e+00, -3.4954e-01], # Here
-         [ 4.3159e-01, -2.4361e-01,  2.4041e-01],
-         [ 1.3506e-02, -1.6694e-03,  6.6847e-03],
-         [ 7.6342e-03,  2.6294e-03,  3.8481e-03],
-         [ 5.8650e-03,  2.0788e-03, -2.5582e-03],
-         [ 4.0614e-03,  4.7357e-03, -4.6884e-04],
-         [ 4.8211e-03,  8.9094e-04, -1.8303e-03],
-         [ 4.0147e-03,  2.1679e-03, -1.1023e-03]]])
+        [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
+        [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
+        [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
+        [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
+        [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
+        [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
+        [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
+        [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
+        [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags))
+    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, zero_tag_tol=5, similarity_tol=10))
