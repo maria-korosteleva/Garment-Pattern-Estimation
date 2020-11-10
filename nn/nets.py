@@ -409,7 +409,7 @@ class GarmentFullPattern3D(BaseModule):
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
                 'scale': data_config['standardize']['gt_scale']['stitch_tags']
-            } if data_config['explicit_stitch_tags'] else {} 
+            } if data_config['explicit_stitch_tags'] else None
         )
 
         # Feature extractor definition
