@@ -814,9 +814,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
-            stitch_zero_tag_tol=0.1,
-            stitch_similarity_tag_tol=0.1, 
-            explicit_stitch_tags=False
+            stitch_zero_tag_tol=5,
+            stitch_similarity_tag_tol=5, 
+            explicit_stitch_tags=True
         )
     
     def standardize(self, training=None):
