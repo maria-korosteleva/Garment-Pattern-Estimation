@@ -376,7 +376,8 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40
+            'epoch_with_stitches': 40, 
+            'stitch_hardnet_version': False 
         })
         # update with input settings
         self.config.update(config) 
@@ -397,9 +398,8 @@ class GarmentFullPattern3D(BaseModule):
             self.stitch_loss = nn.MSELoss()
             # tags provided by data are controlled from data -- force the values to be the same
             self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
-            
         else:
-            self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'])
+            self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default

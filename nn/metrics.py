@@ -78,8 +78,10 @@ class PatternStitchLoss():
         * Edges connected by a stitch have the same tag
         * Edges belonging to different stitches have 
     """
-    def __init__(self, triplet_margin=0.1):
+    def __init__(self, triplet_margin=0.1, use_hardnet=True):
         self.triplet_margin = triplet_margin
+        
+        self.neg_loss = self.HardNet_neg_loss if use_hardnet else self.extended_triplet_neg_loss
 
     def __call__(self, stitch_tags, gt_stitches, gt_free_mask):
         """
@@ -108,6 +110,29 @@ class PatternStitchLoss():
         non_zero_loss = torch.max(non_zero_loss, torch.zeros_like(non_zero_loss)).sum() / (batch_size * num_stitches * 2)
 
         # Push tags away from each other
+        total_neg_loss = self.neg_loss(total_tags)
+
+        # free edges
+        free_edges_loss = self.free_edges(stitch_tags, gt_free_mask)
+               
+        # final sum
+        fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss + free_edges_loss
+        stitch_loss_dict = dict(
+            stitch_similarity_loss=similarity_loss,
+            stitch_non_zero_loss=non_zero_loss, 
+            stitch_neg_loss=total_neg_loss, 
+            free_edges_loss=free_edges_loss
+        )
+
+        return fin_stitch_losses, stitch_loss_dict
+
+    def extended_triplet_neg_loss(self, total_tags):
+        """Pushes stitch tags for different stitches away from each other
+            * Is based on Triplet loss formula to make the distance between tags larger than margin
+            * Evaluated the loss for every tag agaist every other tag (exept for the edges that are part of the same stitch thus have to have same tags)
+        """
+        num_stitches = total_tags.shape[1] // 2
+
         total_neg_loss = []
         for pattern_tags in total_tags:  # per pattern in batch
             for tag_id, tag in enumerate(pattern_tags):
@@ -128,21 +153,33 @@ class PatternStitchLoss():
                 # fin total
                 total_neg_loss.append(neg_loss.sum() / len(neg_loss))
         # average neg loss per tag
-        total_neg_loss = sum(total_neg_loss) / len(total_neg_loss)
+        return sum(total_neg_loss) / len(total_neg_loss)
 
-        # free edges
-        free_edges_loss = self.free_edges(stitch_tags, gt_free_mask)
-               
-        # final sum
-        fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss + free_edges_loss
-        stitch_loss_dict = dict(
-            stitch_similarity_loss=similarity_loss,
-            stitch_non_zero_loss=non_zero_loss, 
-            stitch_neg_loss=total_neg_loss, 
-            free_edges_loss=free_edges_loss
-        )
+    def HardNet_neg_loss(self, total_tags):
+        """Pushes stitch tags for different stitches away from each other
+            * Is based on Triplet loss formula to make the distance between tags larger than margin
+            * Uses trick from HardNet: only evaluate the loss on the closest negative example!
+        """
+        num_stitches = total_tags.shape[1] // 2
 
-        return fin_stitch_losses, stitch_loss_dict
+        total_neg_loss = []
+        for pattern_tags in total_tags:  # per pattern in batch
+            for tag_id, tag in enumerate(pattern_tags):
+                # Evaluate distance to other tags
+                tags_distance = ((tag - pattern_tags) ** 2).sum(dim=-1)
+
+                # mask values corresponding to current tag for min() evaluation
+                tags_distance[tag_id] = float('inf')
+                brother_id = tag_id + num_stitches if tag_id < num_stitches else tag_id - num_stitches
+                tags_distance[brother_id] = float('inf')
+
+                # compare with margin
+                neg_loss = self.triplet_margin - tags_distance.min()  # single value per other tag
+
+                # ignore if all tags are far enough from current tag
+                total_neg_loss.append(max(neg_loss, 0))
+        # average neg loss per tag
+        return sum(total_neg_loss) / len(total_neg_loss)
 
     def free_edges(self, stitch_tags, gt_free_mask):
         """Calculate loss for free edges (not part of any stitch)"""
