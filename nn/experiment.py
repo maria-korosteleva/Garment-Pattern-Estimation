@@ -55,7 +55,7 @@ class WandbRunWrappper(object):
     def stop(self):
         """Stop wandb for current run. All logging finishes & files get uploaded"""
         if self.initialized:
-            wb.join()
+            wb.finish()
         self.initialized = False
 
     # -------- run info ------

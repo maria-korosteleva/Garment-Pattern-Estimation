@@ -98,6 +98,7 @@ class Trainer():
         self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
 
         print("Trainer::Finished training")
+        self.experiment.stop()
 
     # ---- Private -----
     def _fit_loop(self, model, train_loader, valid_loader, start_epoch=0):
