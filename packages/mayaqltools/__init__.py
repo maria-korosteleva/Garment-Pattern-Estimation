@@ -17,7 +17,9 @@ from .mayascene import MayaGarment, Scene, MayaGarmentWithUI
 import simulation
 import qualothwrapper
 import garmentUI
+import scan_imitation
 
 reload(simulation)
 reload(qualothwrapper)
 reload(garmentUI)
+reload(scan_imitation)

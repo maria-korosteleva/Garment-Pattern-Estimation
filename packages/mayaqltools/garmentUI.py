@@ -94,7 +94,7 @@ def start_GUI():
 # ----- State -------
 class State(object):
     def __init__(self):
-        self.pattern_layout = None  # to de set on UI init
+        self.pattern_layout = None  # to be set on UI init
         self.garment = None
         self.scene = None
         self.save_to = None
