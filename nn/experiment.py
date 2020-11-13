@@ -44,12 +44,6 @@ class WandbRunWrappper(object):
         wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
         self.run_id = wb.run.id
 
-        # upload these files as they are created https://docs.wandb.com/library/save
-        wb.save('*' + self.checkpoint_filetag + '*')  
-        wb.save(os.path.join(wb.run.dir, '*.json'))  
-        # self.artifact = wb.Artifact(self.run_name, type='model')
-        # wb.run.use_artifact(self.artifact)
-
         self.initialized = True
         self.checkpoint_counter = 0
 
