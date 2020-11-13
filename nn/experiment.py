@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import requests
+import time
 
 import torch
 import wandb as wb
@@ -193,7 +194,7 @@ class WandbRunWrappper(object):
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
     
-    def save_checkpoint(self, state, aliases=[]):
+    def save_checkpoint(self, state, aliases=[], wait_for_upload=False):
         """Save given state dict as torch checkpoint to local run dir
             aliases assign labels to checkpoints for easy retrieval
         """
@@ -212,6 +213,9 @@ class WandbRunWrappper(object):
         artifact.add_file(str(self.local_artifact_path() / filename))
         wb.run.log_artifact(artifact, aliases=['latest'] + aliases)
 
+        if wait_for_upload:
+            self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter-1))
+
     # ------- utils -------
     def _load_artifact(self, artifact_name, to_path=None):
         """Download a requested artifact withing current project. Return loaded path"""
@@ -228,3 +232,20 @@ class WandbRunWrappper(object):
         """ Shortcut for getting reference to wandb api run object. 
             To uniformly access both ongoing & finished runs"""
         return wb.Api().run(self.cloud_path())
+
+    def _wait_for_upload(self, artifact_name, max_attempts=10):
+        """Wait for an upload of the given version of an artifact"""
+        # follows the suggestion of https://github.com/wandb/client/issues/1486#issuecomment-726229978
+        print('Experiment::Waiting for artifact {} upload'.format(artifact_name))
+        attempt = 1
+        while attempt <= max_attempts:
+            try:
+                time.sleep(5)
+                self._load_artifact(artifact_name)
+                print('Requested version is successfully syncronized')
+                break
+            except (ValueError, wb.errors.error.CommError):
+                attempt += 1
+                print('Trying again')
+        if attempt > max_attempts:
+            print('Experiment::Warning::artifact {} is still not syncronized'.format(artifact_name))
