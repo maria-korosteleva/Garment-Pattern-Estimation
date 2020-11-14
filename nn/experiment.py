@@ -90,8 +90,13 @@ class WandbRunWrappper(object):
     def add_artifact(self, path, name, type):
         """Create a new wandb artifact and upload all the contents there"""
 
-        run = wb.run if self.initialized else self._run_object()
         path = Path(path)
+
+        if not self.initialized:
+            # can add artifacts only to existing runs!
+            # https://github.com/wandb/client/issues/1491#issuecomment-726852201
+            print('Experiment::Reactivating wandb run to upload an artifact {}!'.format(name))
+            wb.init(id=self.run_id, project=self.project, resume='allow')
 
         artifact = wb.Artifact(name, type=type)
         if path.is_file():
@@ -99,7 +104,10 @@ class WandbRunWrappper(object):
         else:
             artifact.add_dir(str(path))
                     
-        run.log_artifact(artifact)
+        wb.run.log_artifact(artifact)
+
+        if not self.initialized:
+            wb.finish()
 
     def is_finished(self):
         run = self._run_object()
@@ -194,7 +202,8 @@ class WandbRunWrappper(object):
         """
 
         if not self.initialized:
-            raise RuntimeError('Experiment: cannot save files to non-active wandb runs')
+            # prevent training updated to finished runs
+            raise RuntimeError('Experiment::cannot save checkpoint files to non-active wandb runs')
 
         print('Experiment::Saving model state -- checkpoint artifact')
 
