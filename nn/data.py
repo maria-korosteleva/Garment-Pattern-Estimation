@@ -814,8 +814,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
-            stitch_zero_tag_tol=5,
-            stitch_similarity_tag_tol=5, 
+            stitch_zero_tag_tol=10,
             explicit_stitch_tags=True
         )
     
@@ -909,7 +908,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return prediction_imgs
 
     @staticmethod
-    def tags_to_stitches(stitch_tags, zero_tag_tol=0.01, similarity_tol=0.1):
+    def tags_to_stitches(stitch_tags, zero_tag_tol=0.01):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
         NOTE: expects input to be a torch tensor, numpy is not supported
@@ -920,21 +919,39 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         non_zero_tag_mask = flat_tags.isclose(torch.zeros_like(flat_tags), atol=zero_tag_tol)
         non_zero_tag_mask = ~torch.all(non_zero_tag_mask, dim=-1)
         non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze(-1)
-        
         if not any(non_zero_tag_mask) or non_zero_tag_edges.shape[0] < 2:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
             return torch.tensor([])
 
-        # NOTE this part could be implemented smarter with fancy indexing
-        # but the total number of edges is never too large, so I decided to go with naive O(n^2) solution
+        # Track matches tags tag matching
+        unmached_tags_mask = non_zero_tag_mask
+        if len(non_zero_tag_edges) % 2:  # odd 
+            # => at least one of tags is erroneously non-zero -> remove the tag that is closest to zero
+            lengths = (flat_tags[non_zero_tag_mask] ** 2).sum(-1)
+            to_remove = lengths.argmin()
+            unmached_tags_mask[non_zero_tag_edges[to_remove]] = False
+
+        # Now we have even number of tags to match
+        # Pair tags with least distance to each other!
         stitches = []
-        for tag1_id in range(len(non_zero_tag_edges)):
-            edge_1 = non_zero_tag_edges[tag1_id]
-            tag1 = flat_tags[edge_1]
-            for tag2_id in range(tag1_id + 1, len(non_zero_tag_edges)):
-                edge_2 = non_zero_tag_edges[tag2_id]
-                if all(torch.isclose(tag1, flat_tags[edge_2], atol=similarity_tol)):  # stitch found!
-                    stitches.append([edge_1, edge_2])
+        for non_zero_id in range(len(non_zero_tag_edges)):
+            edge_id = non_zero_tag_edges[non_zero_id]
+            if not unmached_tags_mask[edge_id]:  # already matched
+                continue
+            # remove from unmatched
+            unmached_tags_mask[edge_id] = False
+
+            # Compare current tag with others -- and match with the closest one!
+            tag1 = flat_tags[edge_id]
+            distances = ((tag1 - flat_tags[unmached_tags_mask]) ** 2).sum(-1)
+            to_match = distances.argmin()
+            # to map id from filtered list of tags to original list of tags
+            unmatched_edges = torch.nonzero(unmached_tags_mask, as_tuple=False).squeeze(-1)  
+            stitches.append([edge_id, unmatched_edges[to_match]])
+            
+            # remove the pair from unmatches
+            unmached_tags_mask[unmatched_edges[to_match]] = False
+
         return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
 
     @staticmethod
@@ -980,8 +997,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # stitch tags to stitch list
         stitches = self.tags_to_stitches(
             torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'], 
-            zero_tag_tol=self.config['stitch_zero_tag_tol'], 
-            similarity_tol=self.config['stitch_similarity_tag_tol']
+            zero_tag_tol=self.config['stitch_zero_tag_tol']
         )
 
         return self._pattern_from_tenzor(
@@ -1142,4 +1158,4 @@ if __name__ == "__main__":
         [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
         [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, zero_tag_tol=5, similarity_tol=10))
+    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, zero_tag_tol=15))

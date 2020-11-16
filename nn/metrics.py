@@ -195,9 +195,8 @@ class PatternStitchPrecisionRecall():
         NOTE: It's NOT a diffentiable evaluation
     """
 
-    def __init__(self, zero_tag_tol, similarity_tol, data_stats=None):
+    def __init__(self, zero_tag_tol, data_stats=None):
         self.zero_tag_tol = zero_tag_tol
-        self.similarity_tol = similarity_tol
         self.data_stats = data_stats
         if data_stats is not None: 
             for key in self.data_stats:
@@ -216,7 +215,7 @@ class PatternStitchPrecisionRecall():
         tot_recall = 0
         for pattern_idx in range(stitch_tags.shape[0]):
             stitch_list = PatternDataset.tags_to_stitches(
-                stitch_tags[pattern_idx], zero_tag_tol=self.zero_tag_tol, similarity_tol=self.similarity_tol
+                stitch_tags[pattern_idx], zero_tag_tol=self.zero_tag_tol
             ).to(gt_stitches.device)
             num_detected_stitches = stitch_list.shape[1] if stitch_list.numel() > 0 else 0
             if not num_detected_stitches:  # no stitches detected -- zero recall & precision

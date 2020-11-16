@@ -405,7 +405,6 @@ class GarmentFullPattern3D(BaseModule):
         self.with_quality_eval = True  # on by default
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
             data_config['stitch_zero_tag_tol'], 
-            data_config['stitch_similarity_tag_tol'], 
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
                 'scale': data_config['standardize']['gt_scale']['stitch_tags']
