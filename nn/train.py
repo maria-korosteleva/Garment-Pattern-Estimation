@@ -108,7 +108,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='stitch-supervised', 
+        run_name='stitch-len-1-sensitivity', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     trainer.fit(model)  # Magic happens here
 
-    # --------------- Final evaluation --------------
+    # --------------- Final evaluation -- same as in test.py --------------
     # On the best-performing model
     try:
         model.load_state_dict(experiment.load_best_model()['model_state_dict'])

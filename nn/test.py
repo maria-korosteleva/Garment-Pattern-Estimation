@@ -16,8 +16,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Test-Garments-Reconstruction', 
-    run_name='Pattern3D-data-transforms', 
-    run_id='cgkk8eb7')  # finished experiment
+    run_name='wait-upload', 
+    run_id='2es5vzij')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -33,7 +33,7 @@ dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 # dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config)
 # dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
 # dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / data_config['name'], data_config)
-dataset = data.Garment3DPatternDataset(
+dataset = data.Garment3DPatternFullDataset(
     Path(system_info['datasets_path']) / dataset_folder, 
     data_config, 
     gt_caching=True, feature_caching=True)
@@ -48,16 +48,8 @@ datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_s
 # model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
 # model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], experiment.NN_config())
 # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
-model = nets.GarmentPattern3D(
-    dataset.config,
-    experiment.NN_config()
-)
+model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
 
-# model_state = torch.load('./wandb/artifacts/2lunqzha/checkpoint_227.pth')['model_state_dict']  # debug
-# model.load_state_dict(model_state)
-
-# model.load_state_dict(experiment.load_final_model()['model_state_dict'])
-# model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
 model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
 # ------- Evaluate --------
@@ -68,10 +60,13 @@ print('Test metrics: {}'.format(test_metrics))
 
 # print(dataset[276]['features'])  # first element of validation set
 
-experiment.add_statistic('valid_metrics', valid_loss)
-experiment.add_statistic('test_metrics', test_metrics)
+experiment.add_statistic('valid_on_best', valid_loss)
+experiment.add_statistic('test_on_best', test_metrics)
 
 # -------- Predict ---------
 # save prediction for validation to file
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 print('Saved to {}'.format(prediction_path))
+# reflect predictions info in expetiment
+experiment.add_statistic('predictions_folder', prediction_path.name)
+experiment.add_artifact('D:/GK-Pattern-Data-Gen/nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201113-17-27-49', datawrapper.dataset.name, 'result')
