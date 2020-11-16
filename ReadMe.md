@@ -48,6 +48,7 @@ pip install -r requirements.txt
 ```
 conda install -c conda-forge igl
 ```
+* [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
 * The project has custom Python packages. Add `Garment-Pattern-Estimation/packages` to `PYTHONPATH` environmental variable for the project to work correctly!
 
 Development was done on _Windows 10_. If running on other OS endups up with errors, please, raise an issue!
