@@ -44,6 +44,10 @@ system.json should include the following:
 ```
 pip install -r requirements.txt
 ```
+* [libigl](https://github.com/libigl/libigl-python-bindings) needs installation with conda. You could also check other options on [their GitHub page](https://github.com/libigl/libigl-python-bindings)
+```
+conda install -c conda-forge igl
+```
 * The project has custom Python packages. Add `Garment-Pattern-Estimation/packages` to `PYTHONPATH` environmental variable for the project to work correctly!
 
 Development was done on _Windows 10_. If running on other OS endups up with errors, please, raise an issue!
