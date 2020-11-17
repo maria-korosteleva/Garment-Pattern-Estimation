@@ -39,19 +39,20 @@ system.json should include the following:
 ### Generating new patterns & training the net
 
 * Developed and tested on Python 3.6+
-* For libs, `requirements.txt` should mostly get you covered. Install dependencies with 
-
-```
-pip install -r requirements.txt
-```
+* For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` might not be sufficient
+* When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools with cuda version you want: 
+    ```
+    conda install pytorch cudatoolkit=10.1 -c pytorch
+    ```
+    * This repo was tested with PyTorch 1.6-1.7 and CUDA 10.1, 10.2
 * [libigl](https://github.com/libigl/libigl-python-bindings) needs installation with conda. You could also check other options on [their GitHub page](https://github.com/libigl/libigl-python-bindings)
-```
-conda install -c conda-forge igl
-```
+    ```
+    conda install -c conda-forge igl
+    ```
 * [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
 * The project has custom Python packages. Add `Garment-Pattern-Estimation/packages` to `PYTHONPATH` environmental variable for the project to work correctly!
 
-Development was done on _Windows 10_. If running on other OS endups up with errors, please, raise an issue!
+Development was done on _Windows 10_. If running on other OS ends up with errors, please, raise an issue!
 
 **Notes on errors with PIL.Image**
 
