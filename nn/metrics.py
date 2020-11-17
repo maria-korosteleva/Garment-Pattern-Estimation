@@ -113,7 +113,7 @@ class PatternStitchLoss():
         total_neg_loss = self.neg_loss(total_tags)
                
         # final sum
-        fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss + free_edges_loss
+        fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss
         stitch_loss_dict = dict(
             stitch_similarity_loss=similarity_loss,
             stitch_non_zero_loss=non_zero_loss, 
