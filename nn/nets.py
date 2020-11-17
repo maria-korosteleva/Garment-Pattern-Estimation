@@ -400,11 +400,11 @@ class GarmentFullPattern3D(BaseModule):
             self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
         else:
             self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
+        self.free_edge_class_loss = nn.BCEWithLogitsLoss()
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
-            data_config['stitch_zero_tag_tol'], 
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
                 'scale': data_config['standardize']['gt_scale']['stitch_tags']
@@ -421,7 +421,8 @@ class GarmentFullPattern3D(BaseModule):
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
-            self.panel_elem_len + self.config['stitch_tag_dim'], self.config['panel_n_layers'], 
+            self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
+            self.config['panel_n_layers'], 
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
@@ -457,14 +458,15 @@ class GarmentFullPattern3D(BaseModule):
         flat_translations = flat_placement[:, self.rotation_size:]
 
         # reshape to per-pattern predictions
-        outlines = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        stitch_tags = outlines[:, :, :, self.panel_elem_len:]
-        outlines = outlines[:, :, :, :self.panel_elem_len]
+        panel_predictions = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        stitch_tags = panel_predictions[:, :, :, self.panel_elem_len:-1]
+        free_edge_class = panel_predictions[:, :, :, -1]
+        outlines = panel_predictions[:, :, :, :self.panel_elem_len]
 
         rotations = flat_rotations.contiguous().view(batch_size, self.max_pattern_size, -1)
         translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
 
-        return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags}
+        return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
 
     def loss(self, features, ground_truth, epoch=1000):
         """Evalute loss when predicting patterns.
@@ -495,21 +497,33 @@ class GarmentFullPattern3D(BaseModule):
 
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
+            # loss on stitch tags
             if isinstance(self.stitch_loss, metrics.PatternStitchLoss):
                 # stitches gotta be IntTensor, Mask should be BoolTensor
                 stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                    preds['stitch_tags'], ground_truth['stitches'], ground_truth['free_edges_mask']) 
+                    preds['stitch_tags'], ground_truth['stitches']) 
                 loss_dict.update(stitch_loss_breakdown)
             else:
                 stitch_loss = self.stitch_loss(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
                 loss_dict.update(stitch_supervised_loss=stitch_loss)
             
-            full_loss += stitch_loss
+            # free\stitches edges classification
+            gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
+            free_edges_loss = self.free_edge_class_loss(preds['free_edge_mask'], gt_free_class)
+            loss_dict.update(free_edges_loss=free_edges_loss)
+            
+            full_loss += stitch_loss + free_edges_loss
 
             # qualitative evaluation
-            if self.with_quality_eval:        
-                stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], ground_truth['stitches'].type(torch.IntTensor))
-                loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
+            if self.with_quality_eval:
+                with torch.no_grad():
+                    stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], preds['free_edge_mask'], ground_truth['stitches'].type(torch.IntTensor))
+
+                    # free edges accuracy
+                    free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))
+                    acc = (free_class == gt_free_class).sum().float() / gt_free_class.numel()
+
+                loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall, free_edge_acc=acc)
 
 
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']

@@ -814,7 +814,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
-            stitch_zero_tag_tol=5,
             explicit_stitch_tags=True
         )
     
@@ -887,12 +886,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         for idx, name in enumerate(datanames):
 
             # "unbatch" dictionary
-            prediction = {
-                'outlines': predictions['outlines'][idx], 
-                'rotations': predictions['rotations'][idx], 
-                'translations': predictions['translations'][idx],
-                'stitch_tags': predictions['stitch_tags'][idx]
-            }
+            prediction = {}
+            for key in predictions:
+                prediction[key] = predictions[key][idx]
 
             pattern = self._pred_to_pattern(prediction, name)
 
@@ -908,16 +904,19 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return prediction_imgs
 
     @staticmethod
-    def tags_to_stitches(stitch_tags, zero_tag_tol=0.01):
+    def tags_to_stitches(stitch_tags, free_edges_class):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
-        NOTE: expects input to be a torch tensor, numpy is not supported
+        NOTE: expects inputs to be torch tensors, numpy is not supported
         """
         flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
         
-        # compare every row with zeros -- which tags are potential edges?
-        non_zero_tag_mask = flat_tags.isclose(torch.zeros_like(flat_tags), atol=zero_tag_tol)
-        non_zero_tag_mask = ~torch.all(non_zero_tag_mask, dim=-1)
+        # to edge classes from logits
+        flat_edges_class = free_edges_class.view(-1) 
+        flat_edges_class = torch.round(torch.sigmoid(flat_edges_class)).type(torch.BoolTensor)
+
+        # filtet nonzero edges
+        non_zero_tag_mask = ~flat_edges_class
         non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze(-1)
         if not any(non_zero_tag_mask) or non_zero_tag_edges.shape[0] < 2:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
@@ -996,8 +995,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
         # stitch tags to stitch list
         stitches = self.tags_to_stitches(
-            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'], 
-            zero_tag_tol=self.config['stitch_zero_tag_tol']
+            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
+            prediction['free_edge_mask']
         )
 
         return self._pattern_from_tenzor(
@@ -1158,4 +1157,4 @@ if __name__ == "__main__":
         [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
         [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, zero_tag_tol=15))
+    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags))

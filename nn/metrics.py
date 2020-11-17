@@ -83,7 +83,7 @@ class PatternStitchLoss():
         
         self.neg_loss = self.HardNet_neg_loss if use_hardnet else self.extended_triplet_neg_loss
 
-    def __call__(self, stitch_tags, gt_stitches, gt_free_mask):
+    def __call__(self, stitch_tags, gt_stitches):
         """
         * stitch_tags contain tags for every panel in every pattern in the batch
         * gt_stitches contains the list of edge pairs that are stitches together.
@@ -111,17 +111,13 @@ class PatternStitchLoss():
 
         # Push tags away from each other
         total_neg_loss = self.neg_loss(total_tags)
-
-        # free edges
-        free_edges_loss = self.free_edges(stitch_tags, gt_free_mask)
                
         # final sum
         fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss + free_edges_loss
         stitch_loss_dict = dict(
             stitch_similarity_loss=similarity_loss,
             stitch_non_zero_loss=non_zero_loss, 
-            stitch_neg_loss=total_neg_loss, 
-            free_edges_loss=free_edges_loss
+            stitch_neg_loss=total_neg_loss
         )
 
         return fin_stitch_losses, stitch_loss_dict
@@ -181,28 +177,19 @@ class PatternStitchLoss():
         # average neg loss per tag
         return sum(total_neg_loss) / len(total_neg_loss)
 
-    def free_edges(self, stitch_tags, gt_free_mask):
-        """Calculate loss for free edges (not part of any stitch)"""
-
-        free_edges_slice = stitch_tags[gt_free_mask]
-        # average norm per edge
-        free_edge_loss = (free_edges_slice ** 2).sum() / free_edges_slice.shape[0]
-        return free_edge_loss
-
 
 class PatternStitchPrecisionRecall():
     """Evaluate Precision and Recall scores for pattern stitches prediction
         NOTE: It's NOT a diffentiable evaluation
     """
 
-    def __init__(self, zero_tag_tol, data_stats=None):
-        self.zero_tag_tol = zero_tag_tol
+    def __init__(self, data_stats=None):
         self.data_stats = data_stats
         if data_stats is not None: 
             for key in self.data_stats:
                 self.data_stats[key] = torch.Tensor(self.data_stats[key])
 
-    def __call__(self, stitch_tags, gt_stitches):
+    def __call__(self, stitch_tags, free_edge_class, gt_stitches):
         """
          Evaluate on the batch of stitch tags
         """
@@ -214,9 +201,8 @@ class PatternStitchPrecisionRecall():
         tot_precision = 0
         tot_recall = 0
         for pattern_idx in range(stitch_tags.shape[0]):
-            stitch_list = PatternDataset.tags_to_stitches(
-                stitch_tags[pattern_idx], zero_tag_tol=self.zero_tag_tol
-            ).to(gt_stitches.device)
+            stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx], free_edge_class[pattern_idx]).to(gt_stitches.device)
+
             num_detected_stitches = stitch_list.shape[1] if stitch_list.numel() > 0 else 0
             if not num_detected_stitches:  # no stitches detected -- zero recall & precision
                 continue
