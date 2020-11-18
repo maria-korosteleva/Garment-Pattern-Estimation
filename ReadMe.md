@@ -58,10 +58,12 @@ Development was done on _Windows 10_. If running on other OS ends up with errors
 
 **Notes on errors with PIL.Image**
 
-You might experience errors related with PIL (pillow) Image module. Those most often come from the ReportLab library requiring older versions of pillow that are currently available, the compatibility issues of pillow and python version, or ReportLab and libigl visualization routines requiring different versions of pillow
+You might experience errors related with PIL (pillow) Image module. Those most often come from the ReportLab library requiring older versions of pillow that are currently available, the compatibility issues of pillow and python version, or ReportLab and libigl visualization routines requiring different versions of pillow. 
 
 *Working combinations*:
-* For ReportLab (saving patterns as png images) to work: Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
+* For ReportLab (saving patterns as png images) to work: 
+    * Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
+    * Python 3.8.5 + ReportLab 3.5.55 + pillow 7.1.1
 
 ### Additional requirements for Simulating garment patterns on a human 3D model
 
