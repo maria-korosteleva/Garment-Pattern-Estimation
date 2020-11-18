@@ -36,20 +36,22 @@ system.json should include the following:
 ## Dependencies
 ---
 
-### Generating new patterns & training the net
-
 * Developed and tested on Python 3.6+
-* For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` might not be sufficient
-* When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools with cuda version you want: 
+* For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` will likely fail
+* When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools: 
     ```
-    conda install pytorch cudatoolkit=10.1 -c pytorch
+    conda install pytorch cudatoolkit -c pytorch
     ```
-    * This repo was tested with PyTorch 1.6-1.7 and CUDA 10.1, 10.2
+    * This repo was tested with PyTorch 1.6-1.7 and CUDA 10.1, 10.2, 11.0
 * [libigl](https://github.com/libigl/libigl-python-bindings) needs installation with conda. You could also check other options on [their GitHub page](https://github.com/libigl/libigl-python-bindings)
     ```
     conda install -c conda-forge igl
     ```
 * [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
+* Simple installation with `pip install <package_name>`: 
+    * `wandb` 
+    * `svglib` 
+    * `svgwrite`
 * The project has custom Python packages. Add `Garment-Pattern-Estimation/packages` to `PYTHONPATH` environmental variable for the project to work correctly!
 
 Development was done on _Windows 10_. If running on other OS ends up with errors, please, raise an issue!
@@ -61,7 +63,7 @@ You might experience errors related with PIL (pillow) Image module. Those most o
 *Working combinations*:
 * For ReportLab (saving patterns as png images) to work: Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
 
-### Simulating garment patterns on a human 3D model
+### Additional requirements for Simulating garment patterns on a human 3D model
 
 * Autodesk Maya 2018 or Autodesk Maya 2020 
     * With `numpy` installed (there are a number of instruction around the Internet on how to get `numpy` to work in Maya)

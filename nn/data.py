@@ -7,7 +7,6 @@ from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-import torchvision.transforms as transforms
 import igl
 # import meshplot  # when uncommented, could lead to problems with wandb run syncing
 
