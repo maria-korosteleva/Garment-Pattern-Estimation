@@ -394,12 +394,15 @@ class GarmentFullPattern3D(BaseModule):
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['outlines'], 
                 'scale': data_config['standardize']['gt_scale']['outlines']})
+
+        self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
         if data_config['explicit_stitch_tags']:
-            self.stitch_loss = nn.MSELoss()
+            self.stitch_loss_supervised = nn.MSELoss()
             # tags provided by data are controlled from data -- force the values to be the same
             self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
         else:
-            self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
+            self.stitch_loss_supervised = None
+            
         self.free_edge_class_loss = nn.BCEWithLogitsLoss()
         
         # setup non-loss quality evaluation metrics
@@ -497,22 +500,21 @@ class GarmentFullPattern3D(BaseModule):
 
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
-            # loss on stitch tags
-            if isinstance(self.stitch_loss, metrics.PatternStitchLoss):
-                # stitches gotta be IntTensor, Mask should be BoolTensor
-                stitch_loss, stitch_loss_breakdown = self.stitch_loss(
+            stitch_loss, stitch_loss_breakdown = self.stitch_loss(
                     preds['stitch_tags'], ground_truth['stitches']) 
-                loss_dict.update(stitch_loss_breakdown)
-            else:
-                stitch_loss = self.stitch_loss(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
-                loss_dict.update(stitch_supervised_loss=stitch_loss)
+            loss_dict.update(stitch_loss_breakdown)
+            full_loss += stitch_loss
+            # loss on stitch tags
+            if self.stitch_loss_supervised is not None:
+                stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
+                loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
+                full_loss += stitch_sup_loss
             
             # free\stitches edges classification
             gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
             free_edges_loss = self.free_edge_class_loss(preds['free_edge_mask'], gt_free_class)
             loss_dict.update(free_edges_loss=free_edges_loss)
-            
-            full_loss += stitch_loss + free_edges_loss
+            full_loss += free_edges_loss
 
             # qualitative evaluation
             if self.with_quality_eval:
