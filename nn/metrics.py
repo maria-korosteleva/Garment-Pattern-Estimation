@@ -90,7 +90,6 @@ class PatternStitchLoss():
             * with every edge indicated as (panel_id, edge_id) 
         """
         gt_stitches = gt_stitches.long()
-        tag_len = stitch_tags.shape[-1]
         batch_size = stitch_tags.shape[0]
         num_stitches = gt_stitches.shape[-1]
 
@@ -105,18 +104,13 @@ class PatternStitchLoss():
         similarity_loss = (left_sides - right_sides) ** 2
         similarity_loss = similarity_loss.sum() / (batch_size * num_stitches)
 
-        # Push tags to be non-zero
-        non_zero_loss = self.triplet_margin - (total_tags ** 2).sum(dim=-1)
-        non_zero_loss = torch.max(non_zero_loss, torch.zeros_like(non_zero_loss)).sum() / (batch_size * num_stitches * 2)
-
         # Push tags away from each other
         total_neg_loss = self.neg_loss(total_tags)
                
         # final sum
-        fin_stitch_losses = similarity_loss + non_zero_loss + total_neg_loss
+        fin_stitch_losses = similarity_loss + total_neg_loss
         stitch_loss_dict = dict(
             stitch_similarity_loss=similarity_loss,
-            stitch_non_zero_loss=non_zero_loss, 
             stitch_neg_loss=total_neg_loss
         )
 

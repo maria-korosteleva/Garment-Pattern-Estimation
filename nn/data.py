@@ -814,7 +814,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
-            explicit_stitch_tags=True
+            explicit_stitch_tags=False
         )
     
     def standardize(self, training=None):
@@ -904,7 +904,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return prediction_imgs
 
     @staticmethod
-    def tags_to_stitches(stitch_tags, free_edges_class):
+    def tags_to_stitches(stitch_tags, free_edges_score):
         """
         Convert per-edge per panel stitch tags into the list of connected edge pairs
         NOTE: expects inputs to be torch tensors, numpy is not supported
@@ -912,22 +912,22 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         flat_tags = stitch_tags.view(-1, stitch_tags.shape[-1])  # with pattern-level edge ids
         
         # to edge classes from logits
-        flat_edges_class = free_edges_class.view(-1) 
-        flat_edges_class = torch.round(torch.sigmoid(flat_edges_class)).type(torch.BoolTensor)
+        flat_edges_score = free_edges_score.view(-1) 
+        flat_edges_mask = torch.round(torch.sigmoid(flat_edges_score)).type(torch.BoolTensor)
 
         # filtet nonzero edges
-        non_zero_tag_mask = ~flat_edges_class
+        non_zero_tag_mask = ~flat_edges_mask
         non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze(-1)
         if not any(non_zero_tag_mask) or non_zero_tag_edges.shape[0] < 2:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
             return torch.tensor([])
 
-        # Track matches tags tag matching
+        # Track tag matching
         unmached_tags_mask = non_zero_tag_mask
-        if len(non_zero_tag_edges) % 2:  # odd 
-            # => at least one of tags is erroneously non-zero -> remove the tag that is closest to zero
-            lengths = (flat_tags[non_zero_tag_mask] ** 2).sum(-1)
-            to_remove = lengths.argmin()
+        # Check for even number of tags
+        if len(non_zero_tag_edges) % 2:  # odd => at least one of tags is erroneously non-free
+            # -> remove the edge that is closest to free edges class from comparison
+            to_remove = flat_edges_score[non_zero_tag_mask].argmax()  # the higer the score, the closer the edge is to free edges
             unmached_tags_mask[non_zero_tag_edges[to_remove]] = False
 
         # Now we have even number of tags to match
