@@ -914,41 +914,45 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         flat_edges_score = free_edges_score.view(-1) 
         flat_edges_mask = torch.round(torch.sigmoid(flat_edges_score)).type(torch.BoolTensor)
 
-        # filtet nonzero edges
-        non_zero_tag_mask = ~flat_edges_mask
-        non_zero_tag_edges = torch.nonzero(non_zero_tag_mask, as_tuple=False).squeeze(-1)
-        if not any(non_zero_tag_mask) or non_zero_tag_edges.shape[0] < 2:  # -> no stitches
+        # filter free edges
+        non_free_mask = ~flat_edges_mask
+        non_free_edges = torch.nonzero(non_free_mask, as_tuple=False).squeeze(-1)  # mapping of non-free-edges ids to full edges list id
+        if not any(non_free_mask) or non_free_edges.shape[0] < 2:  # -> no stitches
             print('Garment3DPatternFullDataset::Warning::no non-zero stitch tags detected')
             return torch.tensor([])
 
-        # Track tag matching
-        unmached_tags_mask = non_zero_tag_mask
         # Check for even number of tags
-        if len(non_zero_tag_edges) % 2:  # odd => at least one of tags is erroneously non-free
+        if len(non_free_edges) % 2:  # odd => at least one of tags is erroneously non-free
             # -> remove the edge that is closest to free edges class from comparison
-            to_remove = flat_edges_score[non_zero_tag_mask].argmax()  # the higer the score, the closer the edge is to free edges
-            unmached_tags_mask[non_zero_tag_edges[to_remove]] = False
+            to_remove = flat_edges_score[non_free_mask].argmax()  # the higer the score, the closer the edge is to free edges
+            non_free_mask[non_free_edges[to_remove]] = False
+            non_free_edges = torch.nonzero(non_free_mask, as_tuple=False).squeeze(-1)
 
         # Now we have even number of tags to match
-        # Pair tags with least distance to each other!
-        stitches = []
-        for non_zero_id in range(len(non_zero_tag_edges)):
-            edge_id = non_zero_tag_edges[non_zero_id]
-            if not unmached_tags_mask[edge_id]:  # already matched
-                continue
-            # remove from unmatched
-            unmached_tags_mask[edge_id] = False
+        num_non_free = len(non_free_edges) 
+        dist_matrix = torch.cdist(flat_tags[non_free_mask], flat_tags[non_free_mask])
 
-            # Compare current tag with others -- and match with the closest one!
-            tag1 = flat_tags[edge_id]
-            distances = ((tag1 - flat_tags[unmached_tags_mask]) ** 2).sum(-1)
-            to_match = distances.argmin()
-            # to map id from filtered list of tags to original list of tags
-            unmatched_edges = torch.nonzero(unmached_tags_mask, as_tuple=False).squeeze(-1)  
-            stitches.append([edge_id, unmatched_edges[to_match]])
-            
-            # remove the pair from unmatches
-            unmached_tags_mask[unmatched_edges[to_match]] = False
+        # remove self-distance on diagonal & lower triangle elements (duplicates)
+        tril_ids = torch.tril_indices(num_non_free, num_non_free)
+        dist_matrix[tril_ids[0], tril_ids[1]] = float('inf')
+
+        # pair egdes by min distance to each other starting by the closest pair
+        stitches = []
+        for _ in range(num_non_free // 2):  # this many pair to arrange
+            to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
+            row = to_match_idx // dist_matrix.shape[0]
+            col = to_match_idx % dist_matrix.shape[0]
+            stitches.append([non_free_edges[row], non_free_edges[col]])
+
+            # exlude distances with matched edges from further consideration
+            dist_matrix[row, :] = float('inf')
+            dist_matrix[:, row] = float('inf')
+            dist_matrix[:, col] = float('inf')
+            dist_matrix[col, :] = float('inf')
+        
+        if torch.isfinite(dist_matrix).any():
+            raise ValueError('Garment3DPatternFullDataset::Error::Tags-to-stitches::Number of stitches {} & dist_matrix shape {} mismatch'.format(
+                num_non_free / 2, dist_matrix.shape))
 
         return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
 
@@ -1106,54 +1110,55 @@ if __name__ == "__main__":
             [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
             [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
 
-            [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
-            [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
-            [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
-            [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
-            [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
-            [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
-            [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
-            [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
-            [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
+            # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
+            # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
+            # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
+            # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
+            # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
+            # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
+            # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
+            # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
+            # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
 
-        [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
-        [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
-        [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
-        [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
-        [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
-        [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
-        [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
-        [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
-        [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
+        # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
+        # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
+        # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
+        # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
+        # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
+        # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
+        # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
+        # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
+        # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
 
-        [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
-        [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
-        [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
-        [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
-        [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
-        [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
-        [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
-        [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
-        [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
+        # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
+        # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
+        # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
+        # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
+        # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
+        # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
+        # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
+        # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
+        # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
 
-        [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
-        [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
-        [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
-        [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
-        [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
-        [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
-        [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
-        [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
-        [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
+        # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
+        # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
+        # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
+        # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
+        # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
+        # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
+        # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
+        # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
+        # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
 
-        [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
-        [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
-        [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
-        [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
-        [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
-        [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
-        [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
-        [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
-        [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]])
+        # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
+        # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
+        # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
+        # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
+        # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
+        # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
+        # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
+        # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
+        # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
+        ])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags))
+    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))
