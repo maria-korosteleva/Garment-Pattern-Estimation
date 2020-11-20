@@ -376,7 +376,7 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40,
+            'epoch_with_stitches': 40, 
             'stitch_hardnet_version': False 
         })
         # update with input settings
@@ -424,7 +424,7 @@ class GarmentFullPattern3D(BaseModule):
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
-            self.panel_elem_len, 
+            self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
             self.config['panel_n_layers'], 
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
@@ -441,15 +441,6 @@ class GarmentFullPattern3D(BaseModule):
             self.config['panel_encoding_size'], 
             self.rotation_size + self.translation_size)
 
-        # decoding stitch tags from panel encoding -- using same module type as for panels
-        self.stitch_tag_decoder = panel_decoder_module(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
-            self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
-            self.config['panel_n_layers'], 
-            dropout=self.config['dropout'], 
-            custom_init=self.config['lstm_init']
-        )
-
     def forward(self, positions_batch):
         self.device = positions_batch.device
         batch_size = positions_batch.size(0)
@@ -461,11 +452,8 @@ class GarmentFullPattern3D(BaseModule):
         panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
         flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
 
-        # Panel outlines
+        # Panel outlines & stitch info
         flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
-
-        # Stitch info
-        flat_stitch_tags = self.stitch_tag_decoder(flat_panel_encodings, self.max_panel_len)
         
         # Placement
         flat_placement = self.placement_decoder(flat_panel_encodings)
@@ -474,13 +462,9 @@ class GarmentFullPattern3D(BaseModule):
 
         # reshape to per-pattern predictions
         panel_predictions = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        # outlines = panel_predictions[:, :, :, :self.panel_elem_len]
-        outlines = panel_predictions
-        # stitch info
-        stitch_tags_full = flat_stitch_tags.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        stitch_tags = stitch_tags_full[:, :, :, :-1]
-        free_edge_class = stitch_tags_full[:, :, :, -1]
-        
+        stitch_tags = panel_predictions[:, :, :, self.panel_elem_len:-1]
+        free_edge_class = panel_predictions[:, :, :, -1]
+        outlines = panel_predictions[:, :, :, :self.panel_elem_len]
 
         rotations = flat_rotations.contiguous().view(batch_size, self.max_pattern_size, -1)
         translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
