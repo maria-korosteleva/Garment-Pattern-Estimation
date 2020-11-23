@@ -289,20 +289,77 @@ class BasicPattern(object):
         shift = shift - vertices[origin_id]
         vertices = vertices - vertices[origin_id]
 
-        # ----- Construct edge sequence ----------
+        # ----- edge order according to origin ----------
         # Edge that starts at origin
-        first_edge = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
-        first_edge = first_edge[0]
+        first_edge_orig_id = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
+        first_edge_orig_id = first_edge_orig_id[0]
 
         # iterate over edges starting from the chosen origin
-        rotated_edges = panel['edges'][first_edge:] + panel['edges'][:first_edge]
+        rotated_edges = panel['edges'][first_edge_orig_id:] + panel['edges'][:first_edge_orig_id]
         # map from old ids to new ids
         edge_ids = list(range(len(rotated_edges)))
-        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge):] + edge_ids[:(len(rotated_edges) - first_edge)]
-        # Construct the edge sequence
+        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+
+        # ------- Flip normal if needed -------
+        # TODO break down into individual functions? 
+        # make sure that edges traverse the panel in cloclwise direction -- s.t. all panels have the same order
+        first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
+        last_edge = self._edge_as_vector(vertices, rotated_edges[1])[:2]
+        if np.cross(first_edge, last_edge) < 0:  # unlikely to be zero due to the choice of origin at the corner of the panel (see above)
+            print('Updating edge order {}'.format(panel_name))
+
+            # flip edge order to make it counterclockwize 
+            rotated_edges.reverse()
+            
+            # We flip normal but not flippling stitches
+            # if we look at the 2D projections of panel in 3D (old & new) the traversal order of edges will be the same
+            # this fact is needed to match edges in stitches in 3D correctly
+            first_edge_orig_id = first_edge_orig_id - 1  # edges id shift now starts from a new first edge
+            rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]  # for stitches
+
+            print(rotated_edge_ids)
+            # rotated_edge_ids.reverse()
+            # print(rotated_edge_ids)
+            # update verts order in every edge on edge matrix construction
+            flip_edges = True
+            
+            # adjust rotation accordingly
+            rotation_euler = np.array(panel['rotation'])
+            # try simplified way first -- flip around Y axis
+
+            if rotation_euler[1] > 0:
+               rotation_euler[1] -= 180  
+            else:
+               rotation_euler[1] += 180
+
+            print(shift)
+            shift[0] -= 2 * shift[0]  # inital origin position was updated with the flip -> shift to place the panle correctly should be udated too
+            print(shift)
+
+            print(panel['rotation'], rotation_euler)
+
+            first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
+            last_edge = self._edge_as_vector(vertices, rotated_edges[1])[:2]
+            print('New order: {}, {}, cross {}'.format(first_edge, last_edge, np.cross(first_edge, last_edge)))
+        else:
+            flip_edges = False
+            rotation_euler = panel['rotation']
+
+        
+        # --- Construct the edge sequence --
         edge_sequence = []
         for edge in rotated_edges:
-            edge_sequence.append(self._edge_as_vector(vertices, edge))
+            edge_sequence.append(self._edge_as_vector(vertices, edge, flip_edge=flip_edges))
+
+        # debug
+        if flip_edges:
+            print('final sequence: {}'.format(edge_sequence))
+            orig_seq = []
+            rotated_edges.reverse()
+            for edge in rotated_edges:
+                orig_seq.append(self._edge_as_vector(vertices, edge))
+            print('no-flip-sequence: {}'.format(orig_seq))
+            rotated_edges.reverse()
 
         # padding if requested
         if pad_to_len is not None:
@@ -315,15 +372,15 @@ class BasicPattern(object):
         # ----- 3D placement convertion  ------
         # Follows the Maya convention: intrinsic xyz Euler Angles
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.html
-        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)
+        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)  # 
         panel_rotation = panel_rotation.as_matrix()
 
         # Global Translation with compensative update for local origin change (shift)
         shift = np.append(shift, 0)  # translation to 3D
-
         comenpensating_shift = - panel_rotation.dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
-        rotation_representation = np.array(panel['rotation'])
+
+        rotation_representation = np.array(rotation_euler)
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
@@ -412,7 +469,7 @@ class BasicPattern(object):
 
         return np.array(stitch_tags)
 
-    def _edge_as_vector(self, vertices, edge_dict):
+    def _edge_as_vector(self, vertices, edge_dict, flip_edge=False):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
                 Original edge endvertex positions can be restored if edge vector is added to the start point,
@@ -421,8 +478,12 @@ class BasicPattern(object):
                 Given in relative coordinates. With zeros if edge is not curved 
         """
         edge_verts = vertices[edge_dict['endpoints']]
-        edge_vector = edge_verts[1] - edge_verts[0]
+        edge_vector = edge_verts[1] - edge_verts[0] if not flip_edge else edge_verts[0] - edge_verts[1]
         curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
+        # flip curvature too
+        if flip_edge:
+            curvature[0] = 1 - curvature[0] if curvature[0] != 0 else 0
+            curvature[1] = -curvature[1]
 
         return np.concatenate([edge_vector, curvature])
 
@@ -1077,24 +1138,22 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
-    # empty_pattern = BasicPattern()
+    empty_pattern = BasicPattern()
     print(pattern.panel_order())
-    print(pattern.pattern['stitches'])
 
     # print(pattern.stitches_as_tags())
 
 
     tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
-    print(stitch_tags)
 
-    # pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # print(pattern.pattern['stitches'])
-    # print(pattern.panel_order())
+    print(empty_pattern.panel_order())
 
-    # pattern.name += '_stitches_upd_1'
-    # pattern.serialize(system_config['output'], to_subfolder=True)
+    empty_pattern.name = pattern.name + '_normals_rot_Y_angles'
+    empty_pattern.serialize(system_config['output'], to_subfolder=True)
