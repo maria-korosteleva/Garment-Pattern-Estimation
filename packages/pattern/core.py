@@ -271,6 +271,8 @@ class BasicPattern(object):
 
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
+        # rotation in the pattern follows the Maya convention: intrinsic xyz Euler Angles
+        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)
 
         # ---- offset vertices to have one (~low-left) vertex at (0, 0) -- deterministically ----
         # bounding box low-left to origin
@@ -282,84 +284,47 @@ class BasicPattern(object):
         full_range = np.arange(vertices.shape[0])
         on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
 
-        # choose the one closest to x
+        # choose the one with min x
         origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
         origin_id = on_ox_ids[origin_candidate]
-        # Chosen vertex to origin
+        # Chosen vertex as to origin
         shift = shift - vertices[origin_id]
         vertices = vertices - vertices[origin_id]
 
-        # ----- edge order according to origin ----------
+        # ----- edge order according to new origin ----------
         # Edge that starts at origin
         first_edge_orig_id = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
         first_edge_orig_id = first_edge_orig_id[0]
 
-        # iterate over edges starting from the chosen origin
         rotated_edges = panel['edges'][first_edge_orig_id:] + panel['edges'][:first_edge_orig_id]
         # map from old ids to new ids
         edge_ids = list(range(len(rotated_edges)))
         rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
 
         # ------- Flip normal if needed -------
-        # TODO break down into individual functions? 
-        # make sure that edges traverse the panel in cloclwise direction -- s.t. all panels have the same order
+        # make sure that edges traverse the panel in cloclwise direction -- s.t. all panels are consistent
         first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
         last_edge = self._edge_as_vector(vertices, rotated_edges[1])[:2]
-        if np.cross(first_edge, last_edge) < 0:  # unlikely to be zero due to the choice of origin at the corner of the panel (see above)
-            print('Updating edge order {}'.format(panel_name))
-
-            # flip edge order to make it counterclockwize 
+        if np.cross(first_edge, last_edge) < 0:  # unlikely to be zero due to the choice of origin at the corner 
+            flip_edges = True  # on reading edges
             rotated_edges.reverse()
             
-            # We flip normal but not flippling stitches
+            # update ID mapping to match edges in stitches in 3D correctly
             # if we look at the 2D projections of panel in 3D (old & new) the traversal order of edges will be the same
-            # this fact is needed to match edges in stitches in 3D correctly
             first_edge_orig_id = first_edge_orig_id - 1  # edges id shift now starts from a new first edge
-            rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]  # for stitches
+            rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
 
-            print(rotated_edge_ids)
-            # rotated_edge_ids.reverse()
-            # print(rotated_edge_ids)
-            # update verts order in every edge on edge matrix construction
-            flip_edges = True
-            
-            # adjust rotation accordingly
-            rotation_euler = np.array(panel['rotation'])
-            # try simplified way first -- flip around Y axis
-
-            if rotation_euler[1] > 0:
-               rotation_euler[1] -= 180  
-            else:
-               rotation_euler[1] += 180
-
-            print(shift)
-            shift[0] -= 2 * shift[0]  # inital origin position was updated with the flip -> shift to place the panle correctly should be udated too
-            print(shift)
-
-            print(panel['rotation'], rotation_euler)
-
-            first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
-            last_edge = self._edge_as_vector(vertices, rotated_edges[1])[:2]
-            print('New order: {}, {}, cross {}'.format(first_edge, last_edge, np.cross(first_edge, last_edge)))
+            # adjust rotation to get the same panel palcement in 3D
+            flip_rotation = Rotation.from_euler('xyz', [0, 180, 0], degrees=True)
+            panel_rotation = panel_rotation * flip_rotation
         else:
             flip_edges = False
-            rotation_euler = panel['rotation']
+            # and rotation stays the same
 
-        
-        # --- Construct the edge sequence --
+        # --- Construct the edge sequence in the recovered order ---
         edge_sequence = []
         for edge in rotated_edges:
             edge_sequence.append(self._edge_as_vector(vertices, edge, flip_edge=flip_edges))
-
-        # debug
-        if flip_edges:
-            print('final sequence: {}'.format(edge_sequence))
-            orig_seq = []
-            rotated_edges.reverse()
-            for edge in rotated_edges:
-                orig_seq.append(self._edge_as_vector(vertices, edge))
-            print('no-flip-sequence: {}'.format(orig_seq))
-            rotated_edges.reverse()
 
         # padding if requested
         if pad_to_len is not None:
@@ -370,17 +335,12 @@ class BasicPattern(object):
                 edge_sequence.append(np.zeros_like(edge_sequence[0]))
         
         # ----- 3D placement convertion  ------
-        # Follows the Maya convention: intrinsic xyz Euler Angles
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.html
-        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)  # 
-        panel_rotation = panel_rotation.as_matrix()
-
         # Global Translation with compensative update for local origin change (shift)
-        shift = np.append(shift, 0)  # translation to 3D
-        comenpensating_shift = - panel_rotation.dot(shift)
+        shift = np.append(shift, 0)  # to 3D
+        comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
 
-        rotation_representation = np.array(rotation_euler)
+        rotation_representation = np.array(panel_rotation.as_euler('xyz', degrees=True))
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
@@ -417,7 +377,7 @@ class BasicPattern(object):
             edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
         else:
             print('BasicPattern::Warning::{} with panel {}::Edge sequence do not return to origin. '
-                'Creating extra vertex'.format(self.name, panel_name))
+                  'Creating extra vertex'.format(self.name, panel_name))
             vertices = np.vstack([vertices, fin_vert])
             edges.append(self._edge_dict(idx, idx + 1, edge_info[2:4]))
 
@@ -1155,5 +1115,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_normals_rot_Y_angles'
+    empty_pattern.name = pattern.name + '_normals_transl'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)

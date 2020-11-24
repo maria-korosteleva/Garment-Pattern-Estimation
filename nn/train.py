@@ -79,7 +79,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Test-Garments-Reconstruction', 
-            run_name='stitch-supervised', run_id='1yvi2kw8'
+            run_name='normals', run_id='256ooh2u'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='normals', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
