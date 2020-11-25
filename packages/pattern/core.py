@@ -304,7 +304,10 @@ class BasicPattern(object):
         # ------- Flip normal if needed -------
         # make sure that edges traverse the panel in cloclwise direction -- s.t. all panels are consistent
         first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
-        last_edge = self._edge_as_vector(vertices, rotated_edges[1])[:2]
+        last_edge = self._edge_as_vector(vertices, rotated_edges[-1])[:2]
+
+        print('{}: ({} x {}) = {}'.format(panel_name, first_edge, last_edge, np.cross(first_edge, last_edge)))
+
         if np.cross(first_edge, last_edge) < 0:  # unlikely to be zero due to the choice of origin at the corner 
             flip_edges = True  # on reading edges
             rotated_edges.reverse()
@@ -317,6 +320,8 @@ class BasicPattern(object):
             # adjust rotation to get the same panel palcement in 3D
             flip_rotation = Rotation.from_euler('xyz', [0, 180, 0], degrees=True)
             panel_rotation = panel_rotation * flip_rotation
+
+            print('Flipping {} from {} to {}'.format(panel_name, panel['rotation'], panel_rotation.as_euler('xyz', degrees=True)))
         else:
             flip_edges = False
             # and rotation stays the same
@@ -1098,8 +1103,9 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
@@ -1115,5 +1121,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_normals_transl'
+    empty_pattern.name = pattern.name + '_normals_last_edge_fix_opposite'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)
