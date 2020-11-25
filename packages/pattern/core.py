@@ -287,6 +287,22 @@ class BasicPattern(object):
 
         return vertices, shift, origin_id
 
+    @staticmethod
+    def _rotate_edges(edges, edge_ids, new_origin_id):
+        """
+            Rotate provided list of edges s.t. the first edge starts from vertex with id = new_origin_id
+            Map old edge_ids to new ones accordingly
+            * edges expects list of edges structures
+        """
+        first_edge_orig_id = [idx for idx, edge in enumerate(edges) if edge['endpoints'][0] == new_origin_id]
+        first_edge_orig_id = first_edge_orig_id[0]
+        rotated_edges = edges[first_edge_orig_id:] + edges[:first_edge_orig_id]
+
+        # map from old ids to new ids
+        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+
+        return rotated_edges, rotated_edge_ids
+
     def panel_as_numeric(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
             * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
@@ -303,18 +319,11 @@ class BasicPattern(object):
         vertices = np.array(panel['vertices'])
         panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)  # pattern rotation follows the Maya convention: intrinsic xyz Euler Angles
 
-        # ---- offset vertices to have one (~low-left) vertex at (0, 0) -- deterministically ----
+        # offset vertices to have one (~low-left) vertex at (0, 0) 
         vertices, shift, origin_id = self._verts_to_left_corner(vertices)
 
-        # ----- edge order according to new origin ----------
-        # Edge that starts at origin
-        first_edge_orig_id = [idx for idx, edge in enumerate(panel['edges']) if edge['endpoints'][0] == origin_id]
-        first_edge_orig_id = first_edge_orig_id[0]
-
-        rotated_edges = panel['edges'][first_edge_orig_id:] + panel['edges'][:first_edge_orig_id]
-        # map from old ids to new ids
-        edge_ids = list(range(len(rotated_edges)))
-        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+        # edge order according to new origin 
+        rotated_edges, rotated_edge_ids = self._rotate_edges(panel['edges'], list(range(len(panel['edges']))), origin_id)
 
         # ------- Flip normal if needed -------
         # make sure that edges traverse the panel in countercloclwise direction -- s.t. all panels are consistent
@@ -332,7 +341,7 @@ class BasicPattern(object):
 
             # conbination of fliping Y coordinate & direction of every edge gives correct flipping around X
             flip_edges = True  # on reading edges
-            vertices[:, 1] = - vertices[:, 1]  # flip by Y
+            vertices[:, 1] = - vertices[:, 1]  # flip by X
 
             # print(vertices)
             print([self._edge_as_vector(vertices, edge, flip_edge=True) for edge in rotated_edges])
@@ -349,17 +358,10 @@ class BasicPattern(object):
 
             print('update origin after flip', vertices)
             vertices, shift_add, origin_id = self._verts_to_left_corner(vertices)
-            
             print(shift, shift_add)
             shift -= shift_add
-
-            # TODO edge rotation to separate function
-            first_edge_orig_id = [idx for idx, edge in enumerate(rotated_edges) if edge['endpoints'][0] == origin_id]
-            first_edge_orig_id = first_edge_orig_id[0]
-            rotated_edges = rotated_edges[first_edge_orig_id:] + rotated_edges[:first_edge_orig_id]
-            # map from old ids to new ids
-            edge_ids = list(range(len(rotated_edges)))
-            rotated_edge_ids = rotated_edge_ids[(len(rotated_edges) - first_edge_orig_id):] + rotated_edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+            # update edges order according to new origin
+            rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
 
             print('Flipping {} from {} to {}'.format(panel_name, panel['rotation'], panel_rotation.as_euler('xyz', degrees=True)))
 
@@ -368,7 +370,7 @@ class BasicPattern(object):
             flip_edges = False
             # and rotation stays the same
 
-        # --- Construct the edge sequence in the recovered order ---
+        # Construct the edge sequence in the recovered order
         edge_sequence = [self._edge_as_vector(vertices, edge, flip_edge=flip_edges) for edge in rotated_edges]
 
         # padding if requested
@@ -1161,5 +1163,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_normals_y_flip_origin'
+    empty_pattern.name = pattern.name + '_normals_y_ref'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)
