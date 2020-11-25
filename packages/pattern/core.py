@@ -268,19 +268,20 @@ class BasicPattern(object):
         left_corner = np.min(vertices, axis=0)
         shift = - left_corner
         vertices = vertices - left_corner
-        print(left_corner, vertices)
+        
+        # print(left_corner, vertices)
 
         # ids of verts sitting on Ox
         full_range = np.arange(vertices.shape[0])
         on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
 
-        print(on_ox_ids)
+        # print(on_ox_ids)
 
         # choose the one with min x
         origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
         origin_id = on_ox_ids[origin_candidate]
 
-        print(origin_id)
+        # print(origin_id)
         # Chosen vertex as to origin
         shift = shift - vertices[origin_id]
         vertices = vertices - vertices[origin_id]
@@ -313,7 +314,6 @@ class BasicPattern(object):
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::panel_as_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
 
-        print(panel_name)
 
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
@@ -321,57 +321,39 @@ class BasicPattern(object):
 
         # offset vertices to have one (~low-left) vertex at (0, 0) 
         vertices, shift, origin_id = self._verts_to_left_corner(vertices)
-
         # edge order according to new origin 
         rotated_edges, rotated_edge_ids = self._rotate_edges(panel['edges'], list(range(len(panel['edges']))), origin_id)
 
         # ------- Flip normal if needed -------
         # make sure that edges traverse the panel in countercloclwise direction -- s.t. all panels are consistent
+
         # due to the choice of origin (at the corner), first & last edge cross-product will reliably show panel normal direction 
         first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
         last_edge = self._edge_as_vector(vertices, rotated_edges[-1])[:2]
-
-        print('{}: ({} x {}) = {}'.format(panel_name, first_edge, last_edge, np.cross(first_edge, last_edge)))
-
-        if np.cross(first_edge, last_edge) < 0:  # should be negative -- counterclockwise
-            
-            # print(rotated_edges)
-            # print(vertices)
-            # print([self._edge_as_vector(vertices, edge, flip_edge=False) for edge in rotated_edges])
-
-            # conbination of fliping Y coordinate & direction of every edge gives correct flipping around X
-            flip_edges = True  # on reading edges
-            vertices[:, 1] = - vertices[:, 1]  # flip by X
-
-            # print(vertices)
-            print([self._edge_as_vector(vertices, edge, flip_edge=True) for edge in rotated_edges])
-
+        if np.cross(first_edge, last_edge) > 0:  # should be negative -- counterclockwise
+            vertices[:, 0] = - vertices[:, 0]  # flip by X coordinate -- we'll rotate around Y
             shift[0] -= 2 * shift[0]  # local coord frame change -- update translation accordingly 
-
-            # no need to update edge ids for stitches
+            flip_edges_curve = True  # flip the curvature on the edges to the other side on reading
 
             # adjust rotation to get the same panel palcement in 3D as it was before flipping
             flip_rotation = Rotation.from_euler('xyz', [0, 180, 0], degrees=True)
             panel_rotation = panel_rotation * flip_rotation
 
-            # TODO update origin too -- s.t. pattern starts in low-left corner
+            # intrestingly, there is no need to re-evaluare edge ids mapping after X coord flip
+            # as every edge will be on the orifinal place in 3D
 
-            print('update origin after flip', vertices)
+            # update origin too -- s.t. all panels start in low-left corner
             vertices, shift_add, origin_id = self._verts_to_left_corner(vertices)
-            print(shift, shift_add)
-            shift -= shift_add
-            # update edges order according to new origin
+            shift += shift_add  # collect all changes
             rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
 
-            print('Flipping {} from {} to {}'.format(panel_name, panel['rotation'], panel_rotation.as_euler('xyz', degrees=True)))
-
-            print([self._edge_as_vector(vertices, edge, flip_edge=True) for edge in rotated_edges])
+            # print('Flipping {} from {} to {}'.format(panel_name, panel['rotation'], panel_rotation.as_euler('xyz', degrees=True)))
         else:
-            flip_edges = False
+            flip_edges_curve = False
             # and rotation stays the same
 
-        # Construct the edge sequence in the recovered order
-        edge_sequence = [self._edge_as_vector(vertices, edge, flip_edge=flip_edges) for edge in rotated_edges]
+        # -- Construct the edge sequence in the recovered order --
+        edge_sequence = [self._edge_as_vector(vertices, edge, flip_curve_side=flip_edges_curve) for edge in rotated_edges]
 
         # padding if requested
         if pad_to_len is not None:
@@ -476,21 +458,29 @@ class BasicPattern(object):
 
         return np.array(stitch_tags)
 
-    def _edge_as_vector(self, vertices, edge_dict, flip_edge=False):
+    def _edge_as_vector(self, vertices, edge_dict, flip_curve_side=False, flip_edge=False):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
                 Original edge endvertex positions can be restored if edge vector is added to the start point,
                 which in turn could be obtained from previous edges in the panel loop
             * Next 2 elements: Curvature values 
                 Given in relative coordinates. With zeros if edge is not curved 
+
+            The latter two setting allow modifying edges on vector construction 
+            * flip_edge -- reverse the edge direction. The curvature values are adjusted s.t. the overall shape of the edge stays the same
+            * flip_curve_side -- updates the Y coordinate of curvature s.t. the curve appears on the other side of the straight edge vector
+                (e.g. used when flipping the panel normal)
         """
         edge_verts = vertices[edge_dict['endpoints']]
         edge_vector = edge_verts[1] - edge_verts[0] if not flip_edge else edge_verts[0] - edge_verts[1]
         curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
-        # flip curvature too
+        # if edge was reveresed, flip curvature too
         if flip_edge:
             curvature[0] = 1 - curvature[0] if curvature[0] != 0 else 0
             curvature[1] = -curvature[1]
+        
+        if flip_curve_side:
+            curvature[1] *= -1
 
         return np.concatenate([edge_vector, curvature])
 
@@ -1163,5 +1153,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_normals_y_ref'
+    empty_pattern.name = pattern.name + '_normals_X_flip_curv_ref'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)

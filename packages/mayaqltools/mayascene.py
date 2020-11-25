@@ -523,6 +523,7 @@ class MayaGarment(core.ParametrizedPattern):
         cross = 0
         
         for i in range(len(panel['edges']) - 1):
+            # TODO this test is not reliable test of normal -- update
             edge_i = panel['edges'][i]
             edge_i = vertices[edge_i['endpoints'][1]] - vertices[edge_i['endpoints'][0]]
             edge_i_next = panel['edges'][i + 1]
