@@ -21,9 +21,9 @@ def get_mesh(object_name):
 
     return mesh, dag
 
-def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False, tag=''):
+def test_intersect(mesh, raySource, rayVector, accelerator, hit_tol=None):
     """Check if given ray intersect given mesh
-        * at least 2 checks wheter there is at least two intersecting points -- usefull when checking self-intersect"""
+        * hit_tol ignores intersections that are within hit_tol from the ray source (as % of ray length) -- usefull when checking self-intersect"""
     # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
     maxParam = 1  # only search for intersections within given vector
     testBothDirections = False  # only in the given direction
@@ -36,13 +36,8 @@ def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False, ta
         raySource, rayVector, None, None, False, OpenMaya.MSpace.kWorld, maxParam, testBothDirections, accelerator, sortHits,
         hitPoints, hitRayParams, hitFaces, None, None, None, 1e-6)   # TODO anyIntersection
     
-    if hit and at_least_2:
-        return hitPoints.length() > 1
-    
-    # if hit:
-    #     print('{}: Hits from [{}, {}, {}]'.format(tag, raySource.x, raySource.y, raySource.z))
-    #     for i in range(len(hitFaces)):
-    #         print('Hit: {}, {}, {}; Face: {}, Ray params: {}'.format(hitPoints[i].x, hitPoints[i].y, hitPoints[i].z, hitFaces[i], hitRayParams[i]))
+    if hit and hit_tol is not None:
+        return any([dist > hit_tol for dist in hitRayParams])
 
     return hit
 
@@ -105,12 +100,12 @@ def remove_invisible(target, camera_surface, obstacles=[]):
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
 
-        if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, at_least_2=True):  # intersects itself
+        if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5):  # intersects itself
             self_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
 
-        if any([test_intersect(mesh, face_mean, rayDir, acc, tag='Body') for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
+        if any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
             object_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
@@ -128,7 +123,6 @@ def remove_invisible(target, camera_surface, obstacles=[]):
     to_delete = sorted(to_delete)  # for simple id adjustment
     for idx in range(len(to_delete)):
        target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
-       print('Removed {}'.format(to_delete[idx]))
     
     print('Removal finished')
 
