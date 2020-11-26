@@ -265,7 +265,6 @@ class BasicPattern(object):
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::panel_as_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
 
-
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
         panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)  # pattern rotation follows the Maya convention: intrinsic xyz Euler Angles
@@ -298,7 +297,10 @@ class BasicPattern(object):
             shift += shift_add  # collect all changes
             rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
 
-            # print('Flipping {} from {} to {}'.format(panel_name, panel['rotation'], panel_rotation.as_euler('xyz', degrees=True)))
+            print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
+                self.name,
+                panel_name, panel['rotation'], 
+                np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
         else:
             flip_edges_curve = False
             # and rotation stays the same
@@ -450,25 +452,17 @@ class BasicPattern(object):
             * Determenistic process
         """
         left_corner = np.min(vertices, axis=0)
-        shift = - left_corner
         vertices = vertices - left_corner
         
-        # print(left_corner, vertices)
+        # choose the one closest to zero (=low-left corner) as new origin
+        verts_norms = np.linalg.norm(vertices, axis=1)  # numpy 1.9+
+        origin_id = np.argmin(verts_norms)
 
-        # ids of verts sitting on Ox
-        full_range = np.arange(vertices.shape[0])
-        on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
-
-        # print(on_ox_ids)
-
-        # choose the one with min x
-        origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
-        origin_id = on_ox_ids[origin_candidate]
-
-        # print(origin_id)
         # Chosen vertex as to origin
-        shift = shift - vertices[origin_id]
         vertices = vertices - vertices[origin_id]
+
+        # From old to new origin
+        shift = - left_corner - vertices[origin_id]
 
         return vertices, shift, origin_id
 
@@ -1135,11 +1129,13 @@ if __name__ == "__main__":
     import customconfig
     from pattern.wrappers import VisPattern
 
+    # np.set_printoptions(precision=4, suppress=True)
+
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
-    pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
+    # pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
     # pattern = VisPattern()
@@ -1155,5 +1151,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_normals_X_flip_curv_ref'
+    empty_pattern.name = pattern.name + '_origin'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)

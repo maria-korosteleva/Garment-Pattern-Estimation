@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import numpy as np
 
 # My modules
 import customconfig
@@ -99,7 +100,8 @@ def get_data_config(in_config, old_stats=False):
 
 
 if __name__ == "__main__":
-    
+    np.set_printoptions(precision=4, suppress=True)  # for readability
+
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     in_data_config, in_nn_config, net_seed = get_values_from_args()
@@ -107,12 +109,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='normals', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='panel-origin-fix', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)
+    split, data_config = get_data_config(in_data_config, old_stats=False)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(Path(system_info['datasets_path']) / dataset_folder, 
                                                data_config, gt_caching=True, feature_caching=True)
