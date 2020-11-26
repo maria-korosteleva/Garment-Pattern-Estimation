@@ -471,7 +471,7 @@ class GarmentFullPattern3D(BaseModule):
 
         return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
 
-    def loss(self, features, ground_truth, epoch=1000):
+    def loss(self, features, ground_truth, names=None, epoch=1000):
         """Evalute loss when predicting patterns.
            * default epoch is some large value to trigger stitch evaluation
            * Fucntion returns True in third parameter at the moment of the loss stucture update
@@ -519,7 +519,8 @@ class GarmentFullPattern3D(BaseModule):
             # qualitative evaluation
             if self.with_quality_eval:
                 with torch.no_grad():
-                    stitch_prec, stitch_recall = self.stitch_quality(preds['stitch_tags'], preds['free_edge_mask'], ground_truth['stitches'].type(torch.IntTensor))
+                    stitch_prec, stitch_recall = self.stitch_quality(
+                        preds['stitch_tags'], preds['free_edge_mask'], ground_truth['stitches'].type(torch.IntTensor), pattern_names=names)
 
                     # free edges accuracy
                     free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))

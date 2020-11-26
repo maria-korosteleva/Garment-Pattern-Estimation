@@ -15,9 +15,9 @@ from experiment import WandbRunWrappper
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Test-Garments-Reconstruction', 
-    run_name='wait-upload', 
-    run_id='2es5vzij')  # finished experiment
+    project_name='Garments-Reconstruction', 
+    run_name='panel-origin-fix', 
+    run_id='1svo6wuc')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -60,13 +60,13 @@ print('Test metrics: {}'.format(test_metrics))
 
 # print(dataset[276]['features'])  # first element of validation set
 
-experiment.add_statistic('valid_on_best', valid_loss)
-experiment.add_statistic('test_on_best', test_metrics)
+# experiment.add_statistic('valid_on_best', valid_loss)
+# experiment.add_statistic('test_on_best', test_metrics)
 
 # -------- Predict ---------
 # save prediction for validation to file
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 print('Saved to {}'.format(prediction_path))
 # reflect predictions info in expetiment
-experiment.add_statistic('predictions_folder', prediction_path.name)
-experiment.add_artifact('D:/GK-Pattern-Data-Gen/nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201113-17-27-49', datawrapper.dataset.name, 'result')
+# experiment.add_statistic('predictions_folder', prediction_path.name)
+# experiment.add_artifact('D:/GK-Pattern-Data-Gen/nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201113-17-27-49', datawrapper.dataset.name, 'result')

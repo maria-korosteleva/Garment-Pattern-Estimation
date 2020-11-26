@@ -183,7 +183,7 @@ class PatternStitchPrecisionRecall():
             for key in self.data_stats:
                 self.data_stats[key] = torch.Tensor(self.data_stats[key])
 
-    def __call__(self, stitch_tags, free_edge_class, gt_stitches):
+    def __call__(self, stitch_tags, free_edge_class, gt_stitches, pattern_names=None):
         """
          Evaluate on the batch of stitch tags
         """
@@ -207,7 +207,13 @@ class PatternStitchPrecisionRecall():
             for detected in stitch_list.transpose(0, 1):
                 for actual in gt_stitches[pattern_idx].transpose(0, 1):
                     # order-invariant comparison of stitch sides
-                    correct_stitches += (all(detected == actual) or all(detected == actual.flip([0])))
+                    correct = (all(detected == actual) or all(detected == actual.flip([0])))
+                    correct_stitches += correct
+                    if correct:  # no need to check subsequent stitches
+                        break
+ 
+                if pattern_names is not None and not correct:  # never detected a match with actual stitches
+                    print('StitchPrecisionRecall::{}::Stitch {} detected wrongly'.format(pattern_names[pattern_idx], detected))
 
             # precision -- how many of the detected stitches are actually there
             tot_precision += correct_stitches / num_detected_stitches if num_detected_stitches else 0
@@ -224,7 +230,7 @@ class PatternStitchPrecisionRecall():
             tot_precision = tot_recall = 0
             for batch in data_loader:
                 predictions = model(batch['features'])
-                batch_precision, batch_recall = self(predictions['stitch_tags'], batch['ground_truth']['stitches'])
+                batch_precision, batch_recall = self(predictions['stitch_tags'], batch['ground_truth']['stitches'], batch['name'])
                 tot_precision += batch_precision
                 tot_recall += batch_recall
 
@@ -254,7 +260,7 @@ def eval_metrics(model, data_wrapper, section='test'):
                     gt = features
 
                 # loss evaluation
-                full_loss, loss_dict, _ = model.loss(features, gt)
+                full_loss, loss_dict, _ = model.loss(features, gt, names=batch['name'])  # use names for cleaner errors when needed
 
                 # summing up
                 current_metrics['full_loss'] += full_loss

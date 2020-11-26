@@ -193,7 +193,7 @@ class WandbRunWrappper(object):
                 return torch.load(file)
                 # only one file per checkpoint anyway
 
-        except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
+        except (requests.exceptions.HTTPError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
     
     def save_checkpoint(self, state, aliases=[], wait_for_upload=False):
