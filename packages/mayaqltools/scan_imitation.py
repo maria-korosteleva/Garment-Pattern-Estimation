@@ -18,10 +18,10 @@ def get_mesh(object_name):
     selectionList.getDagPath(0, dag)
     # as mesh
     mesh = OpenMaya.MFnMesh(dag)  # reference https://help.autodesk.com/view/MAYAUL/2017/ENU/?guid=__py_ref_class_open_maya_1_1_m_fn_mesh_html
-    
+
     return mesh, dag
 
-def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False):
+def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False, tag=''):
     """Check if given ray intersect given mesh
         * at least 2 checks wheter there is at least two intersecting points -- usefull when checking self-intersect"""
     # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
@@ -38,6 +38,11 @@ def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False):
     
     if hit and at_least_2:
         return hitPoints.length() > 1
+    
+    # if hit:
+    #     print('{}: Hits from [{}, {}, {}]'.format(tag, raySource.x, raySource.y, raySource.z))
+    #     for i in range(len(hitFaces)):
+    #         print('Hit: {}, {}, {}; Face: {}, Ray params: {}'.format(hitPoints[i].x, hitPoints[i].y, hitPoints[i].z, hitFaces[i], hitRayParams[i]))
 
     return hit
 
@@ -66,10 +71,10 @@ def remove_invisible(target, camera_surface, obstacles=[]):
     inverted_cam_surface_mesh, _ = get_mesh(inverted_camera_surface)
 
     # search for intersections
-    target_accelerator = OpenMaya.MMeshIsectAccelParams()  
-    cam_surface_accelerator = OpenMaya.MMeshIsectAccelParams() 
-    inv_cam_surface_accelerator = OpenMaya.MMeshIsectAccelParams() 
-    obstacles_accs = [OpenMaya.MMeshIsectAccelParams() for _ in range(len(obstacles))]
+    target_accelerator = target_mesh.autoUniformGridParams()
+    cam_surface_accelerator = camera_surface_mesh.autoUniformGridParams()
+    inv_cam_surface_accelerator = inverted_cam_surface_mesh.autoUniformGridParams()
+    obstacles_accs = [mesh.autoUniformGridParams() for mesh in obstacles_meshes]
     invisible_counter = 0
     inverse_invisible_counter = 0
     self_intersect = 0
@@ -79,10 +84,10 @@ def remove_invisible(target, camera_surface, obstacles=[]):
     target_face_iterator = OpenMaya.MItMeshPolygon(target_dag)
     while not target_face_iterator.isDone():  # https://stackoverflow.com/questions/40422082/how-to-find-face-neighbours-in-maya
         # midpoint of the current face -- start of all the rays
-        face_mean = OpenMaya.MFloatPoint(target_face_iterator.center())
+        face_mean = OpenMaya.MFloatPoint(target_face_iterator.center(OpenMaya.MSpace.kWorld))
         face_id = target_face_iterator.index()
 
-        # print(face_id, face_mean.x, face_mean.y, face_mean.z)
+        # print('Face: {}: {}, {}, {}'.format(face_id, face_mean.x, face_mean.y, face_mean.z))
 
         # TODO Send rays in all directions from the currect vertex
         # Random? Uniform? Same for all vertices? 
@@ -93,19 +98,19 @@ def remove_invisible(target, camera_surface, obstacles=[]):
         # Cases when face is invisible from camera
         if not test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator):  # no intesection with camera surface
             invisible_counter += 1
-            # to_delete.append(face_id)
+            to_delete.append(face_id)
 
         if not test_intersect(inverted_cam_surface_mesh, face_mean, rayDir, inv_cam_surface_accelerator):
             inverse_invisible_counter += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
 
-        if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, at_least_2=False):  # intersects itself
+        if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, at_least_2=True):  # intersects itself
             self_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
 
-        if any([test_intersect(mesh, face_mean, rayDir, acc) for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
+        if any([test_intersect(mesh, face_mean, rayDir, acc, tag='Body') for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
             object_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
