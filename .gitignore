@@ -22,4 +22,5 @@ sweeps
 
 # file for small script tries
 tmp*.py
+tmp*.txt
 *tmp*.mb
