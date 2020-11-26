@@ -549,8 +549,8 @@ class MayaGarment(core.ParametrizedPattern):
         # check
         if np.dot(normal, maya_normal) < 0:
             # normals are opposite directions
-            print('Warning: panel {} normal is loaded wrong, flipping'.format(panel_name))
-            qw.flipPanelNormal(panel_geom)
+            print('Warning: panel {} normal seems to be loaded wrong, BUT NOT flipping (detection has bugs)'.format(panel_name))
+            # qw.flipPanelNormal(panel_geom)
         pass
 
     def _applyEuler(self, vector, eulerRot):
