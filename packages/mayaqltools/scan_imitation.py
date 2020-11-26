@@ -7,6 +7,7 @@
 
 from __future__ import print_function
 from maya import OpenMaya
+from maya import cmds
 
 def get_mesh(object_name):
     """Return MFnMesh object by the object name"""
@@ -40,6 +41,12 @@ def test_intersect(mesh, raySource, rayVector, accelerator, at_least_2=False):
 
     return hit
 
+def copy_inverted_normals(object_name):
+    """Create a copy of mesh object with normals of all poligons flipped"""
+    new_object = cmds.duplicate(object_name)[0]
+    cmds.polyNormal(new_object, normalMode=0)
+    return new_object
+
 def remove_invisible(target, camera_surface, obstacles=[]):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
@@ -54,13 +61,17 @@ def remove_invisible(target, camera_surface, obstacles=[]):
     camera_surface_mesh, _ = get_mesh(camera_surface)
     obstacles_meshes = [get_mesh(name)[0] for name in obstacles]
 
-    # TODO get same meshes with flipped normals!
+    # Get same meshes with flipped normals! -- exerimental
+    inverted_camera_surface = copy_inverted_normals(camera_surface)
+    inverted_cam_surface_mesh, _ = get_mesh(inverted_camera_surface)
 
     # search for intersections
     target_accelerator = OpenMaya.MMeshIsectAccelParams()  
     cam_surface_accelerator = OpenMaya.MMeshIsectAccelParams() 
+    inv_cam_surface_accelerator = OpenMaya.MMeshIsectAccelParams() 
     obstacles_accs = [OpenMaya.MMeshIsectAccelParams() for _ in range(len(obstacles))]
     invisible_counter = 0
+    inverse_invisible_counter = 0
     self_intersect = 0
     object_intersect = 0
     to_delete = []
@@ -83,31 +94,41 @@ def remove_invisible(target, camera_surface, obstacles=[]):
         if not test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator):  # no intesection with camera surface
             invisible_counter += 1
             # to_delete.append(face_id)
+
+        if not test_intersect(inverted_cam_surface_mesh, face_mean, rayDir, inv_cam_surface_accelerator):
+            inverse_invisible_counter += 1
+            if len(to_delete) == 0 or to_delete[-1] != face_id:
+                to_delete.append(face_id)
+
         if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, at_least_2=False):  # intersects itself
             self_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
-                print(face_id, face_mean.x, face_mean.y, face_mean.z)
+
         if any([test_intersect(mesh, face_mean, rayDir, acc) for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
             object_intersect += 1
             if len(to_delete) == 0 or to_delete[-1] != face_id:
                 to_delete.append(face_id)
-                print(face_id, face_mean.x, face_mean.y, face_mean.z)
         
         target_face_iterator.next()  # iterate!
 
     # Remove invisible vertices
-    print('{} invisible, {} self-intersects, {} obstacle instersects out of {}'.format(invisible_counter, self_intersect, object_intersect, target_mesh.numPolygons()))
+    print('{} invisible, {} invisible from inverse, {} self-intersects, {} obstacle instersects out of {}'.format(
+        invisible_counter, inverse_invisible_counter,
+        self_intersect, object_intersect, target_mesh.numPolygons()))
 
     print('To delete {} : {}'.format(len(to_delete), to_delete))
 
     # Removing the faces
     to_delete = sorted(to_delete)  # for simple id adjustment
     for idx in range(len(to_delete)):
-        target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
-        print('Removed {}'.format(to_delete[idx]))\
+       target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
+       print('Removed {}'.format(to_delete[idx]))
     
     print('Removal finished')
+
+    # clean-up
+    cmds.delete(inverted_camera_surface)
 
 
 if __name__ == "__main__":
