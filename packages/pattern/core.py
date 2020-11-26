@@ -111,10 +111,6 @@ class BasicPattern(object):
         
         return log_dir
 
-    def is_self_intersecting(self):
-        """returns True if any of the pattern panels are self-intersecting"""
-        return any(map(self._is_panel_self_intersecting, self.pattern['panels']))
-
     @staticmethod
     def name_from_path(pattern_file):
         name = os.path.splitext(os.path.basename(pattern_file))[0]
@@ -161,7 +157,7 @@ class BasicPattern(object):
 
         return sorted_names
 
-    # --------- Special representations -----
+    # --------- Special representations (no changes of inner dicts) -----
     def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
@@ -258,51 +254,6 @@ class BasicPattern(object):
                 self.pattern['stitches'].append(stitch_object)
         else:
             print('BasicPattern::Warning::{}::Panels were updated but new stitches info was not provided. Stitches are removed.'.format(self.name))
-
-    @staticmethod
-    def _verts_to_left_corner(vertices):
-        """
-            Choose the vertex in the left corner as a new origin, shift vertex coordinates accordingly (2D)
-            * Determenistic process
-        """
-        left_corner = np.min(vertices, axis=0)
-        shift = - left_corner
-        vertices = vertices - left_corner
-        
-        # print(left_corner, vertices)
-
-        # ids of verts sitting on Ox
-        full_range = np.arange(vertices.shape[0])
-        on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
-
-        # print(on_ox_ids)
-
-        # choose the one with min x
-        origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
-        origin_id = on_ox_ids[origin_candidate]
-
-        # print(origin_id)
-        # Chosen vertex as to origin
-        shift = shift - vertices[origin_id]
-        vertices = vertices - vertices[origin_id]
-
-        return vertices, shift, origin_id
-
-    @staticmethod
-    def _rotate_edges(edges, edge_ids, new_origin_id):
-        """
-            Rotate provided list of edges s.t. the first edge starts from vertex with id = new_origin_id
-            Map old edge_ids to new ones accordingly
-            * edges expects list of edges structures
-        """
-        first_edge_orig_id = [idx for idx, edge in enumerate(edges) if edge['endpoints'][0] == new_origin_id]
-        first_edge_orig_id = first_edge_orig_id[0]
-        rotated_edges = edges[first_edge_orig_id:] + edges[:first_edge_orig_id]
-
-        # map from old ids to new ids
-        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
-
-        return rotated_edges, rotated_edge_ids
 
     def panel_as_numeric(self, panel_name, pad_to_len=None):
         """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
@@ -458,6 +409,7 @@ class BasicPattern(object):
 
         return np.array(stitch_tags)
 
+    # -- sub-utils --
     def _edge_as_vector(self, vertices, edge_dict, flip_curve_side=False, flip_edge=False):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
@@ -490,6 +442,51 @@ class BasicPattern(object):
         if not all(np.isclose(curvature, 0)):  # curvature part
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
+
+    @staticmethod
+    def _verts_to_left_corner(vertices):
+        """
+            Choose the vertex in the left corner as a new origin, shift vertex coordinates accordingly (2D)
+            * Determenistic process
+        """
+        left_corner = np.min(vertices, axis=0)
+        shift = - left_corner
+        vertices = vertices - left_corner
+        
+        # print(left_corner, vertices)
+
+        # ids of verts sitting on Ox
+        full_range = np.arange(vertices.shape[0])
+        on_ox_ids = full_range[np.isclose(vertices[:, 1], 0)]
+
+        # print(on_ox_ids)
+
+        # choose the one with min x
+        origin_candidate = np.argmin(vertices[on_ox_ids, :], axis=0)[0]  # only need min on x axis
+        origin_id = on_ox_ids[origin_candidate]
+
+        # print(origin_id)
+        # Chosen vertex as to origin
+        shift = shift - vertices[origin_id]
+        vertices = vertices - vertices[origin_id]
+
+        return vertices, shift, origin_id
+
+    @staticmethod
+    def _rotate_edges(edges, edge_ids, new_origin_id):
+        """
+            Rotate provided list of edges s.t. the first edge starts from vertex with id = new_origin_id
+            Map old edge_ids to new ones accordingly
+            * edges expects list of edges structures
+        """
+        first_edge_orig_id = [idx for idx, edge in enumerate(edges) if edge['endpoints'][0] == new_origin_id]
+        first_edge_orig_id = first_edge_orig_id[0]
+        rotated_edges = edges[first_edge_orig_id:] + edges[:first_edge_orig_id]
+
+        # map from old ids to new ids
+        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+
+        return rotated_edges, rotated_edge_ids
 
     @staticmethod
     def _point_in_3D(local_coord, rotation, translation):
@@ -539,7 +536,7 @@ class BasicPattern(object):
 
         return mid_points[top_mid_point]
 
-    # --------- Pattern operations ----------
+    # --------- Pattern operations (changes inner dicts) ----------
     def _normalize_template(self):
         """
         Updated template definition for convenient processing:
@@ -615,6 +612,7 @@ class BasicPattern(object):
         translation = self.pattern['panels'][panel_name]['translation']
         self.pattern['panels'][panel_name]['translation'] = [scaling * coord for coord in translation]
 
+    # -- sub-utils --
     def _control_to_abs_coord(self, start, end, control_scale):
         """
         Derives absolute coordinates of Bezier control point given as an offset
@@ -670,6 +668,10 @@ class BasicPattern(object):
         self.properties = self.spec['properties']  # mandatory part
 
     # -------- Checks ------------
+    def is_self_intersecting(self):
+        """returns True if any of the pattern panels are self-intersecting"""
+        return any(map(self._is_panel_self_intersecting, self.pattern['panels']))
+
     def _is_panel_self_intersecting(self, panel_name):
         """Checks whatever a given panel contains intersecting edges
         """
