@@ -8,6 +8,7 @@
 from __future__ import print_function
 from maya import OpenMaya
 from maya import cmds
+import numpy as np
 
 def get_mesh(object_name):
     """Return MFnMesh object by the object name"""
@@ -41,7 +42,19 @@ def test_intersect(mesh, raySource, rayVector, accelerator, hit_tol=None):
 
     return hit
 
-def remove_invisible(target, camera_surface, obstacles=[]):
+def sample_sphere(rad):
+    """Uniformly sample a point on a sphere with radious rad. Return as Maya-compatible floating-point vector"""
+    # Using method of (Muller 1959, Marsaglia 1972)
+    # see the last one here https://mathworld.wolfram.com/SpherePointPicking.html
+
+    uni_array = np.random.normal(size=3)
+
+    uni_array = uni_array / np.linalg.norm(uni_array) * rad
+
+    return OpenMaya.MFloatVector(uni_array[0], uni_array[1], uni_array[2])
+
+
+def remove_invisible(target, camera_surface, obstacles=[], num_rays=30):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
 
@@ -72,44 +85,40 @@ def remove_invisible(target, camera_surface, obstacles=[]):
 
         # print('Face: {}: {}, {}, {}'.format(face_id, face_mean.x, face_mean.y, face_mean.z))
 
-        # TODO Send rays in all directions from the currect vertex
-        # Random? Uniform? Same for all vertices? 
-        # TODO define depth of testing -- length of the vectors
-        rayDir = OpenMaya.MFloatVector(0., 0., 150.)
+        visible = False
+        # Send rays in all directions from the currect vertex
+        for _ in range(num_rays):
+            # TODO define depth of testing -- length of the vectors
+            rayDir = sample_sphere(150)
 
-        # search setup (for all cases)
-        # Cases when face is invisible from camera
-        if not test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator):  # no intesection with camera surface
-            invisible_counter += 1
+            # print('Ray: {}, {}, {}'.format(rayDir.x, rayDir.y, rayDir.z))
+
+            # search setup (for all cases)
+            # Case when face is visible from camera surface
+            if (test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
+                    and not any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
+                    and not test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
+                visible = True
+
+                print('Visible!')
+                break
+        
+        if not visible:
+            print('Invisible!')
             to_delete.append(face_id)
 
-        if test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5):  # intersects itself
-            self_intersect += 1
-            if len(to_delete) == 0 or to_delete[-1] != face_id:
-                to_delete.append(face_id)
-
-        if any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)]):  # intesects any of the obstacles
-            object_intersect += 1
-            if len(to_delete) == 0 or to_delete[-1] != face_id:
-                to_delete.append(face_id)
-        
         target_face_iterator.next()  # iterate!
 
     # Remove invisible vertices
-    print('{} invisible, {} self-intersects, {} obstacle instersects out of {}'.format(
-        invisible_counter, self_intersect, object_intersect, target_mesh.numPolygons()))
-
     print('To delete {} : {}'.format(len(to_delete), to_delete))
 
     # Removing the faces
     to_delete = sorted(to_delete)  # for simple id adjustment
     for idx in range(len(to_delete)):
        target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
+       print('Removed ', to_delete[idx])
     
     print('Removal finished')
-
-    # clean-up
-    cmds.delete(inverted_camera_surface)
 
 
 if __name__ == "__main__":
