@@ -488,12 +488,15 @@ class GarmentFullPattern3D(BaseModule):
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
+        # Loss on panel sides connected by stiches
+        stitch_sides = self.stitch_sides_loss(preds['outlines'][:, :, :, :2], ground_truth['stitches'])
+
         # total loss
         loss_dict = dict(
-            pattern_loss=pattern_loss, loop_loss=loop_loss, 
+            pattern_loss=pattern_loss, loop_loss=loop_loss, stitch_sides=stitch_sides,
             rotation_loss=rot_loss, translation_loss=translation_loss)
         
-        full_loss = pattern_loss \
+        full_loss = pattern_loss + stitch_sides + \
             + self.config['loop_loss_weight'] * loop_loss \
             + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
 
@@ -517,10 +520,7 @@ class GarmentFullPattern3D(BaseModule):
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss
 
-            # Loss on panel sides connected by stiches
-            stitch_sides = self.stitch_sides_loss(preds['outlines'][:, :, :, :2], ground_truth['stitches'])
-            loss_dict.update(stitch_sides=stitch_sides)
-            full_loss += stitch_sides
+            
 
             # qualitative evaluation of stitches
             if self.with_quality_eval:
