@@ -10,6 +10,7 @@ from maya import OpenMaya
 from maya import cmds
 import numpy as np
 
+# TODO Move these two utils to shared place?
 def get_mesh(object_name):
     """Return MFnMesh object by the object name"""
     # get object as OpenMaya object -- though DAG
@@ -42,7 +43,7 @@ def test_intersect(mesh, raySource, rayVector, accelerator, hit_tol=None):
 
     return hit
 
-def sample_sphere(rad):
+def sample_on_sphere(rad):
     """Uniformly sample a point on a sphere with radious rad. Return as Maya-compatible floating-point vector"""
     # Using method of (Muller 1959, Marsaglia 1972)
     # see the last one here https://mathworld.wolfram.com/SpherePointPicking.html
@@ -53,28 +54,50 @@ def sample_sphere(rad):
 
     return OpenMaya.MFloatVector(uni_array[0], uni_array[1], uni_array[2])
 
+def camera_surface(target, obstacles=[], scaling_factor=1.5):
+    """Generate a (3D scanning) camera surface around provided scene"""
 
-def remove_invisible(target, camera_surface, obstacles=[], num_rays=30):
+    # basically, draw a bounding box around the target
+    bbox = np.array(cmds.exactWorldBoundingBox(obstacles + [target]))  # [xmin, ymin, zmin, xmax, ymax, zmax]
+    
+    top = bbox[3:]
+    bottom = bbox[:3]
+    center = (top + bottom) / 2
+    dims = (top - bottom) * scaling_factor   # according to request
+
+    cube = cmds.polyCube(height=dims[1], depth=dims[2], width=dims[0], name='camera_surface')
+    
+    # align with center
+    cmds.move(center[0], center[1], center[2], cube, absolute=True)
+
+    # remove top and bottom faces -- as if no cameras there
+    cmds.polyDelFacet( cube[0] + '.f[1]', cube[0] + '.f[3]')  # we know exact structure of default polyCube in Maya2018 & Maya2020
+
+    return cube[0], np.max(dims)
+
+def remove_invisible(target, obstacles=[], num_rays=30):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
 
         In my context, target is usually a garment mesh, and obstacle is a body surface
         """
     # Follows the idea of self_intersect_3D() checks used in simulation pipeline
-    print('Performing scanning imitation on {} from {} with obstacles {}'.format(target, camera_surface, obstacles))
+    print('Performing scanning imitation on {} with obstacles {}'.format(target, obstacles))
     
-    # get mesh objects for all the inputs target as OpenMaya object -- though DAG
+    # generate apropriate camera surface
+    camera_surface_obj, ray_dist = camera_surface(target, obstacles)
+
+    print(ray_dist)
+
+    # get mesh objects as OpenMaya object
     target_mesh, target_dag = get_mesh(target)
-    camera_surface_mesh, _ = get_mesh(camera_surface)
+    camera_surface_mesh, _ = get_mesh(camera_surface_obj)
     obstacles_meshes = [get_mesh(name)[0] for name in obstacles]
 
     # search for intersections
     target_accelerator = target_mesh.autoUniformGridParams()
     cam_surface_accelerator = camera_surface_mesh.autoUniformGridParams()
     obstacles_accs = [mesh.autoUniformGridParams() for mesh in obstacles_meshes]
-    invisible_counter = 0
-    self_intersect = 0
-    object_intersect = 0
     to_delete = []
 
     target_face_iterator = OpenMaya.MItMeshPolygon(target_dag)
@@ -88,12 +111,10 @@ def remove_invisible(target, camera_surface, obstacles=[], num_rays=30):
         visible = False
         # Send rays in all directions from the currect vertex
         for _ in range(num_rays):
-            # TODO define depth of testing -- length of the vectors
-            rayDir = sample_sphere(150)
+            rayDir = sample_on_sphere(ray_dist)
 
             # print('Ray: {}, {}, {}'.format(rayDir.x, rayDir.y, rayDir.z))
 
-            # search setup (for all cases)
             # Case when face is visible from camera surface
             if (test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
                     and not any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
@@ -119,7 +140,8 @@ def remove_invisible(target, camera_surface, obstacles=[], num_rays=30):
        print('Removed ', to_delete[idx])
     
     print('Removal finished')
-
+    
+    cmds.delete(camera_surface_obj)  # clean-up
 
 if __name__ == "__main__":
     # Sample script that can be run within Maya for testing purposes
