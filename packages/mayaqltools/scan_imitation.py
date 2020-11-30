@@ -15,29 +15,6 @@ from datetime import datetime
 from mayaqltools import utils
 
 
-# TODO Move these two utils to shared place?
-
-def _test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
-    """Check if given ray intersect given mesh
-        * hit_tol ignores intersections that are within hit_tol from the ray source (as % of ray length) -- usefull when checking self-intersect"""
-    # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
-    maxParam = 1  # only search for intersections within given vector
-    testBothDirections = False  # only in the given direction
-    sortHits = False  # no need to waste time on sorting
-
-    hitPoints = OpenMaya.MFloatPointArray()
-    hitRayParams = OpenMaya.MFloatArray()
-    hitFaces = OpenMaya.MIntArray()
-    hit = mesh.allIntersections(
-        raySource, rayVector, None, None, False, OpenMaya.MSpace.kWorld, maxParam, testBothDirections, accelerator, sortHits,
-        hitPoints, hitRayParams, hitFaces, None, None, None, 1e-6)   # TODO anyIntersection
-    
-    if hit and hit_tol is not None:
-        return any([dist > hit_tol for dist in hitRayParams])
-
-    return hit
-
-
 def _sample_on_sphere(rad):
     """Uniformly sample a point on a sphere with radious rad. Return as Maya-compatible floating-point vector"""
     # Using method of (Muller 1959, Marsaglia 1972)
@@ -110,9 +87,9 @@ def remove_invisible(target, obstacles=[], num_rays=20):
         for _ in range(num_rays):
             rayDir = _sample_on_sphere(ray_dist)
             # Case when face is visible from camera surface
-            if (_test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
-                    and not any([_test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
-                    and not _test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
+            if (utils.test_ray_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
+                    and not any([utils.test_ray_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
+                    and not utils.test_ray_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
                 visible = True
                 break
         if not visible:

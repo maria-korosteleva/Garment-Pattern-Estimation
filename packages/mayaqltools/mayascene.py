@@ -7,7 +7,6 @@ from __future__ import print_function
 from __future__ import division
 from functools import partial
 import copy
-import ctypes
 import errno
 import json
 import numpy as np
@@ -332,40 +331,23 @@ class MayaGarment(core.ParametrizedPattern):
         # most of the functions I use below are to be treated as wrappers of c++ API
         # https://help.autodesk.com/view/MAYAUL/2018//ENU/?guid=__cpp_ref_class_m_fn_mesh_html
 
-        cloth_dag = self.get_qlcloth_geom_dag()
+        mesh, cloth_dag = utils.get_mesh_dag(self.get_qlcloth_geomentry())
         
-        mesh = OpenMaya.MFnMesh(cloth_dag)  # reference https://help.autodesk.com/view/MAYAUL/2017/ENU/?guid=__py_ref_class_open_maya_1_1_m_fn_mesh_html
         vertices = OpenMaya.MPointArray()
         mesh.getPoints(vertices, OpenMaya.MSpace.kWorld)
         
         # use ray intersect with all edges of current mesh & the mesh itself
         num_edges = mesh.numEdges()
-        accelerator = OpenMaya.MMeshIsectAccelParams()
+        accelerator = mesh.autoUniformGridParams()
         for edge_id in range(num_edges):
-            util = OpenMaya.MScriptUtil(0.0)
-            v_ids_cptr = util.asInt2Ptr()  # https://forums.cgsociety.org/t/mfnmesh-getedgevertices-error-on-2011/1652362
-            mesh.getEdgeVertices(edge_id, v_ids_cptr) 
+            # Vertices that comprise an edge
+            vtx1, vtx2 = utils.edge_vert_ids(mesh, edge_id)
 
-            # get values from SWIG pointer https://stackoverflow.com/questions/39344039/python-cast-swigpythonobject-to-python-object
-            ty = ctypes.c_uint * 2
-            v_ids_list = ty.from_address(int(v_ids_cptr))
-            vtx1, vtx2 = v_ids_list[0], v_ids_list[1]
-
-            # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
+            # test intersection
             raySource = OpenMaya.MFloatPoint(vertices[vtx1])
             rayDir = OpenMaya.MFloatVector(vertices[vtx2] - vertices[vtx1])
-            maxParam = 1  # only search for intersections within edge
-            testBothDirections = False
-            accelParams = accelerator  # Use speed-up
-            sortHits = False  # no need to waste time on sorting
-            # out
-            hitPoints = OpenMaya.MFloatPointArray()
-            hitRayParams = OpenMaya.MFloatArray()
-            hitFaces = OpenMaya.MIntArray()
-            hit = mesh.allIntersections(
-                raySource, rayDir, None, None, False, OpenMaya.MSpace.kWorld, maxParam, testBothDirections, accelParams, sortHits,
-                hitPoints, hitRayParams, hitFaces, None, None, None, 1e-6)
-
+            hit, hitFaces, _, _ = utils.test_ray_intersect(mesh, raySource, rayDir, accelerator, return_info=True)
+            
             if not hit:
                 continue
 
