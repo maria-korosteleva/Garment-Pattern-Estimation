@@ -78,9 +78,10 @@ def camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_sca
 
     return cube[0], np.max(dims)
 
-def remove_invisible(target, obstacles=[], num_rays=30):
+def remove_invisible(target, obstacles=[], num_rays=20):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
+        * Camera surface is generated aroung the target as a small "room" with empty floor and ceiling
 
         In my context, target is usually a garment mesh, and obstacle is a body surface
         """
@@ -89,8 +90,6 @@ def remove_invisible(target, obstacles=[], num_rays=30):
     
     # generate apropriate camera surface
     camera_surface_obj, ray_dist = camera_surface(target, obstacles)
-
-    print(ray_dist)
 
     start_time = datetime.now()
 
@@ -111,38 +110,32 @@ def remove_invisible(target, obstacles=[], num_rays=30):
         face_mean = OpenMaya.MFloatPoint(target_face_iterator.center(OpenMaya.MSpace.kWorld))
         face_id = target_face_iterator.index()
 
-        # print('Face: {}: {}, {}, {}'.format(face_id, face_mean.x, face_mean.y, face_mean.z))
-
         visible = False
         # Send rays in all directions from the currect vertex
         for _ in range(num_rays):
             rayDir = sample_on_sphere(ray_dist)
-
-            # print('Ray: {}, {}, {}'.format(rayDir.x, rayDir.y, rayDir.z))
-
             # Case when face is visible from camera surface
             if (test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
                     and not any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
                     and not test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
                 visible = True
                 break
-        
         if not visible:
             to_delete.append(face_id)
-
         target_face_iterator.next()  # iterate!
+
+    cmds.delete(camera_surface_obj)  # clean-up the scene
 
     # Remove invisible vertices
     print('To delete {} : {}'.format(len(to_delete), to_delete))
 
     # Removing the faces
     delete_strs = [target + '.f[{}]'.format(face_id) for face_id in to_delete]
-    cmds.polyDelFacet(tuple(delete_strs))
+    cmds.polyDelFacet(tuple(delete_strs))  # as this is the last command to execute, it could be undone with Ctrl-Z once
 
     passed = datetime.now() - start_time
-    print('Removal finished after {}'.format(passed))
+    print('{}::Removal finished after {}. Press Ctrl-Z to undo the changes'.format(target, passed))
     
-    cmds.delete(camera_surface_obj)  # clean-up
 
 if __name__ == "__main__":
     # Sample script that can be run within Maya for testing purposes
@@ -153,6 +146,5 @@ if __name__ == "__main__":
 
     body = cmds.ls('*f_smpl*:Mesh')[0]
     garment = cmds.ls('*tee*:Mesh')[0]
-    cam_surface = cmds.ls('*camera_surface*')[0]
 
-    mymaya.scan_imitation.remove_invisible(garment, cam_surface, [body])
+    mymaya.scan_imitation.remove_invisible(garment, [body])
