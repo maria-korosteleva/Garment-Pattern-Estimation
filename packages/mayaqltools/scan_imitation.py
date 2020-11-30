@@ -92,6 +92,8 @@ def remove_invisible(target, obstacles=[], num_rays=30):
 
     print(ray_dist)
 
+    start_time = datetime.now()
+
     # get mesh objects as OpenMaya object
     target_mesh, target_dag = get_mesh(target)
     camera_surface_mesh, _ = get_mesh(camera_surface_obj)
@@ -134,15 +136,11 @@ def remove_invisible(target, obstacles=[], num_rays=30):
     print('To delete {} : {}'.format(len(to_delete), to_delete))
 
     # Removing the faces
-    # TODO use cmds.polyDelFacet instead -- could be faster >>
-    start_time = datetime.now()
-    to_delete = sorted(to_delete)  # for simple id adjustment
-    for idx in range(len(to_delete)):
-       target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
-       # print('Removed ', to_delete[idx])
-    
+    delete_strs = [target + '.f[{}]'.format(face_id) for face_id in to_delete]
+    cmds.polyDelFacet(tuple(delete_strs))
+
     passed = datetime.now() - start_time
-    print('Removal finished after {}'.format(passed.strftime("%H:%M:%S")))
+    print('Removal finished after {}'.format(passed))
     
     cmds.delete(camera_surface_obj)  # clean-up
 
