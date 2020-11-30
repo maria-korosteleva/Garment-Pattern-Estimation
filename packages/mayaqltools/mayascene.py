@@ -26,6 +26,7 @@ import mtoa.core
 # My modules
 import pattern.core as core
 from mayaqltools import qualothwrapper as qw
+from mayaqltools import utils
 reload(core)
 reload(qw)
 
@@ -237,11 +238,7 @@ class MayaGarment(core.ParametrizedPattern):
             raise RuntimeError('MayaGarmentError::Pattern is not yet loaded.')
 
         if 'shapeDAG' not in self.MayaObjects:
-            # https://help.autodesk.com/view/MAYAUL/2016/ENU/?guid=__files_Maya_Python_API_Using_the_Maya_Python_API_htm
-            selectionList = OpenMaya.MSelectionList()
-            selectionList.add(self.get_qlcloth_geomentry())
-            self.MayaObjects['shapeDAG'] = OpenMaya.MDagPath()
-            selectionList.getDagPath(0, self.MayaObjects['shapeDAG'])
+            self.MayaObjects['shapeDAG'] = utils.get_dag(self.get_qlcloth_geomentry())
 
         return self.MayaObjects['shapeDAG']
 

@@ -11,20 +11,11 @@ from maya import cmds
 import numpy as np
 from datetime import datetime
 
+# My modules 
+from mayaqltools import utils
+
 
 # TODO Move these two utils to shared place?
-def _get_mesh(object_name):
-    """Return MFnMesh object by the object name"""
-    # get object as OpenMaya object -- though DAG
-    selectionList = OpenMaya.MSelectionList()
-    selectionList.add(object_name)
-    dag = OpenMaya.MDagPath()
-    selectionList.getDagPath(0, dag)
-    # as mesh
-    mesh = OpenMaya.MFnMesh(dag)  # reference https://help.autodesk.com/view/MAYAUL/2017/ENU/?guid=__py_ref_class_open_maya_1_1_m_fn_mesh_html
-
-    return mesh, dag
-
 
 def _test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
     """Check if given ray intersect given mesh
@@ -98,9 +89,9 @@ def remove_invisible(target, obstacles=[], num_rays=20):
     start_time = datetime.now()
 
     # get mesh objects as OpenMaya object
-    target_mesh, target_dag = _get_mesh(target)
-    camera_surface_mesh, _ = _get_mesh(camera_surface_obj)
-    obstacles_meshes = [_get_mesh(name)[0] for name in obstacles]
+    target_mesh, target_dag = utils.get_mesh_dag(target)
+    camera_surface_mesh, _ = utils.get_mesh_dag(camera_surface_obj)
+    obstacles_meshes = [utils.get_mesh_dag(name)[0] for name in obstacles]
 
     # search for intersections
     target_accelerator = target_mesh.autoUniformGridParams()
