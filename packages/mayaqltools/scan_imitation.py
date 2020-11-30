@@ -25,7 +25,7 @@ def get_mesh(object_name):
 
     return mesh, dag
 
-def test_intersect(mesh, raySource, rayVector, accelerator, hit_tol=None):
+def test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
     """Check if given ray intersect given mesh
         * hit_tol ignores intersections that are within hit_tol from the ray source (as % of ray length) -- usefull when checking self-intersect"""
     # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
