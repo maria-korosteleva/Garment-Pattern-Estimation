@@ -16,27 +16,27 @@ def get_values_from_args():
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
     
-    # Default values from run 9j12qp24, best of sweep y1mmngej
+    # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=1)  # 19
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)  # 19
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
-    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=13)
-    parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=3)
-    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=7)
-    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=4)
+    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
+    parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
+    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=10)
+    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
     parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')
     parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
     # EdgeConv
-    parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=3)
+    parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=2)
     parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=1)  # 2
-    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=8)
+    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=25)
     parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
-    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=8)
+    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=14)
     parser.add_argument('--ec_conv_aggr', '-ecca', help='type of feature aggregation in EdgeConv on edge level', type=str, default='max')
-    parser.add_argument('--ec_global_aggr', '-ecga', help='type of feature aggregation in EdgeConv on graph level', type=str, default='max')
-    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=1)
+    parser.add_argument('--ec_global_aggr', '-ecga', help='type of feature aggregation in EdgeConv on graph level', type=str, default='mean')
+    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=0)
     parser.add_argument('--ec_gpool', '-ecgp', help='Wether to use graph pooling after convolution in EdgeConv', type=int, default=0)
     parser.add_argument('--ec_gpool_ratio', '-ecr', help='ratio of graph pooling in EdgeConv', type=float, default=0.1)
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='panel-origin-fix', 
+        run_name='feature-integration', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
