@@ -71,35 +71,12 @@ class PanelLoopLoss():
         else:
             self.pad_tenzor = None
 
-class PanelStitchSidesLoss():
-    """Encourage edges on both sides of a stitch to have the same length"""
-    def __init__(self):
-        pass
-    
-    def __call__(self, edges, gt_stitches):
-        """
-            Push predicted edges on both sides of a stitch to have the same length
-        """
-        gt_stitches = gt_stitches.long()
-        batch_size = edges.shape[0]
-        num_stitches = gt_stitches.shape[-1]
-
-        flat_edges = edges.view(batch_size, -1, edges.shape[-1])  # all pattern edges as one list
-
-        # same edge cannot appear in multiple stitches, but may not be part of any stitch
-        # => first filter edges, then evaluate norms 
-        left_sides = flat_edges[torch.arange(batch_size).unsqueeze(-1), gt_stitches[:, 0, :]]
-        right_sides = flat_edges[torch.arange(batch_size).unsqueeze(-1), gt_stitches[:, 1, :]]
-
-        len_similarity_loss = ((left_sides ** 2).sum(-1) - (right_sides ** 2).sum(-1)) ** 2
-        len_similarity_loss = len_similarity_loss.sum() / (batch_size * num_stitches)
-
-        return len_similarity_loss
 
 class PatternStitchLoss():
     """Evalute the quality of stitching tags provided for every edge of a pattern:
+        * Free edges have tags close to zero
         * Edges connected by a stitch have the same tag
-        * Edges belonging to different stitches have different tags
+        * Edges belonging to different stitches have 
     """
     def __init__(self, triplet_margin=0.1, use_hardnet=True):
         self.triplet_margin = triplet_margin

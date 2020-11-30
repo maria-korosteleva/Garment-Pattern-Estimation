@@ -394,8 +394,7 @@ class GarmentFullPattern3D(BaseModule):
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['outlines'], 
                 'scale': data_config['standardize']['gt_scale']['outlines']})
-        self.stitch_sides_loss = metrics.PanelStitchSidesLoss()
-        self.free_edge_class_loss = nn.BCEWithLogitsLoss()
+
         self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
         if data_config['explicit_stitch_tags']:
             self.stitch_loss_supervised = nn.MSELoss()
@@ -403,6 +402,8 @@ class GarmentFullPattern3D(BaseModule):
             self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
         else:
             self.stitch_loss_supervised = None
+            
+        self.free_edge_class_loss = nn.BCEWithLogitsLoss()
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
@@ -497,15 +498,13 @@ class GarmentFullPattern3D(BaseModule):
             + self.config['loop_loss_weight'] * loop_loss \
             + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
 
-        # if we are far enough in the training, evaluate all stitch-related losses too
+        # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
-            # Base (implicit) loss on stitch tags
             stitch_loss, stitch_loss_breakdown = self.stitch_loss(
                     preds['stitch_tags'], ground_truth['stitches']) 
             loss_dict.update(stitch_loss_breakdown)
             full_loss += stitch_loss
-            
-            # supervised loss on stitch tags
+            # loss on stitch tags
             if self.stitch_loss_supervised is not None:
                 stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
                 loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
@@ -517,12 +516,7 @@ class GarmentFullPattern3D(BaseModule):
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss
 
-            # Loss on panel sides connected by stiches
-            stitch_sides = self.stitch_sides_loss(preds['outlines'][:, :, :, :2], ground_truth['stitches'])
-            loss_dict.update(stitch_sides=stitch_sides)
-            full_loss += stitch_sides
-
-            # qualitative evaluation of stitches
+            # qualitative evaluation
             if self.with_quality_eval:
                 with torch.no_grad():
                     stitch_prec, stitch_recall = self.stitch_quality(
