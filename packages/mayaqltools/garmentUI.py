@@ -60,12 +60,14 @@ def start_GUI():
     cmds.separator()
 
     # Operations
-    equal_rowlayout(2, win_width=window_width, offset=main_offset)
+    equal_rowlayout(3, win_width=window_width, offset=main_offset)
     cmds.button(label='Reload from JSON', backgroundColor=[255 / 256, 169 / 256, 119 / 256], 
                 command=partial(reload_garment_callback, state))
     sim_button = cmds.button(label='Start Sim', backgroundColor=[227 / 256, 255 / 256, 119 / 256])
     cmds.button(sim_button, edit=True, 
                 command=partial(start_sim_callback, sim_button, state))
+    cmds.button(label='Imitate 3D Scan', backgroundColor=[150 / 256, 225 / 256, 80 / 256], 
+                command=partial(imitate_3D_scan_callback, state))
                              
     cmds.setParent('..')
     # separate
@@ -357,6 +359,14 @@ def stop_sim_callback(button, state, *args):
                 command=partial(start_sim_callback, button, state))
 
     cmds.select(state.garment.get_qlcloth_props_obj())  # for props change
+
+
+def imitate_3D_scan_callback(state, *args):
+    """Run removal of faces that might be invisible to 3D scanner"""
+    mymaya.scan_imitation.remove_invisible(
+        state.garment.get_qlcloth_geomentry(),
+        [state.scene.body] if state.scene is not None else []
+    )
 
 
 def win_closed_callback(*args):

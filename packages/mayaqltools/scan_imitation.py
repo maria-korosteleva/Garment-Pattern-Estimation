@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 # TODO Move these two utils to shared place?
-def get_mesh(object_name):
+def _get_mesh(object_name):
     """Return MFnMesh object by the object name"""
     # get object as OpenMaya object -- though DAG
     selectionList = OpenMaya.MSelectionList()
@@ -25,7 +25,8 @@ def get_mesh(object_name):
 
     return mesh, dag
 
-def test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
+
+def _test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
     """Check if given ray intersect given mesh
         * hit_tol ignores intersections that are within hit_tol from the ray source (as % of ray length) -- usefull when checking self-intersect"""
     # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
@@ -45,7 +46,8 @@ def test_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None):
 
     return hit
 
-def sample_on_sphere(rad):
+
+def _sample_on_sphere(rad):
     """Uniformly sample a point on a sphere with radious rad. Return as Maya-compatible floating-point vector"""
     # Using method of (Muller 1959, Marsaglia 1972)
     # see the last one here https://mathworld.wolfram.com/SpherePointPicking.html
@@ -56,7 +58,8 @@ def sample_on_sphere(rad):
 
     return OpenMaya.MFloatVector(uni_array[0], uni_array[1], uni_array[2])
 
-def camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_scaling_factor=1.2):
+
+def _camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_scaling_factor=1.2):
     """Generate a (3D scanning) camera surface around provided scene"""
 
     # basically, draw a bounding box around the target
@@ -78,6 +81,7 @@ def camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_sca
 
     return cube[0], np.max(dims)
 
+
 def remove_invisible(target, obstacles=[], num_rays=20):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
@@ -89,14 +93,14 @@ def remove_invisible(target, obstacles=[], num_rays=20):
     print('Performing scanning imitation on {} with obstacles {}'.format(target, obstacles))
     
     # generate apropriate camera surface
-    camera_surface_obj, ray_dist = camera_surface(target, obstacles)
+    camera_surface_obj, ray_dist = _camera_surface(target, obstacles)
 
     start_time = datetime.now()
 
     # get mesh objects as OpenMaya object
-    target_mesh, target_dag = get_mesh(target)
-    camera_surface_mesh, _ = get_mesh(camera_surface_obj)
-    obstacles_meshes = [get_mesh(name)[0] for name in obstacles]
+    target_mesh, target_dag = _get_mesh(target)
+    camera_surface_mesh, _ = _get_mesh(camera_surface_obj)
+    obstacles_meshes = [_get_mesh(name)[0] for name in obstacles]
 
     # search for intersections
     target_accelerator = target_mesh.autoUniformGridParams()
@@ -113,11 +117,11 @@ def remove_invisible(target, obstacles=[], num_rays=20):
         visible = False
         # Send rays in all directions from the currect vertex
         for _ in range(num_rays):
-            rayDir = sample_on_sphere(ray_dist)
+            rayDir = _sample_on_sphere(ray_dist)
             # Case when face is visible from camera surface
-            if (test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
-                    and not any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
-                    and not test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
+            if (_test_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
+                    and not any([_test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
+                    and not _test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
                 visible = True
                 break
         if not visible:
@@ -126,15 +130,12 @@ def remove_invisible(target, obstacles=[], num_rays=20):
 
     cmds.delete(camera_surface_obj)  # clean-up the scene
 
-    # Remove invisible vertices
-    print('To delete {} : {}'.format(len(to_delete), to_delete))
-
-    # Removing the faces
+    # Remove invisible faces
     delete_strs = [target + '.f[{}]'.format(face_id) for face_id in to_delete]
     cmds.polyDelFacet(tuple(delete_strs))  # as this is the last command to execute, it could be undone with Ctrl-Z once
 
     passed = datetime.now() - start_time
-    print('{}::Removal finished after {}. Press Ctrl-Z to undo the changes'.format(target, passed))
+    print('{}::Removed {} faces after {}. Press Ctrl-Z to undo the changes'.format(target, len(to_delete), passed))
     
 
 if __name__ == "__main__":
