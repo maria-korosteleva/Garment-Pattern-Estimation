@@ -9,6 +9,8 @@ from __future__ import print_function
 from maya import OpenMaya
 from maya import cmds
 import numpy as np
+from datetime import datetime
+
 
 # TODO Move these two utils to shared place?
 def get_mesh(object_name):
@@ -54,7 +56,7 @@ def sample_on_sphere(rad):
 
     return OpenMaya.MFloatVector(uni_array[0], uni_array[1], uni_array[2])
 
-def camera_surface(target, obstacles=[], scaling_factor=1.5):
+def camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_scaling_factor=1.2):
     """Generate a (3D scanning) camera surface around provided scene"""
 
     # basically, draw a bounding box around the target
@@ -63,9 +65,10 @@ def camera_surface(target, obstacles=[], scaling_factor=1.5):
     top = bbox[3:]
     bottom = bbox[:3]
     center = (top + bottom) / 2
-    dims = (top - bottom) * scaling_factor   # according to request
+    dims = top - bottom
+    dims = [max(dims[0], dims[2]) * ground_scaling_factor, dims[1] * vertical_scaling_factor]
 
-    cube = cmds.polyCube(height=dims[1], depth=dims[2], width=dims[0], name='camera_surface')
+    cube = cmds.polyCube(height=dims[1], depth=dims[0], width=dims[0], name='camera_surface')
     
     # align with center
     cmds.move(center[0], center[1], center[2], cube, absolute=True)
@@ -120,12 +123,9 @@ def remove_invisible(target, obstacles=[], num_rays=30):
                     and not any([test_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
                     and not test_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
                 visible = True
-
-                print('Visible!')
                 break
         
         if not visible:
-            print('Invisible!')
             to_delete.append(face_id)
 
         target_face_iterator.next()  # iterate!
@@ -134,12 +134,15 @@ def remove_invisible(target, obstacles=[], num_rays=30):
     print('To delete {} : {}'.format(len(to_delete), to_delete))
 
     # Removing the faces
+    # TODO use cmds.polyDelFacet instead -- could be faster >>
+    start_time = datetime.now()
     to_delete = sorted(to_delete)  # for simple id adjustment
     for idx in range(len(to_delete)):
        target_mesh.deleteFace(to_delete[idx] - idx)  # adjust for face_id shift after removal
-       print('Removed ', to_delete[idx])
+       # print('Removed ', to_delete[idx])
     
-    print('Removal finished')
+    passed = datetime.now() - start_time
+    print('Removal finished after {}'.format(passed.strftime("%H:%M:%S")))
     
     cmds.delete(camera_surface_obj)  # clean-up
 
