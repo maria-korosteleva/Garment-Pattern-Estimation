@@ -40,6 +40,10 @@ class PanelLoopLoss():
                 self.pad_tenzor = torch.zeros(original_panels.shape[-1])
             pad_tenzor_propagated = self.pad_tenzor.repeat(original_panels.shape[1], 1)
             pad_tenzor_propagated = pad_tenzor_propagated.to(device=predicted_panels.device)
+        else:
+            if self.pad_tenzor is None:  # comaring everything below with zero vector
+                self.pad_tenzor = torch.zeros(original_panels.shape[-1])
+        self.pad_tenzor = self.pad_tenzor.to(device=predicted_panels.device) 
             
         # evaluate loss
         panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
@@ -55,12 +59,14 @@ class PanelLoopLoss():
                 seq_len = len(predicted_panels[el_id])
 
             # get per-coordinate sum of edges endpoints of each panel
-            panel_coords_sum[el_id] = predicted_panels[el_id][:seq_len, :2].sum(axis=0)
+            # should be close to sum of the equvalent number of pading values (since all of coords are shifted due to normalization\standardization)
+            # (in case of panels, padding for edge coords should be zero, but I'm using a more generic solution here JIC)
+            panel_coords_sum[el_id] = (predicted_panels[el_id][:seq_len, :2] - self.pad_tenzor[:2]).sum(axis=0)
 
         panel_square_sums = panel_coords_sum ** 2  # per sum square
 
         # batch mean of squared norms of per-panel final points:
-        return panel_square_sums.sum() / len(panel_square_sums)
+        return panel_square_sums.sum() / (panel_square_sums.shape[0] * panel_square_sums.shape[1])
 
     def _eval_pad_vector(self, data_stats={}):
         # prepare padding vector for unpadding the panel data on call

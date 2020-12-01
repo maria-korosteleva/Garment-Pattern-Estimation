@@ -366,7 +366,7 @@ class GarmentFullPattern3D(BaseModule):
             'panel_n_layers': 4, 
             'pattern_encoding_size': 130, 
             'pattern_n_layers': 3, 
-            'loop_loss_weight': 0.1, 
+            'loop_loss_weight': 1, 
             'placement_loss_weight': 1.,
             'dropout': 0,
             'loss': 'MSE with loop',
