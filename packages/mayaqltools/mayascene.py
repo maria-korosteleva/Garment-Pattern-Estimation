@@ -28,6 +28,7 @@ from mayaqltools import qualothwrapper as qw
 from mayaqltools import utils
 reload(core)
 reload(qw)
+reload(utils)
 
 
 class MayaGarment(core.ParametrizedPattern):
@@ -581,20 +582,12 @@ class MayaGarment(core.ParametrizedPattern):
         edge_id = address['edge']
         return self.MayaObjects['panels'][panel_name]['edges'][edge_id]
 
+
     def _save_to_path(self, path, filename):
         """Save current state of cloth object to given path with given filename as OBJ"""
-
         filepath = os.path.join(path, filename + '.obj')
-        cmds.select(self.get_qlcloth_geomentry())
+        utils.save_mesh(self.get_qlcloth_geomentry(), filepath)
 
-        cmds.file(
-            filepath,
-            type='OBJExport',  
-            exportSelectedStrict=True,  # export selected -- only explicitely selected
-            options='groups=0;ptgroups=0;materials=0;smoothing=0;normals=1',  # very simple obj
-            force=True,   # force override if file exists
-            defaultExtensions=False
-        )
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry

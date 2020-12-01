@@ -1,8 +1,10 @@
-"""Shares utils to work with surfaces in Maya"""
+"""Shares utils to work with Maya"""
 
 import ctypes
 from maya import OpenMaya
+from maya import cmds
 
+# ----- Working with Mesh objects -----
 
 def get_dag(object_name):
     """Return DAG for requested object"""
@@ -67,3 +69,22 @@ def edge_vert_ids(mesh, edge_id):
     ty = ctypes.c_uint * 2
     v_ids_list = ty.from_address(int(v_ids_cptr))
     return v_ids_list[0], v_ids_list[1]
+
+
+def save_mesh(target, to_file):
+    """Save given object to file as a mesh"""
+
+    # Make sure to only select requested mesh
+    cmds.select(clear=True)
+    cmds.select(target)
+
+    cmds.file(
+        to_file,
+        type='OBJExport',  
+        exportSelectedStrict=True,  # export selected -- only explicitely selected
+        options='groups=0;ptgroups=0;materials=0;smoothing=0;normals=1',  # very simple obj
+        force=True,   # force override if file exists
+        defaultExtensions=False
+    )
+
+    cmds.select(clear=True)
