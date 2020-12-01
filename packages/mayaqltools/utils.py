@@ -1,10 +1,22 @@
 """Shares utils to work with Maya"""
 
 import ctypes
+import os
 from maya import OpenMaya
 from maya import cmds
 
 # ----- Working with Mesh objects -----
+
+def load_file(filepath, name='object'):
+    """Load mesh to the scene"""
+    if not os.path.isfile(filepath):
+        raise RuntimeError('Loading Object from file to Maya::Missing file {}'.format(filepath))
+
+    obj = cmds.file(filepath, i=True, rnn=True)[0]
+    obj = cmds.rename(obj, name + '#')
+
+    return obj
+
 
 def get_dag(object_name):
     """Return DAG for requested object"""
@@ -88,3 +100,22 @@ def save_mesh(target, to_file):
     )
 
     cmds.select(clear=True)
+
+
+def scale_to_cm(target, max_height_cm=220):
+    """Heuristically check the target units and scale to cantimeters if other units are detected
+        * default value of max_height_cm is for meshes of humans
+    """
+    # check for througth height (Y axis)
+    # NOTE prone to fails if non-meter units are used for body
+    bb = cmds.polyEvaluate(target, boundingBox=True)  # ((xmin,xmax), (ymin,ymax), (zmin,zmax))
+    height = bb[1][1] - bb[1][0]
+    if height < max_height_cm * 0.01:  # meters
+        cmds.scale(100, 100, 100, target, centerPivot=True, absolute=True)
+        print('Warning: {} is found to use meters as units. Scaled up by 100 for cm'.format(target))
+    elif height < max_height_cm * 0.01:  # decimeters
+        cmds.scale(10, 10, 10, target, centerPivot=True, absolute=True)
+        print('Warning: {} is found to use decimeters as units. Scaled up by 10 for cm'.format(target))
+    elif height > max_height_cm:  # millimiters or something strange
+        cmds.scale(0.1, 0.1, 0.1, target, centerPivot=True, absolute=True)
+        print('Warning: {} is found to use millimiters as units. Scaled down by 0.1 for cm'.format(target))

@@ -953,23 +953,9 @@ class Scene(object):
         """Load body object and scale it to cm units"""
         # load
         self.body_filepath = bodyfilename
-        self.body = cmds.file(bodyfilename, i=True, rnn=True)[0]
-        self.body = cmds.rename(self.body, 'body#')
+        self.body = utils.load_file(bodyfilename, 'body')
 
-        # convert to cm heuristically
-        # check for througth height (Y axis)
-        # NOTE prone to fails if non-meter units are used for body
-        bb = cmds.polyEvaluate(self.body, boundingBox=True)  # ((xmin,xmax), (ymin,ymax), (zmin,zmax))
-        height = bb[1][1] - bb[1][0]
-        if height < 3:  # meters
-            cmds.scale(100, 100, 100, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use meters as units. Scaled up by 100 for cm')
-        elif height < 10:  # decimeters
-            cmds.scale(10, 10, 10, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use decimeters as units. Scaled up by 10 for cm')
-        elif height > 250:  # millimiters or something strange
-            cmds.scale(0.1, 0.1, 0.1, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use millimiters as units. Scaled down by 0.1 for cm')
+        utils.scale_to_cm(self.body)
 
     def _fetch_color(self, shader):
         """Return current color of a given shader node"""
