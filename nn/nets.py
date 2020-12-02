@@ -366,8 +366,6 @@ class GarmentFullPattern3D(BaseModule):
             'panel_n_layers': 4, 
             'pattern_encoding_size': 130, 
             'pattern_n_layers': 3, 
-            'loop_loss_weight': 1, 
-            'placement_loss_weight': 1.,
             'dropout': 0,
             'loss': 'MSE with loop',
             'lstm_init': 'kaiming_normal_', 
@@ -490,13 +488,11 @@ class GarmentFullPattern3D(BaseModule):
         translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
 
         # total loss
+        full_loss = pattern_loss + loop_loss + (rot_loss + translation_loss)
+
         loss_dict = dict(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
-        
-        full_loss = pattern_loss \
-            + self.config['loop_loss_weight'] * loop_loss \
-            + self.config['placement_loss_weight'] * (rot_loss + translation_loss)
 
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
