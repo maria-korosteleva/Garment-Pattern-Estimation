@@ -33,7 +33,8 @@ class Trainer():
             weight_decay=0,
             lr_scheduling={
                 'patience': 10,
-                'factor': 0.5
+                'factor': 0.5,
+                'cooldown': 10
             },
             early_stopping={
                 'window': 0.001,
@@ -183,7 +184,11 @@ class Trainer():
     def _add_scheduler(self):
         if 'lr_scheduling' in self.setup:
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer, mode='min', factor=self.setup['lr_scheduling']['factor'], patience=self.setup['lr_scheduling']['patience'], verbose=True)
+                self.optimizer, mode='min', 
+                factor=self.setup['lr_scheduling']['factor'], 
+                patience=self.setup['lr_scheduling']['patience'], 
+                cooldown=self.setup['lr_scheduling']['cooldown']
+                verbose=True)
         else:
             print('Trainer::Warning::no learning scheduling set')
 
