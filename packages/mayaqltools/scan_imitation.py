@@ -100,7 +100,8 @@ def remove_invisible(target, obstacles=[], num_rays=20):
 
     # Remove invisible faces
     delete_strs = [target + '.f[{}]'.format(face_id) for face_id in to_delete]
-    cmds.polyDelFacet(tuple(delete_strs))  # as this is the last command to execute, it could be undone with Ctrl-Z once
+    if len(delete_strs) > 0:
+        cmds.polyDelFacet(tuple(delete_strs))  # as this is the last command to execute, it could be undone with Ctrl-Z once
 
     passed = datetime.now() - start_time
     print('{}::Removed {} faces after {}. Press Ctrl-Z to undo the changes'.format(target, len(to_delete), passed))
