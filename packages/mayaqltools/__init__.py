@@ -17,7 +17,11 @@ from .mayascene import MayaGarment, Scene, MayaGarmentWithUI
 import simulation
 import qualothwrapper
 import garmentUI
+import scan_imitation
+import utils
 
 reload(simulation)
 reload(qualothwrapper)
 reload(garmentUI)
+reload(scan_imitation)
+reload(utils)

@@ -7,7 +7,6 @@ from __future__ import print_function
 from __future__ import division
 from functools import partial
 import copy
-import ctypes
 import errno
 import json
 import numpy as np
@@ -26,8 +25,10 @@ import mtoa.core
 # My modules
 import pattern.core as core
 from mayaqltools import qualothwrapper as qw
+from mayaqltools import utils
 reload(core)
 reload(qw)
+reload(utils)
 
 
 class MayaGarment(core.ParametrizedPattern):
@@ -237,11 +238,7 @@ class MayaGarment(core.ParametrizedPattern):
             raise RuntimeError('MayaGarmentError::Pattern is not yet loaded.')
 
         if 'shapeDAG' not in self.MayaObjects:
-            # https://help.autodesk.com/view/MAYAUL/2016/ENU/?guid=__files_Maya_Python_API_Using_the_Maya_Python_API_htm
-            selectionList = OpenMaya.MSelectionList()
-            selectionList.add(self.get_qlcloth_geomentry())
-            self.MayaObjects['shapeDAG'] = OpenMaya.MDagPath()
-            selectionList.getDagPath(0, self.MayaObjects['shapeDAG'])
+            self.MayaObjects['shapeDAG'] = utils.get_dag(self.get_qlcloth_geomentry())
 
         return self.MayaObjects['shapeDAG']
 
@@ -335,40 +332,23 @@ class MayaGarment(core.ParametrizedPattern):
         # most of the functions I use below are to be treated as wrappers of c++ API
         # https://help.autodesk.com/view/MAYAUL/2018//ENU/?guid=__cpp_ref_class_m_fn_mesh_html
 
-        cloth_dag = self.get_qlcloth_geom_dag()
+        mesh, cloth_dag = utils.get_mesh_dag(self.get_qlcloth_geomentry())
         
-        mesh = OpenMaya.MFnMesh(cloth_dag)  # reference https://help.autodesk.com/view/MAYAUL/2017/ENU/?guid=__py_ref_class_open_maya_1_1_m_fn_mesh_html
         vertices = OpenMaya.MPointArray()
         mesh.getPoints(vertices, OpenMaya.MSpace.kWorld)
         
         # use ray intersect with all edges of current mesh & the mesh itself
         num_edges = mesh.numEdges()
-        accelerator = OpenMaya.MMeshIsectAccelParams()
+        accelerator = mesh.autoUniformGridParams()
         for edge_id in range(num_edges):
-            util = OpenMaya.MScriptUtil(0.0)
-            v_ids_cptr = util.asInt2Ptr()  # https://forums.cgsociety.org/t/mfnmesh-getedgevertices-error-on-2011/1652362
-            mesh.getEdgeVertices(edge_id, v_ids_cptr) 
+            # Vertices that comprise an edge
+            vtx1, vtx2 = utils.edge_vert_ids(mesh, edge_id)
 
-            # get values from SWIG pointer https://stackoverflow.com/questions/39344039/python-cast-swigpythonobject-to-python-object
-            ty = ctypes.c_uint * 2
-            v_ids_list = ty.from_address(int(v_ids_cptr))
-            vtx1, vtx2 = v_ids_list[0], v_ids_list[1]
-
-            # follow structure https://stackoverflow.com/questions/58390664/how-to-fix-typeerror-in-method-mfnmesh-anyintersection-argument-4-of-type
+            # test intersection
             raySource = OpenMaya.MFloatPoint(vertices[vtx1])
             rayDir = OpenMaya.MFloatVector(vertices[vtx2] - vertices[vtx1])
-            maxParam = 1  # only search for intersections within edge
-            testBothDirections = False
-            accelParams = accelerator  # Use speed-up
-            sortHits = False  # no need to waste time on sorting
-            # out
-            hitPoints = OpenMaya.MFloatPointArray()
-            hitRayParams = OpenMaya.MFloatArray()
-            hitFaces = OpenMaya.MIntArray()
-            hit = mesh.allIntersections(
-                raySource, rayDir, None, None, False, OpenMaya.MSpace.kWorld, maxParam, testBothDirections, accelParams, sortHits,
-                hitPoints, hitRayParams, hitFaces, None, None, None, 1e-6)
-
+            hit, hitFaces, _, _ = utils.test_ray_intersect(mesh, raySource, rayDir, accelerator, return_info=True)
+            
             if not hit:
                 continue
 
@@ -603,20 +583,12 @@ class MayaGarment(core.ParametrizedPattern):
         edge_id = address['edge']
         return self.MayaObjects['panels'][panel_name]['edges'][edge_id]
 
+
     def _save_to_path(self, path, filename):
         """Save current state of cloth object to given path with given filename as OBJ"""
-
         filepath = os.path.join(path, filename + '.obj')
-        cmds.select(self.get_qlcloth_geomentry())
+        utils.save_mesh(self.get_qlcloth_geomentry(), filepath)
 
-        cmds.file(
-            filepath,
-            type='OBJExport',  
-            exportSelectedStrict=True,  # export selected -- only explicitely selected
-            options='groups=0;ptgroups=0;materials=0;smoothing=0;normals=1',  # very simple obj
-            force=True,   # force override if file exists
-            defaultExtensions=False
-        )
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry
@@ -982,23 +954,9 @@ class Scene(object):
         """Load body object and scale it to cm units"""
         # load
         self.body_filepath = bodyfilename
-        self.body = cmds.file(bodyfilename, i=True, rnn=True)[0]
-        self.body = cmds.rename(self.body, 'body#')
+        self.body = utils.load_file(bodyfilename, 'body')
 
-        # convert to cm heuristically
-        # check for througth height (Y axis)
-        # NOTE prone to fails if non-meter units are used for body
-        bb = cmds.polyEvaluate(self.body, boundingBox=True)  # ((xmin,xmax), (ymin,ymax), (zmin,zmax))
-        height = bb[1][1] - bb[1][0]
-        if height < 3:  # meters
-            cmds.scale(100, 100, 100, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use meters as units. Scaled up by 100 for cm')
-        elif height < 10:  # decimeters
-            cmds.scale(10, 10, 10, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use decimeters as units. Scaled up by 10 for cm')
-        elif height > 250:  # millimiters or something strange
-            cmds.scale(0.1, 0.1, 0.1, self.body, centerPivot=True, absolute=True)
-            print('Warning: Body Mesh is found to use millimiters as units. Scaled down by 0.1 for cm')
+        utils.scale_to_cm(self.body)
 
     def _fetch_color(self, shader):
         """Return current color of a given shader node"""
