@@ -497,16 +497,16 @@ class GarmentFullPattern3D(BaseModule):
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
             # loss on stitch tags
+            stitch_loss, stitch_loss_breakdown = self.stitch_loss(
+                    preds['stitch_tags'], ground_truth['stitches']) 
+            loss_dict.update(stitch_loss_breakdown)
+            full_loss += stitch_loss
+            
             if self.stitch_loss_supervised is not None:
                 stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
                 loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
                 full_loss += stitch_sup_loss
-            else:
-                stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                    preds['stitch_tags'], ground_truth['stitches']) 
-                loss_dict.update(stitch_loss_breakdown)
-                full_loss += stitch_loss
-            
+
             # free\stitches edges classification
             gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
             free_edges_loss = self.free_edge_class_loss(preds['free_edge_mask'], gt_free_class)
