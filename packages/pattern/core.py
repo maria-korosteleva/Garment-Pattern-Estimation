@@ -355,7 +355,8 @@ class BasicPattern(object):
         idx = len(vertices) - 1
         edge_info = edge_sequence[-1]
         fin_vert = vertices[-1] + edge_info[:2]
-        if all(np.isclose(fin_vert, 0)):  # TODO add some reasonable tolerance for error
+        if all(np.isclose(fin_vert, 0, atol=3)):  # 3 cm per coordinate is okeish error
+            print('BasicPattern::Info::{} with panel {}::Edge sequence return to origin =)'.format(self.name, panel_name))
             edges.append(self._edge_dict(idx, 0, edge_info[2:4]))
         else:
             print('BasicPattern::Warning::{} with panel {}::Edge sequence do not return to origin. '
