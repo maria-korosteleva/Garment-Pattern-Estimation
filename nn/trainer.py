@@ -187,7 +187,7 @@ class Trainer():
                 self.optimizer, mode='min', 
                 factor=self.setup['lr_scheduling']['factor'], 
                 patience=self.setup['lr_scheduling']['patience'], 
-                cooldown=self.setup['lr_scheduling']['cooldown']
+                cooldown=self.setup['lr_scheduling']['cooldown'],
                 verbose=True)
         else:
             print('Trainer::Warning::no learning scheduling set')
