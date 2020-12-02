@@ -105,6 +105,8 @@ def remove_invisible(target, obstacles=[], num_rays=20):
 
     passed = datetime.now() - start_time
     print('{}::Removed {} faces after {}. Press Ctrl-Z to undo the changes'.format(target, len(to_delete), passed))
+
+    return len(to_delete), passed.total_seconds()
     
 
 if __name__ == "__main__":

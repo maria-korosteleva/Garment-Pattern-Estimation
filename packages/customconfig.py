@@ -6,6 +6,8 @@
 from datetime import timedelta
 import json
 from numbers import Number
+import traceback
+import sys
 
 
 class Properties():
@@ -17,9 +19,11 @@ class Properties():
     """
     def __init__(self, filename="", clean_stats=False):
         self.properties = {}
+        self.properties_on_load = {}
 
         if filename:
             self.properties = self._from_file(filename)
+            self.properties_on_load = self._from_file(filename)
             if clean_stats:  # only makes sense when initialized from file =) 
                 self.clean_stats(self.properties)
 
@@ -99,11 +103,24 @@ class Properties():
                             if as_time:
                                 section['stats'][key + "_avg"] = str(timedelta(seconds=section['stats'][key + "_avg"]))
 
-    def serialize(self, filename):
-        """Log current props to file"""
-        # gather stats first
-        with open(filename, 'w') as f_json:
-            json.dump(self.properties, f_json, indent=2, sort_keys=True)
+    def serialize(self, filename, backup=None):
+        """Log current props to file. If logging failed, at least restore provided backup or originally loaded props
+            * backup is expected to be a Properties object
+        """
+        try:
+            with open(filename, 'w') as f_json:
+                json.dump(self.properties, f_json, indent=2, sort_keys=True)
+        except Exception as e:
+            print('Exception occured while saving properties:')
+            traceback.print_exception(*sys.exc_info()) 
+            # save backup, s.t. the data is not lost due to interruption of the file override
+
+            if backup is not None: 
+                backup.serialize(filename)
+            else:
+                with open(filename, 'w') as f_json:
+                    json.dump(self.properties_on_load, f_json, indent=2, sort_keys=True)
+            raise RuntimeError('Error occured while saving properties. Backup version is saved instead')
 
     def _from_file(self, filename):
         """ Load properties from previously created file """
