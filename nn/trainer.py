@@ -32,9 +32,8 @@ class Trainer():
             optimizer='Adam',
             weight_decay=0,
             lr_scheduling={
-                'patience': 10,
-                'factor': 0.5,
-                'cooldown': 10
+                'mode': 'exp_range',
+                'step_size_up': 2000,  # default
             },
             early_stopping={
                 'window': 0.001,
@@ -118,10 +117,11 @@ class Trainer():
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
+                self.scheduler.step()
                 
                 # logging
                 log_step += 1
-                loss_dict.update({'epoch': epoch, 'batch': i, 'loss': loss})
+                loss_dict.update({'epoch': epoch, 'batch': i, 'loss': loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
                 wb.log(loss_dict, step=log_step)
 
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -129,7 +129,6 @@ class Trainer():
             with torch.no_grad():
                 losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
             valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
-            self.scheduler.step(valid_loss)
 
             # Checkpoints: & compare with previous best
             if loss_structure_update or best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
@@ -140,8 +139,7 @@ class Trainer():
 
             # Base logging
             print('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
-            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss,
-                    'learning_rate': self.optimizer.param_groups[0]['lr']}, step=log_step)
+            wb.log({'epoch': epoch, 'valid_loss': valid_loss, 'best_valid_loss': best_valid_loss}, step=log_step)
 
             # prediction for visual reference
             if self.log_with_visualization:
@@ -183,12 +181,14 @@ class Trainer():
 
     def _add_scheduler(self):
         if 'lr_scheduling' in self.setup:
-            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer, mode='min', 
-                factor=self.setup['lr_scheduling']['factor'], 
-                patience=self.setup['lr_scheduling']['patience'], 
-                cooldown=self.setup['lr_scheduling']['cooldown'],
-                verbose=True)
+            self.scheduler = torch.optim.lr_scheduler.CyclicLR(
+                self.optimizer, 
+                base_lr=self.setup['learning_rate'] * 0.01,
+                max_lr=self.setup['learning_rate'],
+                step_size_up=self.setup['lr_scheduling']['step_size_up'],
+                mode=self.setup['lr_scheduling']['mode'],
+                cycle_momentum=False
+            )
         else:
             print('Trainer::Warning::no learning scheduling set')
 
@@ -254,17 +254,21 @@ class Trainer():
             # take one sample from the supplied loader
             sample = loader.dataset[0]  
             # use it as "one-sample batch"
-            img_files = self.datawraper.dataset.save_prediction_batch(
-                model(sample['features'].unsqueeze(0).to(self.device)), 
-                [sample['name']], 
-                save_to=self.folder_for_preds)
-            
-            print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
-            try:
-                wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+            try: 
+                img_files = self.datawraper.dataset.save_prediction_batch(
+                    model(sample['features'].unsqueeze(0).to(self.device)), 
+                    [sample['name']], 
+                    save_to=self.folder_for_preds)
             except BaseException as e:
                 print(e)
-                pass
+                print('Trainer::Error::On saving pattern prediction for {}. Nothing logged'.format(sample['name']))
+            else:
+                print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
+                try:
+                    wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+                except BaseException as e:
+                    print(e)
+                    pass
 
     def _save_checkpoint(self, model, epoch, best=False):
         """Save checkpoint that can be used to resume training"""
