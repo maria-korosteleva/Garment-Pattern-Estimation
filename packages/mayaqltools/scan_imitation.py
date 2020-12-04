@@ -44,13 +44,14 @@ def _camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_sc
     # align with center
     cmds.move(center[0], center[1], center[2], cube, absolute=True)
 
-    # remove top and bottom faces -- as if no cameras there
-    cmds.polyDelFacet( cube[0] + '.f[3]')  #, cube[0] + '.f[1]')  # we know exact structure of default polyCube in Maya2018 & Maya2020
+    # remove bottom face -- as if no cameras there
+    # adding '.f[1]' would also remove the ceiling
+    cmds.polyDelFacet( cube[0] + '.f[3]')    # we know exact structure of default polyCube in Maya2018 & Maya2020
 
     return cube[0], np.max(dims)
 
 
-def remove_invisible(target, obstacles=[], num_rays=20, visibile_rays=4):
+def remove_invisible(target, obstacles=[], num_rays=30, visibile_rays=4):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
         * Camera surface is generated aroung the target as a small "room" with empty floor and ceiling
