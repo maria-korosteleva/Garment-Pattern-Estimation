@@ -28,7 +28,7 @@ class Trainer():
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=600,
             batch_size=10,
-            learning_rate=0.001,
+            learning_rate=0.01,  # 0.001
             optimizer='Adam',
             weight_decay=0,
             lr_scheduling={
@@ -83,7 +83,7 @@ class Trainer():
         self.device = self.setup['device']
     
         self._add_optimizer(model)
-        self._add_scheduler()
+        self._add_scheduler(len(self.datawraper.loader_train))
         self.es_tracking = []  # early stopping init
 
         start_epoch = self._start_experiment(model)
@@ -179,15 +179,14 @@ class Trainer():
             model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'], weight_decay=self.setup['weight_decay'])
 
-    def _add_scheduler(self):
+    def _add_scheduler(self, steps_per_epoch):
         if 'lr_scheduling' in self.setup:
-            self.scheduler = torch.optim.lr_scheduler.CyclicLR(
+            self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer, 
-                base_lr=self.setup['learning_rate'] * 0.01,
                 max_lr=self.setup['learning_rate'],
-                step_size_up=self.setup['lr_scheduling']['step_size_up'],
-                mode=self.setup['lr_scheduling']['mode'],
-                cycle_momentum=False
+                epochs=self.setup['epochs'],
+                steps_per_epoch=steps_per_epoch,
+                cycle_momentum=False  # to work with Adam
             )
         else:
             print('Trainer::Warning::no learning scheduling set')
