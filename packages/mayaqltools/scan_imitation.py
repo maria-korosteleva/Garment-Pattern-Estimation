@@ -50,13 +50,17 @@ def _camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_sc
     return cube[0], np.max(dims)
 
 
-def remove_invisible(target, obstacles=[], num_rays=20):
+def remove_invisible(target, obstacles=[], num_rays=20, visibile_rays=4):
     """Update target 3D mesh: remove faces that are not visible from camera_surface
         * due to self-occlusion or occlusion by an obstacle
         * Camera surface is generated aroung the target as a small "room" with empty floor and ceiling
 
         In my context, target is usually a garment mesh, and obstacle is a body surface
-        """
+        Noise control: 
+        * num_rays -- number of random rays to emit from each face -- the less rays, the more noisy the output is
+        * visibile_rays -- number of rays to hit camera surface without obstacles to consider the face to be visible
+        BUT at least one ray is always required to consider face as visible!
+    """
     # Follows the idea of self_intersect_3D() checks used in simulation pipeline
     print('Performing scanning imitation on {} with obstacles {}'.format(target, obstacles))
     
@@ -82,7 +86,8 @@ def remove_invisible(target, obstacles=[], num_rays=20):
         face_mean = OpenMaya.MFloatPoint(target_face_iterator.center(OpenMaya.MSpace.kWorld))
         face_id = target_face_iterator.index()
 
-        visible = False
+        visible_count = 0
+        visible=False
         # Send rays in all directions from the currect vertex
         for _ in range(num_rays):
             rayDir = _sample_on_sphere(ray_dist)
@@ -90,8 +95,10 @@ def remove_invisible(target, obstacles=[], num_rays=20):
             if (utils.test_ray_intersect(camera_surface_mesh, face_mean, rayDir, cam_surface_accelerator)  # intesection with camera surface
                     and not any([utils.test_ray_intersect(mesh, face_mean, rayDir, acc,) for mesh, acc in zip(obstacles_meshes, obstacles_accs)])  # intesects any of the obstacles
                     and not utils.test_ray_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
-                visible = True
-                break
+                visible_count += 1
+                if visible_count >= visibile_rays:  # enough rays are visible -- no need to test more; Python 2.7 division
+                    visible=True
+
         if not visible:
             to_delete.append(face_id)
         target_face_iterator.next()  # iterate!
