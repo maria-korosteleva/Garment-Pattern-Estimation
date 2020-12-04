@@ -32,7 +32,7 @@ class Trainer():
             optimizer='Adam',
             weight_decay=0,
             lr_scheduling={
-                'mode': 'exp_range',
+                'mode': 'triangular2',
                 'step_size_up': 2000,  # default
             },
             early_stopping={
