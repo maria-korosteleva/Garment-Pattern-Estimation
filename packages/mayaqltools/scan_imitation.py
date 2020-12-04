@@ -45,7 +45,7 @@ def _camera_surface(target, obstacles=[], vertical_scaling_factor=1.5, ground_sc
     cmds.move(center[0], center[1], center[2], cube, absolute=True)
 
     # remove top and bottom faces -- as if no cameras there
-    cmds.polyDelFacet( cube[0] + '.f[1]', cube[0] + '.f[3]')  # we know exact structure of default polyCube in Maya2018 & Maya2020
+    cmds.polyDelFacet( cube[0] + '.f[3]')  #, cube[0] + '.f[1]')  # we know exact structure of default polyCube in Maya2018 & Maya2020
 
     return cube[0], np.max(dims)
 
@@ -124,6 +124,9 @@ if __name__ == "__main__":
     reload(mymaya)
 
     body = cmds.ls('*f_smpl*:Mesh')[0]
-    garment = cmds.ls('*tee*:Mesh')[0]
+    garment = cmds.ls('*tee*:Mesh')[0]  # :Mesh
+    # cam_surface = cmds.ls('*camera_surface*')[0]
 
-    mymaya.scan_imitation.remove_invisible(garment, [body])
+    mymaya.scan_imitation.remove_invisible(garment, [body], 20, 2)
+    # cube = mymaya.scan_imitation.camera_surface(garment, [body])
+    # print cube
