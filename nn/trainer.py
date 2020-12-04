@@ -36,7 +36,7 @@ class Trainer():
                 'step_size_up': 2000,  # default
             },
             early_stopping={
-                'window': 0.001,
+                'window': 0.0001,
                 'patience': 50
             }
         )
@@ -146,7 +146,7 @@ class Trainer():
                 self._log_an_image(model, valid_loader, epoch, log_step)
 
             # check for early stoping
-            if self._early_stopping(loss, valid_loss, self.optimizer.param_groups[0]['lr']):
+            if self._early_stopping(loss, best_valid_loss, self.optimizer.param_groups[0]['lr']):
                 print('Trainer::Stopped training early')
                 break
 
