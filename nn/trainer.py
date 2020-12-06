@@ -31,13 +31,13 @@ class Trainer():
             learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
-            lr_scheduling={
-                'mode': 'triangular2',
-                'step_size_up': 2000,  # default
-            },
+            # lr_scheduling={
+            #     'mode': 'triangular2',
+            #     'step_size_up': 2000,  # default
+            # },
             early_stopping={
                 'window': 0.0001,
-                'patience': 50
+                'patience': 100
             }
         )
 
@@ -117,7 +117,8 @@ class Trainer():
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                self.scheduler.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
                 
                 # logging
                 log_step += 1
@@ -189,6 +190,7 @@ class Trainer():
                 cycle_momentum=False  # to work with Adam
             )
         else:
+            self.scheduler = None
             print('Trainer::Warning::no learning scheduling set')
 
     def _restore_run(self, model):
@@ -213,7 +215,8 @@ class Trainer():
         # checkpoint loaded correctly
         model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])  # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
+        if self.scheduler is not None:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])  # https://discuss.pytorch.org/t/how-to-save-and-load-lr-scheduler-stats-in-pytorch/20208
 
         # new epoch id
         return checkpoint['epoch'] + 1
@@ -271,14 +274,18 @@ class Trainer():
 
     def _save_checkpoint(self, model, epoch, best=False):
         """Save checkpoint that can be used to resume training"""
+        checkpoint_dict = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict()
+        },
+        if self.scheduler is not None:
+            checkpoint_dict['scheduler_state_dict'] = self.scheduler.state_dict()
+
         self.experiment.save_checkpoint(
-            {
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': self.optimizer.state_dict(),
-                'scheduler_state_dict': self.scheduler.state_dict()
-            },
+            checkpoint_dict,
             aliases=['best'] if best else [], 
             wait_for_upload=best
         )
+        
         # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
