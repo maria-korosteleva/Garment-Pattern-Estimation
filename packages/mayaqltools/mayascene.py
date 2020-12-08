@@ -347,7 +347,7 @@ class MayaGarment(core.ParametrizedPattern):
             # test intersection
             raySource = OpenMaya.MFloatPoint(vertices[vtx1])
             rayDir = OpenMaya.MFloatVector(vertices[vtx2] - vertices[vtx1])
-            hit, hitFaces, _, _ = utils.test_ray_intersect(mesh, raySource, rayDir, accelerator, return_info=True)
+            hit, hitFaces, hitPoints, _ = utils.test_ray_intersect(mesh, raySource, rayDir, accelerator, return_info=True)
             
             if not hit:
                 continue
