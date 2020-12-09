@@ -277,7 +277,7 @@ class Trainer():
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
-        },
+        }
         if self.scheduler is not None:
             checkpoint_dict['scheduler_state_dict'] = self.scheduler.state_dict()
 
