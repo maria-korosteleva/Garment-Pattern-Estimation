@@ -1050,6 +1050,7 @@ class ParametrizedPattern(BasicPattern):
             target_line = edge_influence['along']
         else:
             target_line = verts_coords[-1] - verts_coords[0] 
+        target_line = np.array(target_line, dtype=float)  # https://stackoverflow.com/questions/50625975/typeerror-ufunc-true-divide-output-typecode-d-could-not-be-coerced-to-pro
 
         if np.isclose(np.linalg.norm(target_line), 0):
             raise ZeroDivisionError('target line is zero ' + str(target_line))
