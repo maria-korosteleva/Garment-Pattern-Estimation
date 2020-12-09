@@ -26,15 +26,14 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=600,
+            epochs=400,
             batch_size=10,
-            learning_rate=0.0003,
+            learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
-            # lr_scheduling={
-            #     'mode': 'triangular2',
-            #     'step_size_up': 2000,  # default
-            # },
+            lr_scheduling={
+                'mode': '1cyclic'
+            },
             early_stopping={
                 'window': 0.0001,
                 'patience': 100
