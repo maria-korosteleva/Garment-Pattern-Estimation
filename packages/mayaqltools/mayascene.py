@@ -605,6 +605,9 @@ class MayaGarment(core.ParametrizedPattern):
                 print('Intersection with area {:.2f} cm^2 ignored by threshold {:.2f}'.format(
                     intersect_area, self.config['intersect_area_threshold']))
                 intersect_size = 0
+            else:
+                print('Intersection with area {:.2f} cm^2 is above threshold {:.2f}'.format(
+                    intersect_area, self.config['intersect_area_threshold']))
 
         # delete extra objects
         cmds.delete(cloth_copy)
