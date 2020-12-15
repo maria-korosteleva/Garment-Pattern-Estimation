@@ -307,11 +307,8 @@ class MayaGarment(core.ParametrizedPattern):
         print('Garment::3D Penetration checks')
 
         # check intersection with colliders
-        # NOTE Normal flow produces errors: they are the indication of no intersection -- desired outcome
         for obj in obstacles:
-            obj_copy = cmds.duplicate(obj)  # geometry will get affected
-            intersecting = self._intersect_object(obj_copy)
-            cmds.delete(obj_copy)
+            intersecting = self._intersect_object(obj)
 
             if intersecting:
                 return True
@@ -583,37 +580,51 @@ class MayaGarment(core.ParametrizedPattern):
         edge_id = address['edge']
         return self.MayaObjects['panels'][panel_name]['edges'][edge_id]
 
-
     def _save_to_path(self, path, filename):
         """Save current state of cloth object to given path with given filename as OBJ"""
         filepath = os.path.join(path, filename + '.obj')
         utils.save_mesh(self.get_qlcloth_geomentry(), filepath)
-
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry
-            Note that input geometry will be corrupted after check!"""
-        cloth_copy = cmds.duplicate(self.get_qlcloth_geomentry())
-        intersect = cmds.polyCBoolOp(geometry, cloth_copy[0], op=3, classification=2)[0]
+            Function does not have side-effects on input geometry"""
+        
+        # ray-based intersection test
+        
+        cloth_mesh, cloth_dag = utils.get_mesh_dag(self.get_qlcloth_geomentry())
+        obstacle_mesh, obstacle_dag = utils.get_mesh_dag(geometry)
 
-        # use triangles as integer-based insicator -- more robust comparison with zero
-        intersect_size = cmds.polyEvaluate(intersect, triangle=True)
+        # use obstacle verts as a base for testing
+        # Assuming that the obstacle geometry has a lower resolution then the garment
+        
+        obs_vertices = OpenMaya.MPointArray()
+        obstacle_mesh.getPoints(obs_vertices, OpenMaya.MSpace.kWorld)
+        
+        # use ray intersect of all edges of obstacle mesh with the garment mesh
+        num_edges = obstacle_mesh.numEdges()
+        accelerator = cloth_mesh.autoUniformGridParams()
+        hit_border_length = 0  # those are edges along the border of intersecting area on the geometry
+        for edge_id in range(num_edges):
+            # Vertices that comprise an edge
+            vtx1, vtx2 = utils.edge_vert_ids(obstacle_mesh, edge_id)
 
-        if intersect_size > 0 and 'intersect_area_threshold' in self.config:
-            intersect_area = cmds.polyEvaluate(intersect, worldArea=True)
-            if intersect_area < self.config['intersect_area_threshold']:
-                print('Intersection with area {:.2f} cm^2 ignored by threshold {:.2f}'.format(
-                    intersect_area, self.config['intersect_area_threshold']))
-                intersect_size = 0
-            else:
-                print('Intersection with area {:.2f} cm^2 is above threshold {:.2f}'.format(
-                    intersect_area, self.config['intersect_area_threshold']))
+            # test intersection
+            raySource = OpenMaya.MFloatPoint(obs_vertices[vtx1])
+            rayDir = OpenMaya.MFloatVector(obs_vertices[vtx2] - obs_vertices[vtx1])
+            hit = utils.test_ray_intersect(cloth_mesh, raySource, rayDir, accelerator)
+            if hit: 
+                # A very naive approximation of total border length of areas of intersection
+                hit_border_length += rayDir.length()  
 
-        # delete extra objects
-        cmds.delete(cloth_copy)
-        cmds.delete(intersect)
-
-        return intersect_size > 0
+        if 'object_intersect_border_threshold' in self.config and hit_border_length > self.config['object_intersect_border_threshold']:
+            print('{} with {} intersect::Approximate intersection border length {:.2f} cm is above threshold {:.2f} cm'.format(
+                geometry, self.name, hit_border_length, self.config['object_intersect_border_threshold']))
+            return True
+        
+        print('{} with {} intersect::Approximate intersection border length {:.2f} cm is ignored by threshold {:.2f} cm'.format(
+            geometry, self.name, hit_border_length, 
+            self.config['object_intersect_border_threshold'] if 'object_intersect_border_threshold' in self.config else 0))
+        return False
 
 
 class MayaGarmentWithUI(MayaGarment):
