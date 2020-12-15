@@ -367,7 +367,7 @@ class MayaGarment(core.ParametrizedPattern):
 
         if ('self_intersect_hit_threshold' in self.config 
                 and num_hits > self.config['self_intersect_hit_threshold']
-                or num_hits > 0):  # non-zero hit if no threshold provided
+                or num_hits > 0 and 'self_intersect_hit_threshold' not in self.config):  # non-zero hit if no threshold provided
             print('{} is self-intersecting with {} intersect edges -- above threshold {}'.format(
                 self.name, num_hits,
                 self.config['self_intersect_hit_threshold'] if 'self_intersect_hit_threshold' in self.config else 0))
@@ -635,7 +635,7 @@ class MayaGarment(core.ParametrizedPattern):
 
         if ('object_intersect_border_threshold' in self.config 
                 and hit_border_length > self.config['object_intersect_border_threshold']
-                or hit_border_length > 1e-5):  # non-zero hit if no threshold provided
+                or (hit_border_length > 1e-5 and 'object_intersect_border_threshold' not in self.config)):  # non-zero hit if no threshold provided
             print('{} with {} intersect::Approximate intersection border length {:.2f} cm is above threshold {:.2f} cm'.format(
                 geometry, self.name, hit_border_length, 
                 self.config['object_intersect_border_threshold'] if 'object_intersect_border_threshold' in self.config else 0))
