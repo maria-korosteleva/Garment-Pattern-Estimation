@@ -337,6 +337,7 @@ class MayaGarment(core.ParametrizedPattern):
         # use ray intersect with all edges of current mesh & the mesh itself
         num_edges = mesh.numEdges()
         accelerator = mesh.autoUniformGridParams()
+        num_hits = 0
         for edge_id in range(num_edges):
             # Vertices that comprise an edge
             vtx1, vtx2 = utils.edge_vert_ids(mesh, edge_id)
@@ -360,8 +361,11 @@ class MayaGarment(core.ParametrizedPattern):
                     # hit face is not adjacent to the edge => real hit
                     for point in range(hitPoints.length()):
                         print('Potential self-intersection: {}, {}, {}'.format(hitPoints[point][0], hitPoints[point][1], hitPoints[point][2]))
-                    print('{} is self-intersecting'.format(self.name))
-                    return True
+                    num_hits += 1
+        
+        if num_hits > 0:
+            print('{} is self-intersecting with {} intersect edges'.format(self.name, num_hits))
+            return True
 
         # no need to reload -- non-invasive checks 
         return False
