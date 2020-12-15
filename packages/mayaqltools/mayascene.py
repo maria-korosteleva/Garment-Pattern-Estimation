@@ -359,8 +359,6 @@ class MayaGarment(core.ParametrizedPattern):
                 
                 if vtx1 not in face_verts and vtx2 not in face_verts:
                     # hit face is not adjacent to the edge => real hit
-                    for point in range(hitPoints.length()):
-                        print('Potential self-intersection: {}, {}, {}'.format(hitPoints[point][0], hitPoints[point][1], hitPoints[point][2]))
                     num_hits += 1
         
         if num_hits == 0:  # no intersections -- no need for threshold check
