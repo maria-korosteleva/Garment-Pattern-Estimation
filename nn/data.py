@@ -842,11 +842,11 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
                 # Use min\scale (normalization) instead of Gaussian stats for translation
                 # No padding as zero translation is a valid value
-                transl_min, transl_scale = self._get_norm_stats(gt['translations'])
+                # transl_min, transl_scale = self._get_norm_stats(gt['translations'])
                 rot_min, rot_scale = self._get_norm_stats(gt['rotations'])
 
                 # stitch tags if given
-                st_tags_min, st_tags_scale = self._get_norm_stats(gt['stitch_tags'])
+                # st_tags_min, st_tags_scale = self._get_norm_stats(gt['stitch_tags'])
 
                 break  # only one batch out there anyway
 
@@ -856,14 +856,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 'gt_shift': {
                     'outlines': panel_shift.cpu().numpy(), 
                     'rotations': rot_min.cpu().numpy(),
-                    'translations': transl_min.cpu().numpy(), 
-                    'stitch_tags': st_tags_min.cpu().numpy()
+                    'translations': feature_shift.cpu().numpy(), 
+                    'stitch_tags': feature_shift.cpu().numpy()
                 },
                 'gt_scale': {
                     'outlines': panel_scale.cpu().numpy(), 
                     'rotations': rot_scale.cpu().numpy(),
-                    'translations': transl_scale.cpu().numpy(),
-                    'stitch_tags': st_tags_scale.cpu().numpy()
+                    'translations': feature_scale.cpu().numpy(),
+                    'stitch_tags': feature_scale.cpu().numpy()
                 }
             }
             stats = self.config['standardize']
