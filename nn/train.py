@@ -117,7 +117,7 @@ if __name__ == "__main__":
     split, data_config = get_data_config(in_data_config, old_stats=False)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(Path(system_info['datasets_path']) / dataset_folder, 
-                                               data_config, gt_caching=True, feature_caching=False)
+                                               data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
