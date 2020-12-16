@@ -241,19 +241,32 @@ class GTtandartization():
 # --------------------- Datasets -------------------------
 
 class BaseDataset(Dataset):
-    """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    """
+        * Implements base interface for my datasets
+        * Implements routines for datapoint retrieval, structure & cashing 
+        (agnostic of the desired feature & GT structure representation)
+    """
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         """Kind of Universal init for my datasets
-            if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
+            * Expects that all incoming datasets are located in the same root directory
+            * The names of dataset_folders to use should be provided in start_config
+                (defining it in dict allows to load data list as property from previous experiments)
+            * if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
         self.root_path = Path(root_dir)
-        self.name = self.root_path.name
         self.config = {}
         self.update_config(start_config)
+
+        self.dataset_folders = start_config['data_folders']
         
         # list of items = subfolders
-        _, dirs, _ = next(os.walk(self.root_path))
-        self.datapoints_names = dirs
-        self._clean_datapoint_list()
+        self.datapoints_names = []
+        for data_folder in self.dataset_folders:
+            _, dirs, _ = next(os.walk(self.root_path))
+            # dataset name as part of datapoint name
+            datapoints_names = [data_folder + '/' + name for name in dirs]
+            self.datapoints_names += self._clean_datapoint_list(datapoints_names, dataset_folder)
+
+        # cashing setup
         self.gt_cached = {}
         self.gt_caching = gt_caching
         if gt_caching:
@@ -316,7 +329,8 @@ class BaseDataset(Dataset):
             if self.feature_caching:  # save read values 
                 self.feature_cached[datapoint_name] = features
         
-        sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
+        folder, name = tuple(datapoint_name.split('/'))
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': folder}
 
         # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
@@ -333,10 +347,13 @@ class BaseDataset(Dataset):
             * to be part of experimental setup on wandb
             * Control obtainign values for datapoints"""
         self.config.update(in_config)
-        if 'name' in self.config and self.name != self.config['name']:
-            print('BaseDataset:Warning:dataset name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
 
-        self.config['name'] = self.name
+        # check the correctness of provided list of datasets
+        if ('data_folders' not in self.config 
+                or not isinstance(self.config['data_folders'])
+                or len(self.config['data_folders']) == 0):
+            print('BaseDataset::Error::dataset folders dhould name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
+
         self._update_on_config_change()
 
     def _renew_cache(self):
@@ -364,7 +381,7 @@ class BaseDataset(Dataset):
         """
         print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
 
-    def _clean_datapoint_list(self):
+    def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
         # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
         pass
@@ -398,17 +415,12 @@ class BaseDataset(Dataset):
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
         
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         """
-        Args:
-            root_dir (string): Directory with all examples as subfolders
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
+            Initialize dataset of garments with patterns
+            * the list of dataset folders to use should be supplied in start_config!!!
+            * the initial value is only given for reference
         """
-        self.dataset_props = Properties(Path(root_dir) / 'dataset_properties.json')
-        if not self.dataset_props['to_subfolders']:
-            raise NotImplementedError('Working with datasets with all datapopints ')
-        
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
      
     def save_to_wandb(self, experiment):
@@ -417,38 +429,47 @@ class GarmentBaseDataset(BaseDataset):
 
         shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
     
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+        """Saves prediction on the datapoint to the requested data folder (save_to) grouped by data_folders 
+            (adapted to be used with muplitple datasets)
             Returns list of paths to files with prediction visualizations"""
 
+        # TODO update usages of this function
+        # TODO update reloads of this function
+        save_to = Path(save_to)
         prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
+        for prediction, name, folder in zip(predictions, datanames, folders):
 
             pattern = self._pred_to_pattern(prediction, name)
 
             # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
             # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
+            for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
 
     # ------ Garment Data-specific basic functions --------
-    def _clean_datapoint_list(self):
-        """Remove all elements marked as failure from the datapoint list"""
-        self.datapoints_names.remove('renders')  # TODO read ignore list from props
+    def _clean_datapoint_list(self, datapoints_names, dataset_folder):
+        """Remove all elements marked as failure from the provided list"""
 
-        fails_dict = self.dataset_props['sim']['stats']['fails']
+        dataset_props = Properties(self.root_dir / dataset_folder / 'dataset_properties.json')
+        if not dataset_props['to_subfolders']:
+            raise NotImplementedError('Only working with datasets organized with subfolders')
+
+        datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
+
+        fails_dict = dataset_props['sim']['stats']['fails']
         # TODO allow not to ignore some of the subsections
         for subsection in fails_dict:
             for fail in fails_dict[subsection]:
                 try:
-                    self.datapoints_names.remove(fail)
-                    print('Dataset:: {} ignored'.format(fail))
+                    datapoints_names.remove(dataset_folder + '/' + fail)
+                    print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
 
@@ -467,27 +488,9 @@ class GarmentBaseDataset(BaseDataset):
         points = GarmentBaseDataset.sample_mesh_points(self.config['mesh_samples'], verts, faces)
 
         # Debug
-        # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
+        # if 'skirt_4_panels_00HUVRGNCG' in datapoint_name:
         #     meshplot.offline()
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
-        return points
-
-    @staticmethod
-    def sample_mesh_points(num_points, verts, faces):
-        """A routine to sample requested number of points from a given mesh
-            Returns points in world coordinates"""
-
-        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
-        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
-
-        # convert to world coordinates
-        points = np.empty(barycentric_samples.shape)
-        for i in range(len(face_ids)):
-            face = faces[face_ids[i]]
-            barycentric_coords = barycentric_samples[i]
-            face_verts = verts[face]
-            points[i] = np.dot(barycentric_coords, face_verts)
-
         return points
 
     def _read_pattern(self, datapoint_name, folder_elements, 
@@ -524,7 +527,25 @@ class GarmentBaseDataset(BaseDataset):
 
         return pattern
 
-    # -------- Generalized Utils
+    # -------- Generalized Utils -----
+    @staticmethod
+    def sample_mesh_points(num_points, verts, faces):
+        """A routine to sample requested number of points from a given mesh
+            Returns points in world coordinates"""
+
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
+        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
+
+        # convert to world coordinates
+        points = np.empty(barycentric_samples.shape)
+        for i in range(len(face_ids)):
+            face = faces[face_ids[i]]
+            barycentric_coords = barycentric_samples[i]
+            face_verts = verts[face]
+            points[i] = np.dot(barycentric_coords, face_verts)
+
+        return points
+
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
@@ -579,7 +600,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         * Ground_truth: parameters used to generate a garment
     """
     
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -624,7 +645,7 @@ class Garment3DParamsDataset(GarmentParamsDataset):
         * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
         * Ground_truth: parameters used to generate a garment
     """
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
     
     # the only difference with parent class in the shape of the features
@@ -640,7 +661,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * When saving predictions, the predicted panel is always saved as panel with name provided in config 
 
     """
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         config = {'panel_name': 'front'}
         config.update(start_config)
         super().__init__(root_dir, config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
@@ -714,7 +735,7 @@ class Garment2DPatternDataset(GarmentPanelDataset):
     """Dataset definition for 2D pattern autoencoder
         * features: a 'front' panel edges represented as a sequence
         * ground_truth is not used as in Panel dataset"""
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['panel_len'] = self[0]['features'].shape[1]
         self.config['element_size'] = self[0]['features'].shape[2]
@@ -734,7 +755,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         * features: point samples from 3D surface
         * ground truth: tensor representation of corresponding pattern"""
     
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
@@ -800,7 +821,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         * it includes not only every panel outline geometry, but also 3D placement and stitches information
         Defines 3D samples from the point cloud as features
     """
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, 
@@ -876,13 +897,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+        """Saves predicted params of the datapoint to the requested data folder.
             Returns list of paths to files with prediction visualizations
             Assumes that the number of predictions matches the number of provided data names"""
 
+        save_to = Path(save_to)
         prediction_imgs = []
-        for idx, name in enumerate(datanames):
+        for idx, (name, folder) in enumerate(zip(datanames, data_folders)):
 
             # "unbatch" dictionary
             prediction = {}
@@ -892,12 +914,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pattern = self._pred_to_pattern(prediction, name)
 
             # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
             # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
+            for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
@@ -1014,7 +1036,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
