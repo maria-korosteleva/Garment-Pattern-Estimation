@@ -361,6 +361,16 @@ def stop_sim_callback(button, state, *args):
 
     cmds.select(state.garment.get_qlcloth_props_obj())  # for props change
 
+    cmds.confirmDialog(
+        title='Simulation quality info:', 
+        message=(
+            'Simulation quality checks: \n\n'
+            'Garment intersect colliders: {} \n'
+            'Garment has self-intersections: {}').format(
+                'Yes' if state.garment.intersect_colliders_3D() else 'No', 
+                'Yes' if state.garment.self_intersect_3D(verbose=True) else 'No'), 
+        button=['Ok'], defaultButton='Ok', cancelButton='Ok', dismissString='Ok')
+
 
 def imitate_3D_scan_callback(button, state, *args):
     """Run removal of faces that might be invisible to 3D scanner"""

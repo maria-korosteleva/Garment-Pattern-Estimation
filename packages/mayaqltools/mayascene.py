@@ -315,7 +315,7 @@ class MayaGarment(core.ParametrizedPattern):
         
         return False
 
-    def self_intersect_3D(self):
+    def self_intersect_3D(self, verbose=False):
         """Checks wheter currently loaded garment geometry intersects itself
             Unline boolOp, check is non-invasive and do not require garment reload or copy.
             
@@ -359,6 +359,8 @@ class MayaGarment(core.ParametrizedPattern):
                 
                 if vtx1 not in face_verts and vtx2 not in face_verts:
                     # hit face is not adjacent to the edge => real hit
+                    if verbose:
+                        print('Hit point: {}, {}, {}'.format(hitPoints[face_id][0], hitPoints[face_id][1], hitPoints[face_id][2]))
                     num_hits += 1
         
         if num_hits == 0:  # no intersections -- no need for threshold check
