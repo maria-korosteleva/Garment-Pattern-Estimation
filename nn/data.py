@@ -163,12 +163,18 @@ def _dict_to_tensors(dict_obj):  # helper
     """convert a dictionary with numeric values into a new dictionary with torch tensors"""
     new_dict = dict.fromkeys(dict_obj.keys())
     for key, value in dict_obj.items():
-        if isinstance(value, np.ndarray):
+        if value is None:
+            new_dict[key] = torch.Tensor()
+        elif isinstance(value, dict):
+            new_dict[key] = _dict_to_tensors(value)
+        elif isinstance(value, str):  # no changes for strings
+            new_dict[key] = value
+        elif isinstance(value, np.ndarray):
             new_dict[key] = torch.from_numpy(value)
             if value.dtype not in [np.int, np.bool]:
                 new_dict[key] = new_dict[key].float()  # cast all doubles and ofther stuff to floats
         else:
-            new_dict[key] = torch.Tensor(value)
+            new_dict[key] = torch.Tensor(value)  # just try directly, if nothing else works
     return new_dict
 
 
@@ -176,19 +182,8 @@ def _dict_to_tensors(dict_obj):  # helper
 class SampleToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     
-    def __call__(self, sample):
-        features, gt = sample['features'], sample['ground_truth']
-
-        if isinstance(gt, dict):
-            new_gt = _dict_to_tensors(gt)
-        else: 
-            new_gt = torch.from_numpy(gt).float() if gt is not None else torch.Tensor(), 
-        
-        return {
-            'features': torch.from_numpy(features).float() if features is not None else torch.Tensor(), 
-            'ground_truth': new_gt, 
-            'name': sample['name']
-        }
+    def __call__(self, sample):        
+        return _dict_to_tensors(sample)
 
 
 class FeatureStandartization():
@@ -198,11 +193,14 @@ class FeatureStandartization():
         self.scale = torch.Tensor(scale)
     
     def __call__(self, sample):
-        return {
-            'features': (sample['features'] - self.shift) / self.scale,
-            'ground_truth': sample['ground_truth'],
-            'name': sample['name']
-        }
+        updated_sample = {}
+        for key, value in sample.items():
+            if key == 'features':
+                updated_sample[key] = (sample[key] - self.shift) / self.scale
+            else: 
+                updated_sample[key] = sample[key]
+
+        return updated_sample
 
 
 class GTtandartization():
@@ -226,16 +224,16 @@ class GTtandartization():
                     new_gt[key] = new_gt[key] - self.shift[key]
                 if key in self.scale:
                     new_gt[key] = new_gt[key] / self.scale[key]
-                
                 # if shift and scale are not set, the value is kept as it is
         else:
             new_gt = (gt - self.shift) / self.scale
 
-        return {
-            'features': sample['features'],
-            'ground_truth': new_gt,
-            'name': sample['name']
-        }
+        # gather sample
+        updated_sample = {}
+        for key, value in sample.items():
+            updated_sample[key] = new_gt if key == 'ground_truth' else sample[key]
+
+        return updated_sample
 
 
 # --------------------- Datasets -------------------------
@@ -261,7 +259,7 @@ class BaseDataset(Dataset):
         # list of items = subfolders
         self.datapoints_names = []
         for data_folder in self.dataset_folders:
-            _, dirs, _ = next(os.walk(self.root_path))
+            _, dirs, _ = next(os.walk(self.root_path / data_folder))
             # dataset name as part of datapoint name
             datapoints_names = [data_folder + '/' + name for name in dirs]
             self.datapoints_names += self._clean_datapoint_list(datapoints_names, dataset_folder)
@@ -350,9 +348,9 @@ class BaseDataset(Dataset):
 
         # check the correctness of provided list of datasets
         if ('data_folders' not in self.config 
-                or not isinstance(self.config['data_folders'])
+                or not isinstance(self.config['data_folders'], list)
                 or len(self.config['data_folders']) == 0):
-            print('BaseDataset::Error::dataset folders dhould name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
+            raise RuntimeError('BaseDataset::Error::information on datasets (folders) to use is missing in the incoming config')
 
         self._update_on_config_change()
 
@@ -457,11 +455,14 @@ class GarmentBaseDataset(BaseDataset):
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """Remove all elements marked as failure from the provided list"""
 
-        dataset_props = Properties(self.root_dir / dataset_folder / 'dataset_properties.json')
+        dataset_props = Properties(self.root_path / dataset_folder / 'dataset_properties.json')
         if not dataset_props['to_subfolders']:
             raise NotImplementedError('Only working with datasets organized with subfolders')
 
-        datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
+        try: 
+            datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
+        except ValueError:  # it's ok if there is no subfolder for renders
+            pass
 
         fails_dict = dataset_props['sim']['stats']['fails']
         # TODO allow not to ignore some of the subsections
@@ -472,6 +473,8 @@ class GarmentBaseDataset(BaseDataset):
                     print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
+        
+        return datapoints_names
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -1099,14 +1102,21 @@ if __name__ == "__main__":
     # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
     system = Properties('./system.json')
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
-    # data_location = Path(system['datasets_path']) / dataset_folder
+    data_location = Path(system['datasets_path']) / dataset_folder
 
-    # dataset = Garment3DPatternFullDataset(data_location)
+    dataset = Garment3DPatternFullDataset(system['datasets_path'], {
+        'data_folders': [
+            'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+            'data_1000_skirt_4_panels_200616-14-14-40'
+        ]
+    })
 
-    # print(len(dataset), dataset.config)
-    # print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
+    print(len(dataset), dataset.config)
+    print(dataset[0].keys())
+    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['data_folder'])  # , dataset[0]['ground_truth'])
+    print(dataset[-1]['name'], dataset[-1]['features'].shape, dataset[-1]['data_folder'])  # , dataset[0]['ground_truth'])
 
     # print(dataset[5]['ground_truth'])
 
@@ -1120,67 +1130,67 @@ if __name__ == "__main__":
     # print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])
 
-    stitch_tags = torch.Tensor(
-        [[
-            [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
-            [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
-            [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
-            [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
-            [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
-            [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
-            [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
-            [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
-            [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
+    # stitch_tags = torch.Tensor(
+    #     [[
+    #         [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
+    #         [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
+    #         [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
+    #         [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
+    #         [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
+    #         [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
+    #         [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
+    #         [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
+    #         [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
 
-            # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
-            # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
-            # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
-            # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
-            # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
-            # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
-            # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
-            # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
-            # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
+    #         # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
+    #         # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
+    #         # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
+    #         # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
+    #         # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
+    #         # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
+    #         # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
+    #         # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
+    #         # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
 
-        # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
-        # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
-        # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
-        # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
-        # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
-        # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
-        # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
-        # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
-        # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
+    #     # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
+    #     # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
+    #     # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
+    #     # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
+    #     # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
+    #     # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
+    #     # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
+    #     # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
+    #     # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
 
-        # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
-        # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
-        # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
-        # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
-        # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
-        # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
-        # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
-        # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
-        # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
+    #     # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
+    #     # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
+    #     # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
+    #     # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
+    #     # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
+    #     # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
+    #     # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
+    #     # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
+    #     # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
 
-        # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
-        # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
-        # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
-        # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
-        # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
-        # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
-        # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
-        # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
-        # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
+    #     # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
+    #     # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
+    #     # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
+    #     # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
+    #     # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
+    #     # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
+    #     # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
+    #     # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
+    #     # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
 
-        # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
-        # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
-        # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
-        # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
-        # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
-        # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
-        # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
-        # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
-        # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
-        ])
+    #     # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
+    #     # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
+    #     # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
+    #     # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
+    #     # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
+    #     # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
+    #     # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
+    #     # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
+    #     # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
+    #     ])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))
+    # print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))
