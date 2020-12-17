@@ -441,7 +441,7 @@ class BasicPattern(object):
     def _edge_dict(self, vstart, vend, curvature):
         """Convert given info into the proper edge dictionary representation"""
         edge_dict = {'endpoints': [vstart, vend]}
-        if not all(np.isclose(curvature, 0)):  # curvature part
+        if not all(np.isclose(curvature, 0, atol=0.01)):  # 0.01 is tolerable error for local curvature coords
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
 
