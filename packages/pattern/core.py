@@ -258,8 +258,10 @@ class BasicPattern(object):
                     translation=panel_translations[idx] if panel_translations is not None else None,
                     padded=padded)
             except EmptyPanelError as e:
-                # reached mock-up panels 
-                break
+                # reached mock-up panels -- assuming that the rest of the panels would also be empty
+                # TODO break
+                # DEBUG -- converting all the panels for checking the quality of prediction
+                pass
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
