@@ -43,6 +43,9 @@ panel_spec_template = {
 }
 
 
+class EmptyPanelError(Exception):
+    pass
+
 
 class BasicPattern(object):
     """Loading & serializing of a pattern specification in custom JSON format.
@@ -247,18 +250,22 @@ class BasicPattern(object):
             panel_name = 'panel_' + str(idx)
             in_panel_order.append(panel_name)
             
-            self.panel_from_numeric(
-                panel_name, 
-                pattern_representation[idx], 
-                rotation=panel_rotations[idx] if panel_rotations is not None else None,
-                translation=panel_translations[idx] if panel_translations is not None else None,
-                padded=padded)
+            try:
+                self.panel_from_numeric(
+                    panel_name, 
+                    pattern_representation[idx], 
+                    rotation=panel_rotations[idx] if panel_rotations is not None else None,
+                    translation=panel_translations[idx] if panel_translations is not None else None,
+                    padded=padded)
+            except EmptyPanelError as e:
+                # reached mock-up panels 
+                break
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
         if stitches is not None and len(stitches) > 0:
             if not padded:
-                # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for non-padded panels
+                # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for panels with different number of edges
                 raise NotImplementedError('BasicPattern::Recovering stitches for unpadded pattern is not supported')
             
             edges_per_panel = pattern_representation.shape[1]
@@ -354,14 +361,17 @@ class BasicPattern(object):
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::panel_from_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
 
+        if padded:
+            # edge sequence might be ending with pad values or the whole panel might be a mock object
+            selection = ~np.all(np.isclose(edge_sequence, 0, atol=1.5), axis=1)  # only non-zero rows
+            edge_sequence = edge_sequence[selection]
+            if len(edge_sequence) < 3:
+                # 0, 1, 2 edges are not enough to form a panel -> assuming this is a mock panel
+                raise EmptyPanelError(panel_name)
+
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
             self.pattern['panels'][panel_name] = copy.deepcopy(panel_spec_template)
-
-        if padded:
-            # edge sequence might be ending with pad values
-            selection = ~np.all(np.isclose(edge_sequence, 0, atol=1.5), axis=1)  # only non-zero rows
-            edge_sequence = edge_sequence[selection]
 
         # ---- Convert edge representation ----
         vertices = np.array([[0, 0]])  # first vertex is always at origin
