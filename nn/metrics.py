@@ -127,18 +127,17 @@ class PatternStitchLoss():
             * Is based on Triplet loss formula to make the distance between tags larger than margin
             * Evaluated the loss for every tag agaist every other tag (exept for the edges that are part of the same stitch thus have to have same tags)
         """
-        num_stitches = total_tags.shape[1] // 2
-
         total_neg_loss = []
         for idx, pattern_tags in enumerate(total_tags):  # per pattern in batch
             # slice pattern tags to remove consideration for stitch padding
             half_size = len(pattern_tags) // 2
+            num_stitches = gt_stitches_nums[idx]
 
             print(pattern_tags.shape)
 
             pattern_tags = torch.cat([
-                pattern_tags[:gt_stitches_nums[idx], :], 
-                pattern_tags[half_size:half_size + gt_stitches_nums[idx], :]])
+                pattern_tags[:num_stitches, :], 
+                pattern_tags[half_size:half_size + num_stitches, :]])
 
             print(pattern_tags.shape)
 
@@ -168,18 +167,17 @@ class PatternStitchLoss():
             * Is based on Triplet loss formula to make the distance between tags larger than margin
             * Uses trick from HardNet: only evaluate the loss on the closest negative example!
         """
-        num_stitches = total_tags.shape[1] // 2
-
         total_neg_loss = []
         for pattern_tags in total_tags:  # per pattern in batch
             # slice pattern tags to remove consideration for stitch padding
-            half_size = len(pattern_tags) / 2
+            half_size = len(pattern_tags) // 2
+            num_stitches = gt_stitches_nums[idx]
 
             print(pattern_tags.shape)
 
             pattern_tags = torch.cat([
-                pattern_tags[:gt_stitches_nums[idx], :], 
-                pattern_tags[half_size:half_size + gt_stitches_nums[idx], :]])
+                pattern_tags[:num_stitches, :], 
+                pattern_tags[half_size:half_size + num_stitches, :]])
 
             print(pattern_tags.shape)
 
