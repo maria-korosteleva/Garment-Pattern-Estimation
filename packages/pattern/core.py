@@ -327,10 +327,10 @@ class BasicPattern(object):
             shift += shift_add  # collect all changes
             rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
 
-            print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
-                self.name,
-                panel_name, panel['rotation'], 
-                np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
+            # DEBUG
+            # print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
+            #     self.name, panel_name, panel['rotation'], 
+            #     np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
         else:
             flip_edges_curve = False
             # and rotation stays the same

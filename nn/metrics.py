@@ -133,13 +133,9 @@ class PatternStitchLoss():
             half_size = len(pattern_tags) // 2
             num_stitches = gt_stitches_nums[idx]
 
-            print(pattern_tags.shape)
-
             pattern_tags = torch.cat([
                 pattern_tags[:num_stitches, :], 
                 pattern_tags[half_size:half_size + num_stitches, :]])
-
-            print(pattern_tags.shape)
 
             # eval loss
             for tag_id, tag in enumerate(pattern_tags):
@@ -173,13 +169,9 @@ class PatternStitchLoss():
             half_size = len(pattern_tags) // 2
             num_stitches = gt_stitches_nums[idx]
 
-            print(pattern_tags.shape)
-
             pattern_tags = torch.cat([
                 pattern_tags[:num_stitches, :], 
                 pattern_tags[half_size:half_size + num_stitches, :]])
-
-            print(pattern_tags.shape)
 
             for tag_id, tag in enumerate(pattern_tags):
                 # Evaluate distance to other tags
@@ -228,8 +220,6 @@ class PatternStitchPrecisionRecall():
             if not num_detected_stitches:  # no stitches detected -- zero recall & precision
                 continue
             num_actual_stitches = gt_stitches_nums[pattern_idx]
-
-            print(gt_stitches[pattern_idx][:, :num_actual_stitches])
             
             # compare stitches
             correct_stitches = 0.
@@ -249,8 +239,6 @@ class PatternStitchPrecisionRecall():
             # recall -- how many of the actual stitches were detected
             tot_recall += correct_stitches / num_actual_stitches if num_actual_stitches else 0.
         
-        print(tot_precision, tot_recall)
-
         # evrage by batch
         return tot_precision / stitch_tags.shape[0], tot_recall / stitch_tags.shape[0]
 

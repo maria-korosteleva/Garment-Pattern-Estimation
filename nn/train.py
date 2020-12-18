@@ -19,7 +19,7 @@ def get_values_from_args():
     # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=1)  # 5
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
