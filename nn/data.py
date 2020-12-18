@@ -258,11 +258,13 @@ class BaseDataset(Dataset):
         
         # list of items = subfolders
         self.datapoints_names = []
+        self.dataset_start_ids = dict.fromkeys(self.dataset_folders)
         for data_folder in self.dataset_folders:
             _, dirs, _ = next(os.walk(self.root_path / data_folder))
             # dataset name as part of datapoint name
             datapoints_names = [data_folder + '/' + name for name in dirs]
-            self.datapoints_names += self._clean_datapoint_list(datapoints_names, dataset_folder)
+            self.dataset_start_ids[data_folder] = len(self.datapoints_names)
+            self.datapoints_names += self._clean_datapoint_list(datapoints_names, data_folder)
 
         # cashing setup
         self.gt_cached = {}
@@ -354,6 +356,11 @@ class BaseDataset(Dataset):
 
         self._update_on_config_change()
 
+    def _drop_cache(self):
+        """Clean caches of datapoints info"""
+        self.gt_cached = {}
+        self.feature_cached = {}
+
     def _renew_cache(self):
         """Flush the cache and re-fill it with updated information if any kind of caching is enabled"""
         self.gt_cached = {}
@@ -420,6 +427,27 @@ class GarmentBaseDataset(BaseDataset):
             * the initial value is only given for reference
         """
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+
+        # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
+        num_panels = []
+        num_edges_in_panel = []
+        num_stitches = []
+        for data_folder, start_id in self.dataset_start_ids.items():
+            datapoint = self.datapoints_names[start_id]
+            folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
+            pattern_flat, stitches = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
+            num_panels.append(pattern_flat.shape[0])
+            num_edges_in_panel.append(pattern_flat.shape[1])
+            num_stitches.append(stitches.shape[1])
+
+        self.config.update(
+            max_pattern_len=max(num_panels),
+            max_panel_len=max(num_edges_in_panel),
+            max_num_stitches=max(num_stitches)
+        )
+
+        # to make sure that all the new datapoints adhere to evaluated structure!
+        self._drop_cache() 
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
@@ -461,7 +489,9 @@ class GarmentBaseDataset(BaseDataset):
 
         try: 
             datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
+            print('Dataset {}:: /renders/ subfolder ignored'.format(dataset_folder))
         except ValueError:  # it's ok if there is no subfolder for renders
+            print('GarmentBaseDataset::Info::No renders subfolder found in {}'.format(dataset_folder))
             pass
 
         fails_dict = dataset_props['sim']['stats']['fails']
@@ -496,7 +526,7 @@ class GarmentBaseDataset(BaseDataset):
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
-    def _read_pattern(self, datapoint_name, folder_elements, 
+    def _read_pattern(self, datapoint_name, folder_elements, pad_panels_to_len=None,
                       with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -505,6 +535,7 @@ class GarmentBaseDataset(BaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
         return pattern.pattern_as_tensors(
+            pad_panels_to_len,
             with_placement=with_placement, with_stitches=with_stitches, 
             with_stitch_tags=with_stitch_tags)
 
@@ -614,6 +645,12 @@ class GarmentParamsDataset(GarmentBaseDataset):
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+
+        if len(self.dataset_folders) > 0:
+            # Parametrisation of different templates may not be related
+            # It doesn't make much sense to train on different data
+
+            raise NotImplementedError('Multiple datasets are not supported for parameter prediction case')
     
     # ------ Data-specific basic functions --------
     def _get_features(self, datapoint_name, folder_elements):
@@ -811,7 +848,10 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation"""
-        return self._read_pattern(datapoint_name, folder_elements)
+        return self._read_pattern(
+            datapoint_name, folder_elements,
+            pad_panels_to_len=self.config['max_panel_len']
+        )
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -831,8 +871,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         
         self.config.update(
-            pattern_len=self[0]['ground_truth']['outlines'].shape[0],
-            panel_len=self[0]['ground_truth']['outlines'].shape[1],
             element_size=self[0]['ground_truth']['outlines'].shape[2],
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
@@ -1002,7 +1040,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
         pattern, rots, tranls, stitches, stitch_tags = self._read_pattern(
-            datapoint_name, folder_elements, with_placement=True, with_stitches=True, with_stitch_tags=True)
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len']
+            with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
         return {
             'outlines': pattern, 'rotations': rots, 'translations': tranls, 
