@@ -19,7 +19,7 @@ def get_values_from_args():
     # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)  # 19
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=1)  # 5
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
@@ -104,20 +104,19 @@ if __name__ == "__main__":
 
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-    # TODO update to work with new multi-dataset formulatation
     in_data_config, in_nn_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='multi-dataset-run', 
+        run_name='multi-dataset-run-1', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)
+    split, data_config = get_data_config(in_data_config, old_stats=True)
 
-    data_config.update('data_folders': [dataset_folder])
+    data_config.update(data_folders=[dataset_folder])
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
                                                data_config, gt_caching=True, feature_caching=True)

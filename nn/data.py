@@ -111,9 +111,9 @@ class DatasetWrapper(object):
         if self.batch_size is not None:
             self.new_loaders()  # s.t. loaders could be used right away
 
-        print('{} split: {} / {} / {}'.format(self.dataset.name, len(self.training), 
-                                              len(self.validation) if self.validation else None, 
-                                              len(self.test) if self.test else None))
+        print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
+            len(self.training), len(self.validation) if self.validation else None, 
+            len(self.test) if self.test else None))
 
         return self.training, self.validation, self.test
 
@@ -133,7 +133,7 @@ class DatasetWrapper(object):
     def predict(self, model, save_to, sections=['test'], single_batch=False):
         """Save model predictions on the given dataset section"""
         # Main path
-        prediction_path = save_to / ('nn_pred_' + self.dataset.name + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
         prediction_path.mkdir(parents=True, exist_ok=True)
 
         for section in sections:
@@ -456,7 +456,10 @@ class GarmentBaseDataset(BaseDataset):
         """Save data cofiguration to current expetiment run"""
         super().save_to_wandb(experiment)
 
-        shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
+        for dataset_folder in self.dataset_folders:
+            shutil.copy(
+                self.root_path / dataset_folder / 'dataset_properties.json', 
+                experiment.local_path() / (dataset_folder + '_properties.json'))
     
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
         """Saves prediction on the datapoint to the requested data folder (save_to) grouped by data_folders 
@@ -1057,8 +1060,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pad_stitches_num=self.config['max_num_stitches'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
-
-        print('Conversion result', num_panels, num_stitches)
 
         return {
             'outlines': pattern, 'rotations': rots, 'translations': tranls, 

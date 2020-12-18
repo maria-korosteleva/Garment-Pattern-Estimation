@@ -494,10 +494,6 @@ class GarmentFullPattern3D(BaseModule):
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
 
-
-        print('Incoming GT {}'.format(ground_truth.keys()))
-
-
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
             # loss on stitch tags
