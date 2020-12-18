@@ -160,7 +160,7 @@ class BasicPattern(object):
     # --------- Special representations (no changes of inner dicts) -----
     def pattern_as_tensors(
             self, 
-            pad_panels_to_len=None, pad_panels_num=None,
+            pad_panels_to_len=None, pad_panels_num=None, pad_stitches_num=None,
             with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
@@ -197,7 +197,14 @@ class BasicPattern(object):
                 panel_rotations.append(np.zeros_like(panel_rotations[0]))
 
         # Stitches info. Order of stitches doesn't matter
-        stitches_indicies = np.empty((2, len(self.pattern['stitches'])), dtype=np.int)
+        stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
+        if stitches_num < len(self.pattern['stitches']):
+            raise ValueError(
+                'BasicPattern::Error::requiested number of stitches {} is less the number of stitches {} in pattern {}'.format(
+                    stitches_num, len(self.pattern['stitches']), self.name
+                ))
+        
+        stitches_indicies = np.zeros((2, stitches_num), dtype=np.int)
         if with_stitch_tags:
             # padding happens automatically, if panels are padded =)
             stitch_tags = self.stitches_as_tags()
@@ -212,11 +219,13 @@ class BasicPattern(object):
 
         # format result as requested
         result = [np.stack(panel_seqs)]
+        result.append(len(self.pattern['panels']))  # actual number of panels 
         if with_placement:
             result.append(np.stack(panel_rotations))
             result.append(np.stack(panel_translations))
         if with_stitches:
             result.append(stitches_indicies)
+            result.append(len(self.pattern['stitches']))  # actual number of stitches
         if with_stitch_tags:
             result.append(tags_per_edge)
 

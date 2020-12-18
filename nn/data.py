@@ -174,7 +174,7 @@ def _dict_to_tensors(dict_obj):  # helper
             if value.dtype not in [np.int, np.bool]:
                 new_dict[key] = new_dict[key].float()  # cast all doubles and ofther stuff to floats
         else:
-            new_dict[key] = torch.Tensor(value)  # just try directly, if nothing else works
+            new_dict[key] = torch.tensor(value)  # just try directly, if nothing else works
     return new_dict
 
 
@@ -438,7 +438,7 @@ class GarmentBaseDataset(BaseDataset):
         for data_folder, start_id in self.dataset_start_ids.items():
             datapoint = self.datapoints_names[start_id]
             folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
-            pattern_flat, stitches = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
+            pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
             num_panels.append(pattern_flat.shape[0])
             num_edges_in_panel.append(pattern_flat.shape[1])
             num_stitches.append(stitches.shape[1])
@@ -530,7 +530,7 @@ class GarmentBaseDataset(BaseDataset):
         return points
 
     def _read_pattern(self, datapoint_name, folder_elements, 
-                      pad_panels_to_len=None, pad_panel_num=None,
+                      pad_panels_to_len=None, pad_panel_num=None, pad_stitches_num=None,
                       with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -539,7 +539,7 @@ class GarmentBaseDataset(BaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
         return pattern.pattern_as_tensors(
-            pad_panels_to_len, pad_panels_num=pad_panel_num,
+            pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
             with_stitch_tags=with_stitch_tags)
 
@@ -746,7 +746,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
-        pattern_nn = self._read_pattern(
+        pattern_nn, num_panels = self._read_pattern(
             datapoint_name, folder_elements, 
             pad_panels_to_len=self.config['max_panel_len'],
             pad_panel_num=self.config['max_pattern_len'])
@@ -792,7 +792,7 @@ class Garment2DPatternDataset(GarmentPanelDataset):
         return self._read_pattern(
             datapoint_name, folder_elements, 
             pad_panels_to_len=self.config['max_panel_len'],
-            pad_panel_num=self.config['max_pattern_len'])
+            pad_panel_num=self.config['max_pattern_len'])[0]
         
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -862,7 +862,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
             datapoint_name, folder_elements,
             pad_panels_to_len=self.config['max_panel_len'],
             pad_panel_num=self.config['max_pattern_len']
-        )
+        )[0]
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -1050,14 +1050,19 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
       
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
-        pattern, rots, tranls, stitches, stitch_tags = self._read_pattern(
+        pattern, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
             datapoint_name, folder_elements, 
             pad_panels_to_len=self.config['max_panel_len'],
             pad_panel_num=self.config['max_pattern_len'],
+            pad_stitches_num=self.config['max_num_stitches'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
+
+        print('Conversion result', num_panels, num_stitches)
+
         return {
             'outlines': pattern, 'rotations': rots, 'translations': tranls, 
+            'num_panels': num_panels, 'num_stitches': num_stitches,
             'stitches': stitches, 'free_edges_mask': mask, 'stitch_tags': stitch_tags}
 
     def _pred_to_pattern(self, prediction, dataname):
