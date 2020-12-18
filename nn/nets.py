@@ -494,11 +494,15 @@ class GarmentFullPattern3D(BaseModule):
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
 
+
+        print('Incoming GT {}'.format(ground_truth.keys()))
+
+
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:
             # loss on stitch tags
             stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                    preds['stitch_tags'], ground_truth['stitches']) 
+                preds['stitch_tags'], ground_truth['stitches'], ground_truth['num_stitches']) 
             loss_dict.update(stitch_loss_breakdown)
             full_loss += stitch_loss
             
@@ -517,7 +521,10 @@ class GarmentFullPattern3D(BaseModule):
             if self.with_quality_eval:
                 with torch.no_grad():
                     stitch_prec, stitch_recall = self.stitch_quality(
-                        preds['stitch_tags'], preds['free_edge_mask'], ground_truth['stitches'].type(torch.IntTensor), pattern_names=names)
+                        preds['stitch_tags'], preds['free_edge_mask'], 
+                        ground_truth['stitches'].type(torch.IntTensor), 
+                        ground_truth['num_stitches'],
+                        pattern_names=names)
 
                     # free edges accuracy
                     free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))

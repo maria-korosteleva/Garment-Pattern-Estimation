@@ -89,7 +89,7 @@ class PatternStitchLoss():
         
         self.neg_loss = self.HardNet_neg_loss if use_hardnet else self.extended_triplet_neg_loss
 
-    def __call__(self, stitch_tags, gt_stitches):
+    def __call__(self, stitch_tags, gt_stitches, gt_stitches_nums):
         """
         * stitch_tags contain tags for every panel in every pattern in the batch
         * gt_stitches contains the list of edge pairs that are stitches together.
@@ -111,7 +111,7 @@ class PatternStitchLoss():
         similarity_loss = similarity_loss.sum() / (batch_size * num_stitches)
 
         # Push tags away from each other
-        total_neg_loss = self.neg_loss(total_tags)
+        total_neg_loss = self.neg_loss(total_tags, gt_stitches_nums)
                
         # final sum
         fin_stitch_losses = similarity_loss + total_neg_loss
@@ -122,7 +122,7 @@ class PatternStitchLoss():
 
         return fin_stitch_losses, stitch_loss_dict
 
-    def extended_triplet_neg_loss(self, total_tags):
+    def extended_triplet_neg_loss(self, total_tags, gt_stitches_nums):
         """Pushes stitch tags for different stitches away from each other
             * Is based on Triplet loss formula to make the distance between tags larger than margin
             * Evaluated the loss for every tag agaist every other tag (exept for the edges that are part of the same stitch thus have to have same tags)
@@ -130,7 +130,19 @@ class PatternStitchLoss():
         num_stitches = total_tags.shape[1] // 2
 
         total_neg_loss = []
-        for pattern_tags in total_tags:  # per pattern in batch
+        for idx, pattern_tags in enumarate(total_tags):  # per pattern in batch
+            # slice pattern tags to remove consideration for stitch padding
+            half_size = len(pattern_tags) / 2
+
+            print(pattern_tags.shape)
+
+            pattern_tags = torch.cat([
+                pattern_tags[:gt_stitches_nums[idx], :], 
+                pattern_tags[half_size:half_size + gt_stitches_nums[idx], :]])
+
+            print(pattern_tags.shape)
+
+            # eval loss
             for tag_id, tag in enumerate(pattern_tags):
                 # Evaluate distance to other tags
                 neg_loss = (tag - pattern_tags) ** 2
@@ -151,7 +163,7 @@ class PatternStitchLoss():
         # average neg loss per tag
         return sum(total_neg_loss) / len(total_neg_loss)
 
-    def HardNet_neg_loss(self, total_tags):
+    def HardNet_neg_loss(self, total_tags, gt_stitches_nums):
         """Pushes stitch tags for different stitches away from each other
             * Is based on Triplet loss formula to make the distance between tags larger than margin
             * Uses trick from HardNet: only evaluate the loss on the closest negative example!
@@ -160,6 +172,17 @@ class PatternStitchLoss():
 
         total_neg_loss = []
         for pattern_tags in total_tags:  # per pattern in batch
+            # slice pattern tags to remove consideration for stitch padding
+            half_size = len(pattern_tags) / 2
+
+            print(pattern_tags.shape)
+
+            pattern_tags = torch.cat([
+                pattern_tags[:gt_stitches_nums[idx], :], 
+                pattern_tags[half_size:half_size + gt_stitches_nums[idx], :]])
+
+            print(pattern_tags.shape)
+
             for tag_id, tag in enumerate(pattern_tags):
                 # Evaluate distance to other tags
                 tags_distance = ((tag - pattern_tags) ** 2).sum(dim=-1)
@@ -189,7 +212,7 @@ class PatternStitchPrecisionRecall():
             for key in self.data_stats:
                 self.data_stats[key] = torch.Tensor(self.data_stats[key])
 
-    def __call__(self, stitch_tags, free_edge_class, gt_stitches, pattern_names=None):
+    def __call__(self, stitch_tags, free_edge_class, gt_stitches, gt_stitches_nums, pattern_names=None):
         """
          Evaluate on the batch of stitch tags
         """
@@ -206,12 +229,14 @@ class PatternStitchPrecisionRecall():
             num_detected_stitches = stitch_list.shape[1] if stitch_list.numel() > 0 else 0
             if not num_detected_stitches:  # no stitches detected -- zero recall & precision
                 continue
-            num_actual_stitches = gt_stitches[pattern_idx].shape[-1]
+            num_actual_stitches = gt_stitches_nums[pattern_idx]
+
+            print(gt_stitches[pattern_idx][:, :gt_stitches_nums[pattern_idx]])
             
             # compare stitches
             correct_stitches = 0
             for detected in stitch_list.transpose(0, 1):
-                for actual in gt_stitches[pattern_idx].transpose(0, 1):
+                for actual in gt_stitches[pattern_idx][:, :gt_stitches_nums[pattern_idx]].transpose(0, 1):
                     # order-invariant comparison of stitch sides
                     correct = (all(detected == actual) or all(detected == actual.flip([0])))
                     correct_stitches += correct
