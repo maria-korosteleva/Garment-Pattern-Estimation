@@ -158,13 +158,18 @@ class BasicPattern(object):
         return sorted_names
 
     # --------- Special representations (no changes of inner dicts) -----
-    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False, with_stitch_tags=False):
+    def pattern_as_tensors(
+            self, 
+            pad_panels_to_len=None, pad_panels_num=None,
+            with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
             * 3D tensor of panel's 3D rotations
-            with_placement tag is given mostly for backward compatibility
-            """
+        Parameters to control padding: 
+            * pad_panels_to_len -- pad the list edges of every panel to this number of edges
+            * pad_panels_num -- pad the list of panels of the pattern to this number of panels
+        """
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::pattern_as_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
         
@@ -184,10 +189,17 @@ class BasicPattern(object):
             panel_translations.append(transl)
             panel_rotations.append(rot)
             panel_edge_ids_map[panel_name] = edge_ids
+        # add padded panels
+        if pad_panels_num is not None:
+            for _ in range(len(panel_seqs), pad_panels_num):
+                panel_seqs.append(np.zeros_like(panel_seqs[0]))
+                panel_translations.append(np.zeros_like(panel_translations[0]))
+                panel_rotations.append(np.zeros_like(panel_rotations[0]))
 
         # Stitches info. Order of stitches doesn't matter
         stitches_indicies = np.empty((2, len(self.pattern['stitches'])), dtype=np.int)
         if with_stitch_tags:
+            # padding happens automatically, if panels are padded =)
             stitch_tags = self.stitches_as_tags()
             tags_per_edge = np.zeros((len(panel_seqs), len(panel_seqs[0]), stitch_tags.shape[-1]))
         for idx, stitch in enumerate(self.pattern['stitches']):
