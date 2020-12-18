@@ -23,20 +23,17 @@ if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
+# data_config also contains the names of datasets to use
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 # data_config.update({'num_verts': 500})
 # dataset = data.ParametrizedShirtDataSet(datapath, data_config)
-# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-# dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config)
-# dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
-# dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / data_config['name'], data_config)
+# dataset = data.GarmentParamsDataset(system_info['datasets_path']r, data_config)
+# dataset = data.Garment3DParamsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+# dataset = data.GarmentPanelDataset(system_info['datasets_path'], data_config)
 dataset = data.Garment3DPatternFullDataset(
-    Path(system_info['datasets_path']) / dataset_folder, 
-    data_config, 
-    gt_caching=True, feature_caching=True)
+    system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))

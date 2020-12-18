@@ -287,8 +287,8 @@ class GarmentPattern3D(BaseModule):
         self.config.update(config) 
 
         # output props
-        self.max_panel_len = data_config['panel_len']
-        self.max_pattern_size = data_config['pattern_len']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
 
         # extra loss object
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_config['standardize'])
@@ -382,8 +382,8 @@ class GarmentFullPattern3D(BaseModule):
 
         # output props
         self.panel_elem_len = data_config['element_size']
-        self.max_panel_len = data_config['panel_len']
-        self.max_pattern_size = data_config['pattern_len']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
         self.rotation_size = data_config['rotation_size']
         self.translation_size = data_config['translation_size']
 
