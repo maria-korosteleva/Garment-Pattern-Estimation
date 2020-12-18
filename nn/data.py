@@ -426,6 +426,9 @@ class GarmentBaseDataset(BaseDataset):
             * the list of dataset folders to use should be supplied in start_config!!!
             * the initial value is only given for reference
         """
+        # initialize keys for correct dataset initialization
+        start_config.update(max_pattern_len=None, max_panel_len=None, max_num_stitches=None)
+
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
@@ -526,7 +529,8 @@ class GarmentBaseDataset(BaseDataset):
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
-    def _read_pattern(self, datapoint_name, folder_elements, pad_panels_to_len=None,
+    def _read_pattern(self, datapoint_name, folder_elements, 
+                      pad_panels_to_len=None, pad_panel_num=None,
                       with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -535,7 +539,7 @@ class GarmentBaseDataset(BaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
         return pattern.pattern_as_tensors(
-            pad_panels_to_len,
+            pad_panels_to_len, pad_panels_num=pad_panel_num,
             with_placement=with_placement, with_stitches=with_stitches, 
             with_stitch_tags=with_stitch_tags)
 
@@ -742,7 +746,10 @@ class GarmentPanelDataset(GarmentBaseDataset):
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
-        pattern_nn = self._read_pattern(datapoint_name, folder_elements)
+        pattern_nn = self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'])
         # return random panel from a pattern
         return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
         
@@ -782,7 +789,10 @@ class Garment2DPatternDataset(GarmentPanelDataset):
     
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        return self._read_pattern(datapoint_name, folder_elements)
+        return self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'])
         
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -850,7 +860,8 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         """Get the pattern representation"""
         return self._read_pattern(
             datapoint_name, folder_elements,
-            pad_panels_to_len=self.config['max_panel_len']
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len']
         )
 
     def _pred_to_pattern(self, prediction, dataname):
@@ -1041,7 +1052,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """Get the pattern representation with 3D placement"""
         pattern, rots, tranls, stitches, stitch_tags = self._read_pattern(
             datapoint_name, folder_elements, 
-            pad_panels_to_len=self.config['max_panel_len']
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
         return {
@@ -1154,9 +1166,10 @@ if __name__ == "__main__":
     })
 
     print(len(dataset), dataset.config)
-    print(dataset[0].keys())
-    print(dataset[0]['name'], dataset[0]['features'].shape, dataset[0]['data_folder'])  # , dataset[0]['ground_truth'])
-    print(dataset[-1]['name'], dataset[-1]['features'].shape, dataset[-1]['data_folder'])  # , dataset[0]['ground_truth'])
+    print(dataset[0]['name'], dataset[0]['data_folder'])
+    print(dataset[0]['ground_truth'])
+    print(dataset[-1]['name'], dataset[-1]['data_folder'])
+    print(dataset[-1]['ground_truth'])
 
     # print(dataset[5]['ground_truth'])
 
