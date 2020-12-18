@@ -258,7 +258,7 @@ class Trainer():
             try: 
                 img_files = self.datawraper.dataset.save_prediction_batch(
                     model(sample['features'].unsqueeze(0).to(self.device)), 
-                    [sample['name']], 
+                    [sample['name']], [sample['data_folder']]
                     save_to=self.folder_for_preds)
             except BaseException as e:
                 print(e)
