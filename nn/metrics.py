@@ -82,7 +82,7 @@ class PatternStitchLoss():
     """Evalute the quality of stitching tags provided for every edge of a pattern:
         * Free edges have tags close to zero
         * Edges connected by a stitch have the same tag
-        * Edges belonging to different stitches have 
+        * Edges belonging to different stitches have different tags
     """
     def __init__(self, triplet_margin=0.1, use_hardnet=True):
         self.triplet_margin = triplet_margin
