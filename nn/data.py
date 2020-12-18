@@ -150,11 +150,13 @@ class DatasetWrapper(object):
                     if single_batch:
                         batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
                         features = batch['features'].to(device)
-                        self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+                        self.dataset.save_prediction_batch(
+                            model(features), batch['name'], batch['data_folder'], section_dir)
                     else:
                         for batch in loader:
                             features = batch['features'].to(device)
-                            self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+                            self.dataset.save_prediction_batch(
+                                model(features), batch['name'], batch['data_folder'], section_dir)
         return prediction_path
 
 
@@ -254,12 +256,12 @@ class BaseDataset(Dataset):
         self.config = {}
         self.update_config(start_config)
 
-        self.dataset_folders = start_config['data_folders']
+        self.data_folders = start_config['data_folders']
         
         # list of items = subfolders
         self.datapoints_names = []
-        self.dataset_start_ids = dict.fromkeys(self.dataset_folders)
-        for data_folder in self.dataset_folders:
+        self.dataset_start_ids = dict.fromkeys(self.data_folders)
+        for data_folder in self.data_folders:
             _, dirs, _ = next(os.walk(self.root_path / data_folder))
             # dataset name as part of datapoint name
             datapoints_names = [data_folder + '/' + name for name in dirs]
@@ -371,7 +373,7 @@ class BaseDataset(Dataset):
             print('Data cached!')
 
     # -------- Data-specific functions --------
-    def save_prediction_batch(self, predictions, datanames, save_to):
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
         pass
 
@@ -456,7 +458,7 @@ class GarmentBaseDataset(BaseDataset):
         """Save data cofiguration to current expetiment run"""
         super().save_to_wandb(experiment)
 
-        for dataset_folder in self.dataset_folders:
+        for dataset_folder in self.data_folders:
             shutil.copy(
                 self.root_path / dataset_folder / 'dataset_properties.json', 
                 experiment.local_path() / (dataset_folder + '_properties.json'))
@@ -653,7 +655,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
-        if len(self.dataset_folders) > 0:
+        if len(self.data_folders) > 0:
             # Parametrisation of different templates may not be related
             # It doesn't make much sense to train on different data
 

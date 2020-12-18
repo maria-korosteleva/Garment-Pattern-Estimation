@@ -130,9 +130,9 @@ class PatternStitchLoss():
         num_stitches = total_tags.shape[1] // 2
 
         total_neg_loss = []
-        for idx, pattern_tags in enumarate(total_tags):  # per pattern in batch
+        for idx, pattern_tags in enumerate(total_tags):  # per pattern in batch
             # slice pattern tags to remove consideration for stitch padding
-            half_size = len(pattern_tags) / 2
+            half_size = len(pattern_tags) // 2
 
             print(pattern_tags.shape)
 
@@ -221,8 +221,8 @@ class PatternStitchPrecisionRecall():
             device = stitch_tags.device
             stitch_tags = stitch_tags * self.data_stats['scale'].to(device) + self.data_stats['shift'].to(device)
 
-        tot_precision = 0
-        tot_recall = 0
+        tot_precision = 0.
+        tot_recall = 0.
         for pattern_idx in range(stitch_tags.shape[0]):
             stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx], free_edge_class[pattern_idx]).to(gt_stitches.device)
 
@@ -231,10 +231,10 @@ class PatternStitchPrecisionRecall():
                 continue
             num_actual_stitches = gt_stitches_nums[pattern_idx]
 
-            print(gt_stitches[pattern_idx][:, :gt_stitches_nums[pattern_idx]])
+            print(gt_stitches[pattern_idx][:, :num_actual_stitches])
             
             # compare stitches
-            correct_stitches = 0
+            correct_stitches = 0.
             for detected in stitch_list.transpose(0, 1):
                 for actual in gt_stitches[pattern_idx][:, :gt_stitches_nums[pattern_idx]].transpose(0, 1):
                     # order-invariant comparison of stitch sides
@@ -247,10 +247,12 @@ class PatternStitchPrecisionRecall():
                     print('StitchPrecisionRecall::{}::Stitch {} detected wrongly'.format(pattern_names[pattern_idx], detected))
 
             # precision -- how many of the detected stitches are actually there
-            tot_precision += correct_stitches / num_detected_stitches if num_detected_stitches else 0
+            tot_precision += correct_stitches / num_detected_stitches if num_detected_stitches else 0.
             # recall -- how many of the actual stitches were detected
-            tot_recall += correct_stitches / num_actual_stitches if num_actual_stitches else 0
+            tot_recall += correct_stitches / num_actual_stitches if num_actual_stitches else 0.
         
+        print(tot_precision, tot_recall)
+
         # evrage by batch
         return tot_precision / stitch_tags.shape[0], tot_recall / stitch_tags.shape[0]
 

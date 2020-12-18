@@ -157,4 +157,7 @@ if __name__ == "__main__":
     print('Predictions saved to {}'.format(prediction_path))
     # reflect predictions info in expetiment
     experiment.add_statistic('predictions_folder', prediction_path.name)
-    experiment.add_artifact(prediction_path, dataset_wrapper.dataset.name, 'result')
+    art_name = 'multi-data' if len(dataset_wrapper.dataset.data_folders) > 1 else dataset_wrapper.dataset.data_folders[0]
+
+    experiment.add_artifact(prediction_path, art_name, 'result')
+
