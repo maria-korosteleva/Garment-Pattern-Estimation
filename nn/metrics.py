@@ -97,18 +97,24 @@ class PatternStitchLoss():
         """
         gt_stitches = gt_stitches.long()
         batch_size = stitch_tags.shape[0]
-        num_stitches = gt_stitches.shape[-1]
+        num_stitches = gt_stitches_nums.sum()  # Ground truth number of stitches!
 
-        flat_stitch_tags = stitch_tags.view(batch_size, -1, stitch_tags.shape[-1])
+        flat_stitch_tags = stitch_tags.view(batch_size, -1, stitch_tags.shape[-1])  # remove panel dimention
 
         # https://stackoverflow.com/questions/55628014/indexing-a-3d-tensor-using-a-2d-tensor
+        # these will have dull values due to padding in gt_stitches
         left_sides = flat_stitch_tags[torch.arange(batch_size).unsqueeze(-1), gt_stitches[:, 0, :]]
         right_sides = flat_stitch_tags[torch.arange(batch_size).unsqueeze(-1), gt_stitches[:, 1, :]]
         total_tags = torch.cat([left_sides, right_sides], dim=1)
 
         # tags on both sides of the stitch -- together
-        similarity_loss = (left_sides - right_sides) ** 2
-        similarity_loss = similarity_loss.sum() / (batch_size * num_stitches)
+        similarity_loss_mat = (left_sides - right_sides) ** 2
+
+        # Gather the loss
+        similarity_loss = 0.
+        for pattern_idx in range(batch_size):
+            # ingore values calculated for padded part of gt_stitches 
+            similarity_loss += similarity_loss_mat[pattern_idx][:gt_stitches_nums[pattern_idx], :].sum()
 
         # Push tags away from each other
         total_neg_loss = self.neg_loss(total_tags, gt_stitches_nums)
