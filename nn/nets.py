@@ -374,7 +374,7 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40, 
+            'epoch_with_stitches': 0,  # 40, 
             'stitch_hardnet_version': False 
         })
         # update with input settings

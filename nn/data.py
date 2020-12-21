@@ -114,8 +114,24 @@ class DatasetWrapper(object):
         print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
             len(self.training), len(self.validation) if self.validation else None, 
             len(self.test) if self.test else None))
+        self.print_subset_stats(self.training, 'Training')
+        if self.validation:
+            self.print_subset_stats(self.validation, 'Validation')
+        if self.test:
+            self.print_subset_stats(self.test, 'Test')
 
         return self.training, self.validation, self.test
+
+    def print_subset_stats(self, subset, subset_name=''):
+        """Print stats on the elements of each datafolder contained in given subset"""
+        # gouped by data_folders
+        data_folders_breakdown = self.dataset.indices_by_data_folder(subset.indices)
+
+        message = ''
+        for data_folder, indices in data_folders_breakdown.items():
+            message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(indices) / len(subset))
+        
+        print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
 
     def save_to_wandb(self, experiment):
         """Save current data info to the wandb experiment"""
@@ -371,6 +387,24 @@ class BaseDataset(Dataset):
             for i in range(len(self)):
                 self[i]
             print('Data cached!')
+
+    def indices_by_data_folder(self, index_list):
+        """
+            Separate provided indices according to dataset folders used in current dataset
+        """
+        ids_dict = dict.fromkeys(self.data_folders)
+        index_list = np.array(index_list)
+        
+        # assign by comparing with data_folders start & end ids
+        dstart_ids_items = list(self.dataset_start_ids.items())  # [(key, value), ...]
+        dstart_ids_items = sorted(dstart_ids_items, key=lambda idx: idx[1])
+        dstart_ids_items.append((None, len(self.datapoints_names)))  # end element describes the dataset length
+
+        for i in range(0, len(dstart_ids_items) - 1):
+            ids_filter = (index_list >= dstart_ids_items[i][1]) & (index_list < dstart_ids_items[i + 1][1])
+            ids_dict[dstart_ids_items[i][0]] = index_list[ids_filter]
+        
+        return ids_dict
 
     # -------- Data-specific functions --------
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
@@ -1174,15 +1208,15 @@ if __name__ == "__main__":
     })
 
     print(len(dataset), dataset.config)
-    print(dataset[0]['name'], dataset[0]['data_folder'])
-    print(dataset[0]['ground_truth'])
-    print(dataset[-1]['name'], dataset[-1]['data_folder'])
-    print(dataset[-1]['ground_truth'])
+    # print(dataset[0]['name'], dataset[0]['data_folder'])
+    # print(dataset[0]['ground_truth'])
+    # print(dataset[-1]['name'], dataset[-1]['data_folder'])
+    # print(dataset[-1]['ground_truth'])
 
     # print(dataset[5]['ground_truth'])
 
-    # datawrapper = DatasetWrapper(dataset)
-    # datawrapper.new_split(10, 10, 300)
+    datawrapper = DatasetWrapper(dataset)
+    datawrapper.new_split(10, 10, 300)
 
     # datawrapper.standardize_data()
 
