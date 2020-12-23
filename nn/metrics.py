@@ -114,7 +114,12 @@ class PatternStitchLoss():
         similarity_loss = 0.
         for pattern_idx in range(batch_size):
             # ingore values calculated for padded part of gt_stitches 
-            similarity_loss += similarity_loss_mat[pattern_idx][:gt_stitches_nums[pattern_idx], :].sum()
+            # average by number of stitches in pattern
+            similarity_loss += (
+                similarity_loss_mat[pattern_idx][:gt_stitches_nums[pattern_idx], :].sum() 
+                / gt_stitches_nums[pattern_idx])
+
+        similarity_loss /= batch_size  # average similarity by stitch
 
         # Push tags away from each other
         total_neg_loss = self.neg_loss(total_tags, gt_stitches_nums)
