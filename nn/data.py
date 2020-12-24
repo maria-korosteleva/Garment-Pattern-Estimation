@@ -96,15 +96,10 @@ class DatasetWrapper(object):
             self.split_info = split_info
 
         torch.manual_seed(self.split_info['random_seed'])
-        valid_size = (int)(len(self.dataset) * self.split_info['valid_percent'] / 100)
-        if self.split_info['test_percent']:
-            test_size = (int)(len(self.dataset) * self.split_info['test_percent'] / 100)
-            self.training, self.validation, self.test = torch.utils.data.random_split(
-                self.dataset, (len(self.dataset) - valid_size - test_size, valid_size, test_size))
-        else:
-            self.training, self.validation = torch.utils.data.random_split(
-                self.dataset, (len(self.dataset) - valid_size, valid_size))
-            self.test = None
+
+        self.training, self.validation, self.test = self.dataset.random_split_by_dataset(
+            self.split_info['valid_percent'], 
+            self.split_info['test_percent'])
 
         if batch_size is not None:
             self.batch_size = batch_size
@@ -276,13 +271,14 @@ class BaseDataset(Dataset):
         
         # list of items = subfolders
         self.datapoints_names = []
-        self.dataset_start_ids = dict.fromkeys(self.data_folders)
+        self.dataset_start_ids = []  # (folder, start_id) tuples -- ordered by start id
         for data_folder in self.data_folders:
             _, dirs, _ = next(os.walk(self.root_path / data_folder))
             # dataset name as part of datapoint name
             datapoints_names = [data_folder + '/' + name for name in dirs]
-            self.dataset_start_ids[data_folder] = len(self.datapoints_names)
+            self.dataset_start_ids.append((data_folder, len(self.datapoints_names)))
             self.datapoints_names += self._clean_datapoint_list(datapoints_names, data_folder)
+        self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
 
         # cashing setup
         self.gt_cached = {}
@@ -396,15 +392,46 @@ class BaseDataset(Dataset):
         index_list = np.array(index_list)
         
         # assign by comparing with data_folders start & end ids
-        dstart_ids_items = list(self.dataset_start_ids.items())  # [(key, value), ...]
-        dstart_ids_items = sorted(dstart_ids_items, key=lambda idx: idx[1])
-        dstart_ids_items.append((None, len(self.datapoints_names)))  # end element describes the dataset length
+        # enforce sort Just in case
+        self.dataset_start_ids = sorted(self.dataset_start_ids, key=lambda idx: idx[1])
 
-        for i in range(0, len(dstart_ids_items) - 1):
-            ids_filter = (index_list >= dstart_ids_items[i][1]) & (index_list < dstart_ids_items[i + 1][1])
-            ids_dict[dstart_ids_items[i][0]] = index_list[ids_filter]
+        for i in range(0, len(self.dataset_start_ids) - 1):
+            ids_filter = (index_list >= self.dataset_start_ids[i][1]) & (index_list < self.dataset_start_ids[i + 1][1])
+            ids_dict[self.dataset_start_ids[i][0]] = index_list[ids_filter]
         
         return ids_dict
+
+    def random_split_by_dataset(self, valid_percent, test_percent=0):
+        """Produce subset wrappers for training set, validations set, and test set (if requested)
+            * Enshures the equal proportions of elements from each datafolder in each subset -- 
+              according to overall proportions of datafolders in the whole dataset
+        Note: 
+            * it's recommended to shuffle the training set on batching as random permute is not 
+              guaranteed in this function
+        """
+        train_ids, valid_ids, test_ids = [], [], []
+
+        for dataset_id in range(len(self.data_folders)):
+            start_id = self.dataset_start_ids[dataset_id][1]
+            end_id = self.dataset_start_ids[dataset_id + 1][1]   # marker of the dataset end included
+            data_len = end_id - start_id
+
+            permute = (torch.randperm(data_len) + start_id).tolist()
+
+            valid_size = int(data_len * valid_percent / 100)
+            test_size = int(data_len * test_percent / 100)
+            train_size = data_len - valid_size - test_size
+
+            train_ids += permute[:train_size]
+            valid_ids += permute[train_size:train_size + valid_size]
+            if test_size:
+                test_ids += permute[train_size + valid_size:train_size + valid_size + test_size]
+
+        return (
+            torch.utils.data.Subset(self, train_ids), 
+            torch.utils.data.Subset(self, valid_ids),
+            torch.utils.data.Subset(self, test_ids) if test_percent else None
+        )
 
     # -------- Data-specific functions --------
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
@@ -471,7 +498,10 @@ class GarmentBaseDataset(BaseDataset):
         num_panels = []
         num_edges_in_panel = []
         num_stitches = []
-        for data_folder, start_id in self.dataset_start_ids.items():
+        for data_folder, start_id in self.dataset_start_ids:
+            if data_folder is None: 
+                break
+
             datapoint = self.datapoints_names[start_id]
             folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
             pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
@@ -1216,7 +1246,7 @@ if __name__ == "__main__":
     # print(dataset[5]['ground_truth'])
 
     datawrapper = DatasetWrapper(dataset)
-    datawrapper.new_split(10, 10, 300)
+    datawrapper.new_split(10, 10, 3000)
 
     # datawrapper.standardize_data()
 
