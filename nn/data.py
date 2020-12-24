@@ -443,7 +443,6 @@ class GarmentBaseDataset(BaseDataset):
         self.datapoints_names.remove('renders')  # TODO read ignore list from props
 
         fails_dict = self.dataset_props['sim']['stats']['fails']
-        # TODO allow not to ignore some of the subsections
         for subsection in fails_dict:
             for fail in fails_dict[subsection]:
                 try:
