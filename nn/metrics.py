@@ -5,6 +5,17 @@ import torch.nn as nn
 from data import Garment3DPatternFullDataset as PatternDataset
 
 
+# ------- utils ---------
+def eval_pad_vector(data_stats={}):
+    # prepare padding vector used for panel padding 
+    if data_stats:
+        shift = torch.Tensor(data_stats['shift'])
+        scale = torch.Tensor(data_stats['scale'])
+        return shift / scale
+    else:
+        return None
+
+
 # ------- custom metrics --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
@@ -14,7 +25,7 @@ class PanelLoopLoss():
             * if standardization/normalization transform is applied to padding, 'data_stats' should be provided
                 'data_stats' format: {'shift': <torch.tenzor>, 'scale': <torch.tensor>} 
         """
-        self._eval_pad_vector(data_stats)
+        self.pad_tenzor = eval_pad_vector(data_stats)
             
     def __call__(self, predicted_panels, original_panels=None, data_stats={}):
         """Evaluate loop loss on provided predicted_panels batch.
@@ -67,15 +78,6 @@ class PanelLoopLoss():
 
         # batch mean of squared norms of per-panel final points:
         return panel_square_sums.sum() / (panel_square_sums.shape[0] * panel_square_sums.shape[1])
-
-    def _eval_pad_vector(self, data_stats={}):
-        # prepare padding vector for unpadding the panel data on call
-        if data_stats:
-            shift = torch.Tensor(data_stats['shift'])
-            scale = torch.Tensor(data_stats['scale'])
-            self.pad_tenzor = - shift / scale
-        else:
-            self.pad_tenzor = None
 
 
 class PatternStitchLoss():
@@ -266,6 +268,50 @@ class PatternStitchPrecisionRecall():
 
         return tot_precision / len(data_loader), tot_recall / len(data_loader)
 
+
+class NumberOfPanelsAccuracy():
+    """
+        Evaluate in how many cases the number of panels in patterns were detected correctly
+    """
+    def __init__(self, max_edges_in_panel, data_stats=None):
+        """
+            Requesting data stats to recognize padding correctly
+            Should be a dictionary with {'shift': <>, 'scale': <>} keys containing stats for panel outlines
+        """
+        self.data_stats = data_stats
+        self.max_panel_len = max_edges_in_panel
+        self.pad_vector = eval_pad_vector(data_stats)
+        self.empty_panel_template = self.pad_vector.repeat(self.max_panel_len, 1)
+
+    def __call__(self, predicted_patterns, gt_panel_nums, pattern_names=None):
+        """
+         Evaluate on the batch of stitch tags
+        """
+        batch_size = predicted_patterns.shape[0]
+        max_num_panels = predicted_patterns.shape[1]
+        if self.empty_panel_template.device != predicted_patterns.device:
+            self.empty_panel_template = self.empty_panel_template.to(predicted_patterns.device)
+
+        correct_patterns = 0
+        for pattern_idx in range(batch_size):
+            # assuming all empty panels are at the end of the pattern, if any
+            for back_panel_id in range(max_num_panels):
+                bool_matrix = torch.isclose(
+                    predicted_patterns[pattern_idx][- back_panel_id], 
+                    self.empty_panel_template, atol=1.e-1)  # TODO this value might differ from what is actually used in core.py
+                if not torch.all(bool_matrix):
+                    break
+            predicted_num_panels = max_num_panels - back_panel_id
+            correct = (predicted_num_panels == gt_panel_nums[pattern_idx])
+            correct_patterns += correct
+
+            if pattern_names is not None and not correct:  # pattern len predicted wrongly
+                print('NumberOfPanelsAccuracy::{}::{} panels instead of {}'.format(
+                    pattern_names[pattern_idx], predicted_num_panels, gt_panel_nums[pattern_idx]))
+        
+        # average by batch
+        return float(correct_patterns) / batch_size
+    
 
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):

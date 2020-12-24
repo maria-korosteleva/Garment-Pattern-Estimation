@@ -405,6 +405,9 @@ class GarmentFullPattern3D(BaseModule):
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
+        self.pattern_quality = metrics.NumberOfPanelsAccuracy(self.max_panel_len, data_stats={
+            'shift': data_config['standardize']['gt_shift']['outlines'], 
+            'scale': data_config['standardize']['gt_scale']['outlines']})
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
@@ -477,11 +480,16 @@ class GarmentFullPattern3D(BaseModule):
         preds = self(features)
         device = features.device
 
+        loss_dict = {}
+
         # Loss for panel shapes
         outlines = ground_truth['outlines'].to(device)
         pattern_loss = self.regression_loss(preds['outlines'], outlines)   
         # Loop loss per panel
         loop_loss = self.loop_loss(preds['outlines'], outlines)
+        if self.with_quality_eval:
+            num_panels_acc = self.pattern_quality(outlines, ground_truth['num_panels'], pattern_names=names)
+            loss_dict.update(num_panels_accuracy=num_panels_acc)
 
         # panel placement
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
@@ -490,7 +498,7 @@ class GarmentFullPattern3D(BaseModule):
         # total loss
         full_loss = pattern_loss + loop_loss + (rot_loss + translation_loss)
 
-        loss_dict = dict(
+        loss_dict.update(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
 
