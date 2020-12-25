@@ -440,7 +440,10 @@ class GarmentBaseDataset(BaseDataset):
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self):
         """Remove all elements marked as failure from the datapoint list"""
-        self.datapoints_names.remove('renders')  # TODO read ignore list from props
+        try:
+            self.datapoints_names.remove('renders')  # TODO read ignore list from props
+        except ValueError:
+            pass
 
         fails_dict = self.dataset_props['sim']['stats']['fails']
         for subsection in fails_dict:
