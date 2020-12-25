@@ -11,7 +11,7 @@ def eval_pad_vector(data_stats={}):
     if data_stats:
         shift = torch.Tensor(data_stats['shift'])
         scale = torch.Tensor(data_stats['scale'])
-        return shift / scale
+        return (- shift / scale)
     else:
         return None
 
@@ -292,12 +292,12 @@ class NumbersInPanelsAccuracies():
         if self.empty_panel_template.device != predicted_patterns.device:
             self.empty_panel_template = self.empty_panel_template.to(predicted_patterns.device)
 
-        correct_num_panels = 0
+        correct_num_panels = 0.
         num_edges_accuracies = 0.
         for pattern_idx in range(batch_size):
             # assuming all empty panels are at the end of the pattern, if any
             predicted_num_panels = 0
-            correct_num_edges = 0
+            correct_num_edges = 0.
             for panel_id in range(max_num_panels):
                 predicted_bool_matrix = torch.isclose(
                     predicted_patterns[pattern_idx][panel_id], 
@@ -305,10 +305,15 @@ class NumbersInPanelsAccuracies():
                 # empty panel detected -- stop further eval
                 if torch.all(predicted_bool_matrix):
                     break
-                predicted_num_panels += 1
 
                 # check is the num of edges matches
                 predicted_num_edges = (~torch.all(predicted_bool_matrix, axis=1)).sum()  # only non-padded rows
+            
+                if predicted_num_edges < 3:
+                    # 0, 1, 2 edges are not enough to form a panel -> assuming this is an empty panel
+                    break
+                # othervise, we have a real panel
+                predicted_num_panels += 1
 
                 gt_bool_matrix = torch.isclose(gt_outlines[pattern_idx][panel_id], self.empty_panel_template, atol=0.1)
                 gt_num_edges = (~torch.all(gt_bool_matrix, axis=1)).sum()  # only non-padded rows
@@ -324,15 +329,16 @@ class NumbersInPanelsAccuracies():
             # update num panels stats
             correct_len = (predicted_num_panels == gt_panel_nums[pattern_idx])
             correct_num_panels += correct_len
+
             if pattern_names is not None and not correct_len:  # pattern len predicted wrongly
                 print('NumbersInPanelsAccuracies::{}::{} panels instead of {}'.format(
                     pattern_names[pattern_idx], predicted_num_panels, gt_panel_nums[pattern_idx]))
 
             # update num edges stats (averaged per panel)
-            num_edges_accuracies += float(correct_num_edges) / gt_panel_nums[pattern_idx]
+            num_edges_accuracies += correct_num_edges / gt_panel_nums[pattern_idx]
         
         # average by batch
-        return float(correct_num_panels) / batch_size, num_edges_accuracies / batch_size
+        return correct_num_panels / batch_size, num_edges_accuracies / batch_size
     
 
 # ------- Model evaluation shortcut -------------
