@@ -147,8 +147,17 @@ if __name__ == "__main__":
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
     experiment.add_statistic('valid_on_best', final_metrics)
+
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'valid_per_data_folder')
+    print('Validation metrics breakdown: {}'.format(final_metrics))
+    experiment.add_statistic('valid_on_best', final_metrics)
+
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
+    experiment.add_statistic('test_on_best', final_metrics)
+
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test_per_data_folder')
+    print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
     # print(dataset[276]['features'])  # first element of validation set

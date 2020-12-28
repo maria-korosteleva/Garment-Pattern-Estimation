@@ -352,33 +352,44 @@ def eval_metrics(model, data_wrapper, section='test'):
         model.with_quality_eval = True  # force quality evaluation for models that support it
 
     with torch.no_grad():
-        current_metrics = {}
         loader = data_wrapper.get_loader(section)
-        if loader:
-            current_metrics = dict.fromkeys(['full_loss'], 0)
-            model_defined = 0
-            loop_loss = 0
-            for batch in loader:
-                features, gt = batch['features'].to(device), batch['ground_truth']
-                if gt is None or (hasattr(gt, 'nelement') and gt.nelement() == 0):  # assume reconstruction task
-                    gt = features
+        if isinstance(loader, dict):
+            metrics_dict = {}
+            for data_folder, loader in loader.items():
+                metrics_dict[data_folder] = _eval_metrics_per_loader(model, loader, device)
+            return metrics_dict
+        else:
+            return _eval_metrics_per_loader(model, loader, device)
 
-                # loss evaluation
-                full_loss, loss_dict, _ = model.loss(features, gt, names=batch['name'])  # use names for cleaner errors when needed
 
-                # summing up
-                current_metrics['full_loss'] += full_loss
-                for key, value in loss_dict.items():
-                    if key not in current_metrics:
-                        current_metrics[key] = 0  # init new metric
-                    current_metrics[key] += value
-
-            # normalize & convert
-            for metric in current_metrics:
-                if isinstance(current_metrics[metric], torch.Tensor):
-                    current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu
-                current_metrics[metric] /= len(loader)
+def _eval_metrics_per_loader(model, loader, device):
+    """
+    Evaluate model on given loader. 
     
+    Secondary function -- it assumes that context is set up: torch.no_grad(), model device & mode, etc."""
+
+    current_metrics = dict.fromkeys(['full_loss'], 0)
+    for batch in loader:
+        features, gt = batch['features'].to(device), batch['ground_truth']
+        if gt is None or (hasattr(gt, 'nelement') and gt.nelement() == 0):  # assume reconstruction task
+            gt = features
+
+        # loss evaluation
+        full_loss, loss_dict, _ = model.loss(features, gt, names=batch['name'])  # use names for cleaner errors when needed
+
+        # summing up
+        current_metrics['full_loss'] += full_loss
+        for key, value in loss_dict.items():
+            if key not in current_metrics:
+                current_metrics[key] = 0  # init new metric
+            current_metrics[key] += value
+
+    # normalize & convert
+    for metric in current_metrics:
+        if isinstance(current_metrics[metric], torch.Tensor):
+            current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu
+        current_metrics[metric] /= len(loader)
+
     return current_metrics
 
 

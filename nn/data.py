@@ -59,6 +59,10 @@ class DatasetWrapper(object):
             return self.loader_test
         elif data_section == 'validation':
             return self.loader_validation
+        elif data_section == 'valid_per_data_folder':
+            return self.loader_validation_per_data
+        elif data_section == 'test_per_data_folder':
+            return self.loader_test_per_data
         
         raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
 
@@ -70,11 +74,24 @@ class DatasetWrapper(object):
             raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
 
         self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+        # no need for breakdown per datafolder for training -- for now
+
         self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
+
         self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
+        self.loader_test_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.test else None
+
         self.loader_full = DataLoader(self.dataset, self.batch_size)
 
         return self.loader_train, self.loader_validation, self.loader_test
+
+    def _loaders_dict(self, subsets_dict, batch_size, shuffle=False):
+        """Create loaders for all subsets in dict"""
+        loaders_dict = {}
+        for name, subset in subsets_dict.items():
+            loaders_dict[name] = DataLoader(subset, batch_size, shuffle=shuffle)
+        return loaders_dict
 
     # -------- Reproducibility ---------------
     def new_split(self, valid_percent, test_percent=None, random_seed=None):
@@ -97,9 +114,10 @@ class DatasetWrapper(object):
 
         torch.manual_seed(self.split_info['random_seed'])
 
-        self.training, self.validation, self.test = self.dataset.random_split_by_dataset(
+        self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
             self.split_info['valid_percent'], 
-            self.split_info['test_percent'])
+            self.split_info['test_percent'], 
+            with_breakdown=True)
 
         if batch_size is not None:
             self.batch_size = batch_size
@@ -109,22 +127,22 @@ class DatasetWrapper(object):
         print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
             len(self.training), len(self.validation) if self.validation else None, 
             len(self.test) if self.test else None))
-        self.print_subset_stats(self.training, 'Training')
-        if self.validation:
-            self.print_subset_stats(self.validation, 'Validation')
-        if self.test:
-            self.print_subset_stats(self.test, 'Test')
+            
+        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
+        self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
+
+        if self.test is not None:
+            self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
 
         return self.training, self.validation, self.test
 
-    def print_subset_stats(self, subset, subset_name=''):
+    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name=''):
         """Print stats on the elements of each datafolder contained in given subset"""
         # gouped by data_folders
-        data_folders_breakdown = self.dataset.indices_by_data_folder(subset.indices)
 
         message = ''
-        for data_folder, indices in data_folders_breakdown.items():
-            message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(indices) / len(subset))
+        for data_folder, subset in subset_breakdown_dict.items():
+            message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(subset) / total_len)
         
         print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
 
@@ -401,7 +419,7 @@ class BaseDataset(Dataset):
         
         return ids_dict
 
-    def random_split_by_dataset(self, valid_percent, test_percent=0):
+    def random_split_by_dataset(self, valid_percent, test_percent=0, with_breakdown=False):
         """Produce subset wrappers for training set, validations set, and test set (if requested)
             * Enshures the equal proportions of elements from each datafolder in each subset -- 
               according to overall proportions of datafolders in the whole dataset
@@ -410,6 +428,8 @@ class BaseDataset(Dataset):
               guaranteed in this function
         """
         train_ids, valid_ids, test_ids = [], [], []
+
+        train_breakdown, valid_breakdown, test_breakdown = {}, {}, {}
 
         for dataset_id in range(len(self.data_folders)):
             start_id = self.dataset_start_ids[dataset_id][1]
@@ -422,10 +442,29 @@ class BaseDataset(Dataset):
             test_size = int(data_len * test_percent / 100)
             train_size = data_len - valid_size - test_size
 
-            train_ids += permute[:train_size]
-            valid_ids += permute[train_size:train_size + valid_size]
+            train_sub, valid_sub = permute[:train_size], permute[train_size:train_size + valid_size]
+
+            train_ids += train_sub
+            valid_ids += valid_sub
+
             if test_size:
-                test_ids += permute[train_size + valid_size:train_size + valid_size + test_size]
+                test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
+                test_ids += test_sub
+            
+            if with_breakdown:
+                train_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, train_sub)
+                valid_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, valid_sub)
+                test_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, test_sub) if test_size else None
+
+
+        if with_breakdown:
+            return (
+                torch.utils.data.Subset(self, train_ids), 
+                torch.utils.data.Subset(self, valid_ids),
+                torch.utils.data.Subset(self, test_ids) if test_percent else None, 
+                train_breakdown, valid_breakdown, test_breakdown
+            )
+            
 
         return (
             torch.utils.data.Subset(self, train_ids), 
