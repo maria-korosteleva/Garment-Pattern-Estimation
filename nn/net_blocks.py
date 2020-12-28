@@ -418,6 +418,49 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
         return out
 
 
+class GRUDecoderModule(nn.Module):
+    """A wrapper for LSTM targeting decoding task"""
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
+        super().__init__()
+        self.custom_init = custom_init
+        self.n_layers = n_layers
+        self.encoding_size = encoding_size
+        self.hidden_size = hidden_size
+        self.out_elem_size = out_elem_size
+
+        self.recurrent_cell = nn.GRU(
+            encoding_size, hidden_size, n_layers, 
+            dropout=dropout, batch_first=True)
+
+        # post-process to match the desired outut shape
+        self.lin = nn.Linear(hidden_size, out_elem_size)
+
+        # initialize
+        _init_weights(self.recurrent_cell, init_type=custom_init)
+
+    def forward(self, batch_enc, out_len):
+        """out_len specifies the length of the output sequence to produce"""
+        device = batch_enc.device
+        batch_size = batch_enc.size(0)
+        
+        # propagate encoding for needed seq_len
+        dec_input = batch_enc.unsqueeze(1).repeat(1, out_len, 1)  # along sequence dimention
+
+        # decode
+        # https://discuss.pytorch.org/t/gru-cant-deal-with-self-hidden-attributeerror-tuple-object-has-no-attribute-size/17283/2
+        hidden_init = _init_tenzor(self.n_layers, batch_size, self.hidden_size, device=device, init_type=self.custom_init)
+        out, _ = self.recurrent_cell(dec_input, hidden_init)
+
+        # back to requested format
+        # reshaping the outputs such that it can be fit into the fully connected layer
+        out = out.contiguous().view(-1, self.hidden_size)
+        out = self.lin(out)
+        # back to sequence
+        out = out.contiguous().view(batch_size, out_len, -1)
+
+        return out
+
+
 # Quick tests
 if __name__ == "__main__":
 
