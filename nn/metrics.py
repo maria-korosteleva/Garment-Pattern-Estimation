@@ -283,14 +283,14 @@ class NumbersInPanelsAccuracies():
         self.pad_vector = eval_pad_vector(data_stats)
         self.empty_panel_template = self.pad_vector.repeat(self.max_panel_len, 1)
 
-    def __call__(self, predicted_patterns, gt_outlines, gt_panel_nums, pattern_names=None):
+    def __call__(self, predicted_outlines, gt_outlines, gt_panel_nums, pattern_names=None):
         """
-         Evaluate on the batch of stitch tags
+         Evaluate on the batch of panel outlines predictoins 
         """
-        batch_size = predicted_patterns.shape[0]
-        max_num_panels = predicted_patterns.shape[1]
-        if self.empty_panel_template.device != predicted_patterns.device:
-            self.empty_panel_template = self.empty_panel_template.to(predicted_patterns.device)
+        batch_size = predicted_outlines.shape[0]
+        max_num_panels = predicted_outlines.shape[1]
+        if self.empty_panel_template.device != predicted_outlines.device:
+            self.empty_panel_template = self.empty_panel_template.to(predicted_outlines.device)
 
         correct_num_panels = 0.
         num_edges_accuracies = 0.
@@ -300,8 +300,8 @@ class NumbersInPanelsAccuracies():
             correct_num_edges = 0.
             for panel_id in range(max_num_panels):
                 predicted_bool_matrix = torch.isclose(
-                    predicted_patterns[pattern_idx][panel_id], 
-                    self.empty_panel_template, atol=0.1)  # TODO this value might differ from what is actually used in core.py
+                    predicted_outlines[pattern_idx][panel_id], 
+                    self.empty_panel_template, atol=0.05)  # this value is adjusted to have similat effect to what is used in core.py
                 # empty panel detected -- stop further eval
                 if torch.all(predicted_bool_matrix):
                     break
@@ -315,7 +315,7 @@ class NumbersInPanelsAccuracies():
                 # othervise, we have a real panel
                 predicted_num_panels += 1
 
-                gt_bool_matrix = torch.isclose(gt_outlines[pattern_idx][panel_id], self.empty_panel_template, atol=0.1)
+                gt_bool_matrix = torch.isclose(gt_outlines[pattern_idx][panel_id], self.empty_panel_template, atol=0.05)
                 gt_num_edges = (~torch.all(gt_bool_matrix, axis=1)).sum()  # only non-padded rows
 
                 panel_correct = (predicted_num_edges == gt_num_edges)
