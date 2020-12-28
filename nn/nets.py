@@ -505,7 +505,7 @@ class GarmentFullPattern3D(BaseModule):
             if self.stitch_loss_supervised is not None:
                 stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
                 loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
-                full_loss += stitch_sup_loss
+                full_loss += 0.1 * stitch_sup_loss
 
             # free\stitches edges classification
             gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
