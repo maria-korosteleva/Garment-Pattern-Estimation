@@ -6,6 +6,7 @@ import time
 import torch
 import wandb as wb
 
+
 class WandbRunWrappper(object):
     """Class provides 
         * a convenient way to store wandb run info 
