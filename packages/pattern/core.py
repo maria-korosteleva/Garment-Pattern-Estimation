@@ -322,7 +322,7 @@ class BasicPattern(object):
         comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
 
-        rotation_representation = np.array(panel_rotation.as_euler('xyz', degrees=True))
+        rotation_representation = np.array(panel_rotation.as_quat())
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
@@ -374,7 +374,8 @@ class BasicPattern(object):
             panel['translation'] = translation.tolist()
         
         if rotation is not None:
-            panel['rotation'] = rotation.tolist()
+            rotation_obj = Rotation.from_quat(rotation)
+            panel['rotation'] = rotation_obj.as_euler('xyz', degrees=True).tolist()
         
     def stitches_as_tags(self, panel_order=None, pad_to_len=None):
         """For every stitch, assign an approximate identifier (tag) of the stitch to the edges that are part of that stitch
