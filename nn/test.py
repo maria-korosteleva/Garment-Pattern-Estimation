@@ -63,9 +63,9 @@ print('Test metrics per dataset: {}'.format(test_breakdown))
 # print(dataset[276]['features'])  # first element of validation set
 
 # experiment.add_statistic('valid_on_best', valid_loss)
-# experiment.add_statistic('valid_on_best', valid_breakdown)
+# experiment.add_statistic('valid_best_breakdown', valid_breakdown)
 # experiment.add_statistic('test_on_best', test_metrics)
-# experiment.add_statistic('test_on_best', test_breakdown)
+# experiment.add_statistic('test_best_breakdown', test_breakdown)
 
 # -------- Predict ---------
 # save prediction for validation to file
