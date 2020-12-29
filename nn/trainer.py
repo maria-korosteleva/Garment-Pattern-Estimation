@@ -104,7 +104,7 @@ class Trainer():
         """Fit loop with the setup already performed. Assumes wandb experiment was initialized"""
         model.to(self.device)
         log_step = wb.run.step - 1
-        best_valid_loss = None
+        best_valid_loss = self.experiment.last_best_validation_loss()
         
         for epoch in range(start_epoch, wb.config.epochs):
             model.train()
