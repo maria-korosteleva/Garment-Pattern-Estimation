@@ -322,7 +322,7 @@ class BasicPattern(object):
         comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
         translation = np.array(panel['translation']) + comenpensating_shift
 
-        rotation_representation = np.array(panel_rotation.as_quat())
+        rotation_representation = np.array(panel_rotation.as_rotvec())
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
@@ -374,7 +374,7 @@ class BasicPattern(object):
             panel['translation'] = translation.tolist()
         
         if rotation is not None:
-            rotation_obj = Rotation.from_quat(rotation)
+            rotation_obj = Rotation.from_rotvec(rotation)
             panel['rotation'] = rotation_obj.as_euler('xyz', degrees=True).tolist()
         
     def stitches_as_tags(self, panel_order=None, pad_to_len=None):
