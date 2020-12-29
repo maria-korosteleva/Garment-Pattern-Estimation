@@ -52,13 +52,20 @@ model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 # ------- Evaluate --------
 valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
 print('Validation metrics: {}'.format(valid_loss))
+valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
+print('Validation metrics per dataset: {}'.format(valid_breakdown))
+
 test_metrics = metrics.eval_metrics(model, datawrapper, 'test')
 print('Test metrics: {}'.format(test_metrics))
+test_breakdown = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
+print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # print(dataset[276]['features'])  # first element of validation set
 
 # experiment.add_statistic('valid_on_best', valid_loss)
+# experiment.add_statistic('valid_on_best', valid_breakdown)
 # experiment.add_statistic('test_on_best', test_metrics)
+# experiment.add_statistic('test_on_best', test_breakdown)
 
 # -------- Predict ---------
 # save prediction for validation to file
