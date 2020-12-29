@@ -155,6 +155,7 @@ class Trainer():
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
+            self.experiment.checkpoint_counter = start_epoch
             print('Trainer::Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
 
             if self.device != wb.config.device:
