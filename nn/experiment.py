@@ -58,13 +58,17 @@ class WandbRunWrappper(object):
     def last_epoch(self):
         """Id of the last epoch processed"""
         run = self._run_object()
-        return run.summary['epoch']
+        return run.summary['epoch'] if 'epoch' in run.summary else -1
 
     def data_info(self):
         """Info on the data setup from the run config:
             Split & batch size info """
         run = self._run_object()
         return run.config['data_split'], run.config['batch_size'], run.config['dataset']
+
+    def last_best_validation_loss(self):
+        run = self._run_object()
+        return run.summary['best_valid_loss'] if 'best_valid_loss' in run.summary else None
 
     def NN_config(self):
         """Run configuration params of NeuralNetwork model"""
