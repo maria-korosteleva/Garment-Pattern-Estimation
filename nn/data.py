@@ -456,7 +456,6 @@ class BaseDataset(Dataset):
                 valid_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, valid_sub)
                 test_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, test_sub) if test_size else None
 
-
         if with_breakdown:
             return (
                 torch.utils.data.Subset(self, train_ids), 
@@ -465,7 +464,6 @@ class BaseDataset(Dataset):
                 train_breakdown, valid_breakdown, test_breakdown
             )
             
-
         return (
             torch.utils.data.Subset(self, train_ids), 
             torch.utils.data.Subset(self, valid_ids),
@@ -994,7 +992,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
-            explicit_stitch_tags=True
+            explicit_stitch_tags=False
         )
     
     def standardize(self, training=None):
