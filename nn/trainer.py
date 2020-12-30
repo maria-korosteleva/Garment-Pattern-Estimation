@@ -105,6 +105,7 @@ class Trainer():
         model.to(self.device)
         log_step = wb.run.step - 1
         best_valid_loss = self.experiment.last_best_validation_loss()
+        best_valid_loss = torch.tensor(best_valid_loss) if best_valid_loss is not None else None
         
         for epoch in range(start_epoch, wb.config.epochs):
             model.train()
