@@ -107,7 +107,7 @@ def batch_sim(resources, data_path, dataset_props,
                             dataset_props['sim'], 
                             delete_on_clean=True,  # delete geometry after sim as we don't need it any more
                             caching=caching, 
-                            save_maya_scene=True)
+                            save_maya_scene=False)
         
         if pattern_name in dataset_props['sim']['stats']['fails']['crashes']:
             # if we successfully finished simulating crashed example -- it's not a crash any more!
