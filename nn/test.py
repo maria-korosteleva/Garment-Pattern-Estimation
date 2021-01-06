@@ -29,7 +29,7 @@ split, batch_size, data_config = experiment.data_info()  # note that run is not 
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 # data_config.update({'num_verts': 500})
 # dataset = data.ParametrizedShirtDataSet(datapath, data_config)
-# dataset = data.GarmentParamsDataset(system_info['datasets_path']r, data_config)
+# dataset = data.GarmentParamsDataset(system_info['datasets_path'], data_config)
 # dataset = data.Garment3DParamsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 # dataset = data.GarmentPanelDataset(system_info['datasets_path'], data_config)
 dataset = data.Garment3DPatternFullDataset(
