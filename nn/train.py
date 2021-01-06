@@ -102,8 +102,8 @@ def get_data_config(in_config, old_stats=False):
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
-    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
+    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     # dataset_folder = 'data_500_pants_straight_sides_201223-12-48-10'
     # dataset_folder = 'data_500_pants_flare_201222-11-33-00'
     in_data_config, in_nn_config, net_seed = get_values_from_args()
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='tee-universal-transl', 
+        run_name='skirt-universal-transl', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
