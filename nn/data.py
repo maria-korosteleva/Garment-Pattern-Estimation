@@ -59,6 +59,10 @@ class DatasetWrapper(object):
             return self.loader_test
         elif data_section == 'validation':
             return self.loader_validation
+        elif data_section == 'valid_per_data_folder':
+            return self.loader_validation_per_data
+        elif data_section == 'test_per_data_folder':
+            return self.loader_test_per_data
         
         raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
 
@@ -70,11 +74,24 @@ class DatasetWrapper(object):
             raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
 
         self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+        # no need for breakdown per datafolder for training -- for now
+
         self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
+
         self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
+        self.loader_test_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.test else None
+
         self.loader_full = DataLoader(self.dataset, self.batch_size)
 
         return self.loader_train, self.loader_validation, self.loader_test
+
+    def _loaders_dict(self, subsets_dict, batch_size, shuffle=False):
+        """Create loaders for all subsets in dict"""
+        loaders_dict = {}
+        for name, subset in subsets_dict.items():
+            loaders_dict[name] = DataLoader(subset, batch_size, shuffle=shuffle)
+        return loaders_dict
 
     # -------- Reproducibility ---------------
     def new_split(self, valid_percent, test_percent=None, random_seed=None):
@@ -96,26 +113,38 @@ class DatasetWrapper(object):
             self.split_info = split_info
 
         torch.manual_seed(self.split_info['random_seed'])
-        valid_size = (int)(len(self.dataset) * self.split_info['valid_percent'] / 100)
-        if self.split_info['test_percent']:
-            test_size = (int)(len(self.dataset) * self.split_info['test_percent'] / 100)
-            self.training, self.validation, self.test = torch.utils.data.random_split(
-                self.dataset, (len(self.dataset) - valid_size - test_size, valid_size, test_size))
-        else:
-            self.training, self.validation = torch.utils.data.random_split(
-                self.dataset, (len(self.dataset) - valid_size, valid_size))
-            self.test = None
+
+        self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
+            self.split_info['valid_percent'], 
+            self.split_info['test_percent'], 
+            with_breakdown=True)
 
         if batch_size is not None:
             self.batch_size = batch_size
         if self.batch_size is not None:
             self.new_loaders()  # s.t. loaders could be used right away
 
-        print('{} split: {} / {} / {}'.format(self.dataset.name, len(self.training), 
-                                              len(self.validation) if self.validation else None, 
-                                              len(self.test) if self.test else None))
+        print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
+            len(self.training), len(self.validation) if self.validation else None, 
+            len(self.test) if self.test else None))
+            
+        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
+        self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
+
+        if self.test is not None:
+            self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
 
         return self.training, self.validation, self.test
+
+    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name=''):
+        """Print stats on the elements of each datafolder contained in given subset"""
+        # gouped by data_folders
+
+        message = ''
+        for data_folder, subset in subset_breakdown_dict.items():
+            message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(subset) / total_len)
+        
+        print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
 
     def save_to_wandb(self, experiment):
         """Save current data info to the wandb experiment"""
@@ -133,7 +162,7 @@ class DatasetWrapper(object):
     def predict(self, model, save_to, sections=['test'], single_batch=False):
         """Save model predictions on the given dataset section"""
         # Main path
-        prediction_path = save_to / ('nn_pred_' + self.dataset.name + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
         prediction_path.mkdir(parents=True, exist_ok=True)
 
         for section in sections:
@@ -150,11 +179,13 @@ class DatasetWrapper(object):
                     if single_batch:
                         batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
                         features = batch['features'].to(device)
-                        self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+                        self.dataset.save_prediction_batch(
+                            model(features), batch['name'], batch['data_folder'], section_dir)
                     else:
                         for batch in loader:
                             features = batch['features'].to(device)
-                            self.dataset.save_prediction_batch(model(features), batch['name'], section_dir)
+                            self.dataset.save_prediction_batch(
+                                model(features), batch['name'], batch['data_folder'], section_dir)
         return prediction_path
 
 
@@ -163,12 +194,18 @@ def _dict_to_tensors(dict_obj):  # helper
     """convert a dictionary with numeric values into a new dictionary with torch tensors"""
     new_dict = dict.fromkeys(dict_obj.keys())
     for key, value in dict_obj.items():
-        if isinstance(value, np.ndarray):
+        if value is None:
+            new_dict[key] = torch.Tensor()
+        elif isinstance(value, dict):
+            new_dict[key] = _dict_to_tensors(value)
+        elif isinstance(value, str):  # no changes for strings
+            new_dict[key] = value
+        elif isinstance(value, np.ndarray):
             new_dict[key] = torch.from_numpy(value)
             if value.dtype not in [np.int, np.bool]:
                 new_dict[key] = new_dict[key].float()  # cast all doubles and ofther stuff to floats
         else:
-            new_dict[key] = torch.Tensor(value)
+            new_dict[key] = torch.tensor(value)  # just try directly, if nothing else works
     return new_dict
 
 
@@ -176,19 +213,8 @@ def _dict_to_tensors(dict_obj):  # helper
 class SampleToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     
-    def __call__(self, sample):
-        features, gt = sample['features'], sample['ground_truth']
-
-        if isinstance(gt, dict):
-            new_gt = _dict_to_tensors(gt)
-        else: 
-            new_gt = torch.from_numpy(gt).float() if gt is not None else torch.Tensor(), 
-        
-        return {
-            'features': torch.from_numpy(features).float() if features is not None else torch.Tensor(), 
-            'ground_truth': new_gt, 
-            'name': sample['name']
-        }
+    def __call__(self, sample):        
+        return _dict_to_tensors(sample)
 
 
 class FeatureStandartization():
@@ -198,11 +224,14 @@ class FeatureStandartization():
         self.scale = torch.Tensor(scale)
     
     def __call__(self, sample):
-        return {
-            'features': (sample['features'] - self.shift) / self.scale,
-            'ground_truth': sample['ground_truth'],
-            'name': sample['name']
-        }
+        updated_sample = {}
+        for key, value in sample.items():
+            if key == 'features':
+                updated_sample[key] = (sample[key] - self.shift) / self.scale
+            else: 
+                updated_sample[key] = sample[key]
+
+        return updated_sample
 
 
 class GTtandartization():
@@ -226,34 +255,50 @@ class GTtandartization():
                     new_gt[key] = new_gt[key] - self.shift[key]
                 if key in self.scale:
                     new_gt[key] = new_gt[key] / self.scale[key]
-                
                 # if shift and scale are not set, the value is kept as it is
         else:
             new_gt = (gt - self.shift) / self.scale
 
-        return {
-            'features': sample['features'],
-            'ground_truth': new_gt,
-            'name': sample['name']
-        }
+        # gather sample
+        updated_sample = {}
+        for key, value in sample.items():
+            updated_sample[key] = new_gt if key == 'ground_truth' else sample[key]
+
+        return updated_sample
 
 
 # --------------------- Datasets -------------------------
 
 class BaseDataset(Dataset):
-    """Ensure that all my datasets follow this interface"""
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    """
+        * Implements base interface for my datasets
+        * Implements routines for datapoint retrieval, structure & cashing 
+        (agnostic of the desired feature & GT structure representation)
+    """
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         """Kind of Universal init for my datasets
-            if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
+            * Expects that all incoming datasets are located in the same root directory
+            * The names of dataset_folders to use should be provided in start_config
+                (defining it in dict allows to load data list as property from previous experiments)
+            * if cashing is enabled, datapoints will stay stored in memory on first call to them: might speed up data processing by reducing file reads"""
         self.root_path = Path(root_dir)
-        self.name = self.root_path.name
         self.config = {}
         self.update_config(start_config)
+
+        self.data_folders = start_config['data_folders']
         
         # list of items = subfolders
-        _, dirs, _ = next(os.walk(self.root_path))
-        self.datapoints_names = dirs
-        self._clean_datapoint_list()
+        self.datapoints_names = []
+        self.dataset_start_ids = []  # (folder, start_id) tuples -- ordered by start id
+        for data_folder in self.data_folders:
+            _, dirs, _ = next(os.walk(self.root_path / data_folder))
+            # dataset name as part of datapoint name
+            datapoints_names = [data_folder + '/' + name for name in dirs]
+            self.dataset_start_ids.append((data_folder, len(self.datapoints_names)))
+            self.datapoints_names += self._clean_datapoint_list(datapoints_names, data_folder)
+        self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
+
+        # cashing setup
         self.gt_cached = {}
         self.gt_caching = gt_caching
         if gt_caching:
@@ -316,7 +361,8 @@ class BaseDataset(Dataset):
             if self.feature_caching:  # save read values 
                 self.feature_cached[datapoint_name] = features
         
-        sample = {'features': features, 'ground_truth': ground_truth, 'name': datapoint_name}
+        folder, name = tuple(datapoint_name.split('/'))
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': folder}
 
         # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
@@ -333,11 +379,19 @@ class BaseDataset(Dataset):
             * to be part of experimental setup on wandb
             * Control obtainign values for datapoints"""
         self.config.update(in_config)
-        if 'name' in self.config and self.name != self.config['name']:
-            print('BaseDataset:Warning:dataset name ({}) in loaded config does not match current dataset name ({})'.format(self.config['name'], self.name))
 
-        self.config['name'] = self.name
+        # check the correctness of provided list of datasets
+        if ('data_folders' not in self.config 
+                or not isinstance(self.config['data_folders'], list)
+                or len(self.config['data_folders']) == 0):
+            raise RuntimeError('BaseDataset::Error::information on datasets (folders) to use is missing in the incoming config')
+
         self._update_on_config_change()
+
+    def _drop_cache(self):
+        """Clean caches of datapoints info"""
+        self.gt_cached = {}
+        self.feature_cached = {}
 
     def _renew_cache(self):
         """Flush the cache and re-fill it with updated information if any kind of caching is enabled"""
@@ -348,8 +402,76 @@ class BaseDataset(Dataset):
                 self[i]
             print('Data cached!')
 
+    def indices_by_data_folder(self, index_list):
+        """
+            Separate provided indices according to dataset folders used in current dataset
+        """
+        ids_dict = dict.fromkeys(self.data_folders)
+        index_list = np.array(index_list)
+        
+        # assign by comparing with data_folders start & end ids
+        # enforce sort Just in case
+        self.dataset_start_ids = sorted(self.dataset_start_ids, key=lambda idx: idx[1])
+
+        for i in range(0, len(self.dataset_start_ids) - 1):
+            ids_filter = (index_list >= self.dataset_start_ids[i][1]) & (index_list < self.dataset_start_ids[i + 1][1])
+            ids_dict[self.dataset_start_ids[i][0]] = index_list[ids_filter]
+        
+        return ids_dict
+
+    def random_split_by_dataset(self, valid_percent, test_percent=0, with_breakdown=False):
+        """Produce subset wrappers for training set, validations set, and test set (if requested)
+            * Enshures the equal proportions of elements from each datafolder in each subset -- 
+              according to overall proportions of datafolders in the whole dataset
+        Note: 
+            * it's recommended to shuffle the training set on batching as random permute is not 
+              guaranteed in this function
+        """
+        train_ids, valid_ids, test_ids = [], [], []
+
+        train_breakdown, valid_breakdown, test_breakdown = {}, {}, {}
+
+        for dataset_id in range(len(self.data_folders)):
+            start_id = self.dataset_start_ids[dataset_id][1]
+            end_id = self.dataset_start_ids[dataset_id + 1][1]   # marker of the dataset end included
+            data_len = end_id - start_id
+
+            permute = (torch.randperm(data_len) + start_id).tolist()
+
+            valid_size = int(data_len * valid_percent / 100)
+            test_size = int(data_len * test_percent / 100)
+            train_size = data_len - valid_size - test_size
+
+            train_sub, valid_sub = permute[:train_size], permute[train_size:train_size + valid_size]
+
+            train_ids += train_sub
+            valid_ids += valid_sub
+
+            if test_size:
+                test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
+                test_ids += test_sub
+            
+            if with_breakdown:
+                train_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, train_sub)
+                valid_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, valid_sub)
+                test_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, test_sub) if test_size else None
+
+        if with_breakdown:
+            return (
+                torch.utils.data.Subset(self, train_ids), 
+                torch.utils.data.Subset(self, valid_ids),
+                torch.utils.data.Subset(self, test_ids) if test_percent else None, 
+                train_breakdown, valid_breakdown, test_breakdown
+            )
+            
+        return (
+            torch.utils.data.Subset(self, train_ids), 
+            torch.utils.data.Subset(self, valid_ids),
+            torch.utils.data.Subset(self, test_ids) if test_percent else None
+        )
+
     # -------- Data-specific functions --------
-    def save_prediction_batch(self, predictions, datanames, save_to):
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
         pass
 
@@ -364,7 +486,7 @@ class BaseDataset(Dataset):
         """
         print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
 
-    def _clean_datapoint_list(self):
+    def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
         # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
         pass
@@ -398,61 +520,100 @@ class BaseDataset(Dataset):
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
         
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         """
-        Args:
-            root_dir (string): Directory with all examples as subfolders
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
+            Initialize dataset of garments with patterns
+            * the list of dataset folders to use should be supplied in start_config!!!
+            * the initial value is only given for reference
         """
-        self.dataset_props = Properties(Path(root_dir) / 'dataset_properties.json')
-        if not self.dataset_props['to_subfolders']:
-            raise NotImplementedError('Working with datasets with all datapopints ')
-        
+        # initialize keys for correct dataset initialization
+        start_config.update(max_pattern_len=None, max_panel_len=None, max_num_stitches=None)
+
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+
+        # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
+        num_panels = []
+        num_edges_in_panel = []
+        num_stitches = []
+        for data_folder, start_id in self.dataset_start_ids:
+            if data_folder is None: 
+                break
+
+            datapoint = self.datapoints_names[start_id]
+            folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
+            pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
+            num_panels.append(pattern_flat.shape[0])
+            num_edges_in_panel.append(pattern_flat.shape[1])
+            num_stitches.append(stitches.shape[1])
+
+        self.config.update(
+            max_pattern_len=max(num_panels),
+            max_panel_len=max(num_edges_in_panel),
+            max_num_stitches=max(num_stitches)
+        )
+
+        # to make sure that all the new datapoints adhere to evaluated structure!
+        self._drop_cache() 
      
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
         super().save_to_wandb(experiment)
 
-        shutil.copy(self.root_path / 'dataset_properties.json', experiment.local_path())
+        for dataset_folder in self.data_folders:
+            shutil.copy(
+                self.root_path / dataset_folder / 'dataset_properties.json', 
+                experiment.local_path() / (dataset_folder + '_properties.json'))
     
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+        """Saves prediction on the datapoint to the requested data folder (save_to) grouped by data_folders 
+            (adapted to be used with muplitple datasets)
             Returns list of paths to files with prediction visualizations"""
 
+        # TODO update usages of this function
+        # TODO update reloads of this function
+        save_to = Path(save_to)
         prediction_imgs = []
-        for prediction, name in zip(predictions, datanames):
+        for prediction, name, folder in zip(predictions, datanames, folders):
 
             pattern = self._pred_to_pattern(prediction, name)
 
             # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
             # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
+            for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
 
     # ------ Garment Data-specific basic functions --------
-    def _clean_datapoint_list(self):
-        """Remove all elements marked as failure from the datapoint list"""
-        try:
-            self.datapoints_names.remove('renders')  # TODO read ignore list from props
-        except ValueError:
+    def _clean_datapoint_list(self, datapoints_names, dataset_folder):
+        """Remove all elements marked as failure from the provided list"""
+
+        dataset_props = Properties(self.root_path / dataset_folder / 'dataset_properties.json')
+        if not dataset_props['to_subfolders']:
+            raise NotImplementedError('Only working with datasets organized with subfolders')
+
+        try: 
+            datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
+            print('Dataset {}:: /renders/ subfolder ignored'.format(dataset_folder))
+        except ValueError:  # it's ok if there is no subfolder for renders
+            print('GarmentBaseDataset::Info::No renders subfolder found in {}'.format(dataset_folder))
             pass
 
-        fails_dict = self.dataset_props['sim']['stats']['fails']
+        fails_dict = dataset_props['sim']['stats']['fails']
+        # TODO allow not to ignore some of the subsections
         for subsection in fails_dict:
             for fail in fails_dict[subsection]:
                 try:
-                    self.datapoints_names.remove(fail)
-                    print('Dataset:: {} ignored'.format(fail))
+                    datapoints_names.remove(dataset_folder + '/' + fail)
+                    print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
+        
+        return datapoints_names
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -469,30 +630,13 @@ class GarmentBaseDataset(BaseDataset):
         points = GarmentBaseDataset.sample_mesh_points(self.config['mesh_samples'], verts, faces)
 
         # Debug
-        # if datapoint_name == 'skirt_4_panels_00HUVRGNCG':
+        # if 'skirt_4_panels_00HUVRGNCG' in datapoint_name:
         #     meshplot.offline()
         #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
         return points
 
-    @staticmethod
-    def sample_mesh_points(num_points, verts, faces):
-        """A routine to sample requested number of points from a given mesh
-            Returns points in world coordinates"""
-
-        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
-        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
-
-        # convert to world coordinates
-        points = np.empty(barycentric_samples.shape)
-        for i in range(len(face_ids)):
-            face = faces[face_ids[i]]
-            barycentric_coords = barycentric_samples[i]
-            face_verts = verts[face]
-            points[i] = np.dot(barycentric_coords, face_verts)
-
-        return points
-
     def _read_pattern(self, datapoint_name, folder_elements, 
+                      pad_panels_to_len=None, pad_panel_num=None, pad_stitches_num=None,
                       with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Read given pattern in tensor representation from file"""
         spec_list = [file for file in folder_elements if 'specification.json' in file]
@@ -501,6 +645,7 @@ class GarmentBaseDataset(BaseDataset):
         
         pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
         return pattern.pattern_as_tensors(
+            pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
             with_stitch_tags=with_stitch_tags)
 
@@ -526,7 +671,25 @@ class GarmentBaseDataset(BaseDataset):
 
         return pattern
 
-    # -------- Generalized Utils
+    # -------- Generalized Utils -----
+    @staticmethod
+    def sample_mesh_points(num_points, verts, faces):
+        """A routine to sample requested number of points from a given mesh
+            Returns points in world coordinates"""
+
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
+        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
+
+        # convert to world coordinates
+        points = np.empty(barycentric_samples.shape)
+        for i in range(len(face_ids)):
+            face = faces[face_ids[i]]
+            barycentric_coords = barycentric_samples[i]
+            face_verts = verts[face]
+            points[i] = np.dot(barycentric_coords, face_verts)
+
+        return points
+
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
@@ -581,7 +744,7 @@ class GarmentParamsDataset(GarmentBaseDataset):
         * Ground_truth: parameters used to generate a garment
     """
     
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all examples as subfolders
@@ -592,6 +755,12 @@ class GarmentParamsDataset(GarmentBaseDataset):
             start_config['mesh_samples'] = 1000  # some default to ensure it's set
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+
+        if len(self.data_folders) > 0:
+            # Parametrisation of different templates may not be related
+            # It doesn't make much sense to train on different data
+
+            raise NotImplementedError('Multiple datasets are not supported for parameter prediction case')
     
     # ------ Data-specific basic functions --------
     def _get_features(self, datapoint_name, folder_elements):
@@ -626,7 +795,7 @@ class Garment3DParamsDataset(GarmentParamsDataset):
         * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
         * Ground_truth: parameters used to generate a garment
     """
-    def __init__(self, root_dir, start_config={'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
     
     # the only difference with parent class in the shape of the features
@@ -642,7 +811,7 @@ class GarmentPanelDataset(GarmentBaseDataset):
         * When saving predictions, the predicted panel is always saved as panel with name provided in config 
 
     """
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         config = {'panel_name': 'front'}
         config.update(start_config)
         super().__init__(root_dir, config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
@@ -683,7 +852,10 @@ class GarmentPanelDataset(GarmentBaseDataset):
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         # sequence = pattern.panel_as_sequence(self.config['panel_name'])
-        pattern_nn = self._read_pattern(datapoint_name, folder_elements)
+        pattern_nn, num_panels = self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'])
         # return random panel from a pattern
         return pattern_nn[torch.randint(pattern_nn.shape[0], (1,))]
         
@@ -716,14 +888,17 @@ class Garment2DPatternDataset(GarmentPanelDataset):
     """Dataset definition for 2D pattern autoencoder
         * features: a 'front' panel edges represented as a sequence
         * ground_truth is not used as in Panel dataset"""
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         self.config['panel_len'] = self[0]['features'].shape[1]
         self.config['element_size'] = self[0]['features'].shape[2]
     
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        return self._read_pattern(datapoint_name, folder_elements)
+        return self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'])[0]
         
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -736,7 +911,7 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         * features: point samples from 3D surface
         * ground truth: tensor representation of corresponding pattern"""
     
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
@@ -789,7 +964,11 @@ class Garment3DPatternDataset(GarmentBaseDataset):
         
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation"""
-        return self._read_pattern(datapoint_name, folder_elements)
+        return self._read_pattern(
+            datapoint_name, folder_elements,
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len']
+        )[0]
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object"""
@@ -802,15 +981,13 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         * it includes not only every panel outline geometry, but also 3D placement and stitches information
         Defines 3D samples from the point cloud as features
     """
-    def __init__(self, root_dir, start_config={}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         super().__init__(root_dir, start_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         
         self.config.update(
-            pattern_len=self[0]['ground_truth']['outlines'].shape[0],
-            panel_len=self[0]['ground_truth']['outlines'].shape[1],
             element_size=self[0]['ground_truth']['outlines'].shape[2],
             rotation_size=self[0]['ground_truth']['rotations'].shape[1],
             translation_size=self[0]['ground_truth']['translations'].shape[1],
@@ -878,13 +1055,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+        """Saves predicted params of the datapoint to the requested data folder.
             Returns list of paths to files with prediction visualizations
             Assumes that the number of predictions matches the number of provided data names"""
 
+        save_to = Path(save_to)
         prediction_imgs = []
-        for idx, name in enumerate(datanames):
+        for idx, (name, folder) in enumerate(zip(datanames, data_folders)):
 
             # "unbatch" dictionary
             prediction = {}
@@ -894,12 +1072,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pattern = self._pred_to_pattern(prediction, name)
 
             # save
-            final_dir = pattern.serialize(save_to, to_subfolder=True, tag='_predicted_')
+            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
             # copy originals for comparison
-            for file in (self.root_path / name).glob('*'):
+            for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
         return prediction_imgs
@@ -978,11 +1156,17 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
       
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
-        pattern, rots, tranls, stitches, stitch_tags = self._read_pattern(
-            datapoint_name, folder_elements, with_placement=True, with_stitches=True, with_stitch_tags=True)
+        pattern, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'],
+            pad_stitches_num=self.config['max_num_stitches'],
+            with_placement=True, with_stitches=True, with_stitch_tags=True)
         mask = self.free_edges_mask(pattern, stitches)
+
         return {
             'outlines': pattern, 'rotations': rots, 'translations': tranls, 
+            'num_panels': num_panels, 'num_stitches': num_stitches,
             'stitches': stitches, 'free_edges_mask': mask, 'stitch_tags': stitch_tags}
 
     def _pred_to_pattern(self, prediction, dataname):
@@ -1016,7 +1200,7 @@ class ParametrizedShirtDataSet(BaseDataset):
     For loading the data of "Learning Shared Shape Space.." paper
     """
     
-    def __init__(self, root_dir, start_config={'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': [], 'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
         """
         Args:
             root_dir (string): Directory with all the t-shirt examples as subfolders
@@ -1079,19 +1263,27 @@ if __name__ == "__main__":
     # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
     system = Properties('./system.json')
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
 
-    # data_location = Path(system['datasets_path']) / dataset_folder
+    data_location = Path(system['datasets_path']) / dataset_folder
 
-    # dataset = Garment3DPatternFullDataset(data_location)
+    dataset = Garment3DPatternFullDataset(system['datasets_path'], {
+        'data_folders': [
+            'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+            'data_1000_skirt_4_panels_200616-14-14-40'
+        ]
+    })
 
-    # print(len(dataset), dataset.config)
-    # print(dataset[0]['name'], dataset[0]['features'].shape)  # , dataset[0]['ground_truth'])
+    print(len(dataset), dataset.config)
+    # print(dataset[0]['name'], dataset[0]['data_folder'])
+    # print(dataset[0]['ground_truth'])
+    # print(dataset[-1]['name'], dataset[-1]['data_folder'])
+    # print(dataset[-1]['ground_truth'])
 
     # print(dataset[5]['ground_truth'])
 
-    # datawrapper = DatasetWrapper(dataset)
-    # datawrapper.new_split(10, 10, 300)
+    datawrapper = DatasetWrapper(dataset)
+    datawrapper.new_split(10, 10, 3000)
 
     # datawrapper.standardize_data()
 
@@ -1100,67 +1292,67 @@ if __name__ == "__main__":
     # print(dataset[0]['ground_truth'])
     # print(dataset[5]['features'])
 
-    stitch_tags = torch.Tensor(
-        [[
-            [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
-            [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
-            [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
-            [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
-            [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
-            [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
-            [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
-            [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
-            [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
+    # stitch_tags = torch.Tensor(
+    #     [[
+    #         [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
+    #         [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
+    #         [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
+    #         [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
+    #         [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
+    #         [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
+    #         [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
+    #         [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
+    #         [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
 
-            # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
-            # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
-            # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
-            # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
-            # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
-            # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
-            # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
-            # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
-            # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
+    #         # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
+    #         # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
+    #         # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
+    #         # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
+    #         # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
+    #         # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
+    #         # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
+    #         # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
+    #         # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
 
-        # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
-        # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
-        # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
-        # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
-        # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
-        # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
-        # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
-        # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
-        # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
+    #     # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
+    #     # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
+    #     # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
+    #     # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
+    #     # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
+    #     # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
+    #     # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
+    #     # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
+    #     # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
 
-        # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
-        # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
-        # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
-        # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
-        # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
-        # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
-        # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
-        # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
-        # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
+    #     # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
+    #     # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
+    #     # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
+    #     # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
+    #     # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
+    #     # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
+    #     # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
+    #     # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
+    #     # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
 
-        # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
-        # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
-        # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
-        # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
-        # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
-        # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
-        # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
-        # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
-        # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
+    #     # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
+    #     # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
+    #     # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
+    #     # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
+    #     # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
+    #     # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
+    #     # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
+    #     # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
+    #     # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
 
-        # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
-        # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
-        # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
-        # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
-        # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
-        # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
-        # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
-        # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
-        # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
-        ])
+    #     # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
+    #     # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
+    #     # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
+    #     # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
+    #     # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
+    #     # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
+    #     # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
+    #     # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
+    #     # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
+    #     ])
 
-    print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))
+    # print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))

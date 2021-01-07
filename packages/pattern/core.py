@@ -43,6 +43,9 @@ panel_spec_template = {
 }
 
 
+class EmptyPanelError(Exception):
+    pass
+
 
 class BasicPattern(object):
     """Loading & serializing of a pattern specification in custom JSON format.
@@ -158,13 +161,18 @@ class BasicPattern(object):
         return sorted_names
 
     # --------- Special representations (no changes of inner dicts) -----
-    def pattern_as_tensors(self, pad_panels_to_len=None, with_placement=False, with_stitches=False, with_stitch_tags=False):
+    def pattern_as_tensors(
+            self, 
+            pad_panels_to_len=None, pad_panels_num=None, pad_stitches_num=None,
+            with_placement=False, with_stitches=False, with_stitch_tags=False):
         """Return pattern in format suitable for NN inputs/outputs
             * 3D tensor of panel edges
             * 3D tensor of panel's 3D translations
             * 3D tensor of panel's 3D rotations
-            with_placement tag is given mostly for backward compatibility
-            """
+        Parameters to control padding: 
+            * pad_panels_to_len -- pad the list edges of every panel to this number of edges
+            * pad_panels_num -- pad the list of panels of the pattern to this number of panels
+        """
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::pattern_as_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
         
@@ -184,10 +192,24 @@ class BasicPattern(object):
             panel_translations.append(transl)
             panel_rotations.append(rot)
             panel_edge_ids_map[panel_name] = edge_ids
+        # add padded panels
+        if pad_panels_num is not None:
+            for _ in range(len(panel_seqs), pad_panels_num):
+                panel_seqs.append(np.zeros_like(panel_seqs[0]))
+                panel_translations.append(np.zeros_like(panel_translations[0]))
+                panel_rotations.append(np.zeros_like(panel_rotations[0]))
 
         # Stitches info. Order of stitches doesn't matter
-        stitches_indicies = np.empty((2, len(self.pattern['stitches'])), dtype=np.int)
+        stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
+        if stitches_num < len(self.pattern['stitches']):
+            raise ValueError(
+                'BasicPattern::Error::requiested number of stitches {} is less the number of stitches {} in pattern {}'.format(
+                    stitches_num, len(self.pattern['stitches']), self.name
+                ))
+        
+        stitches_indicies = np.zeros((2, stitches_num), dtype=np.int)
         if with_stitch_tags:
+            # padding happens automatically, if panels are padded =)
             stitch_tags = self.stitches_as_tags()
             tags_per_edge = np.zeros((len(panel_seqs), len(panel_seqs[0]), stitch_tags.shape[-1]))
         for idx, stitch in enumerate(self.pattern['stitches']):
@@ -200,11 +222,13 @@ class BasicPattern(object):
 
         # format result as requested
         result = [np.stack(panel_seqs)]
+        result.append(len(self.pattern['panels']))  # actual number of panels 
         if with_placement:
             result.append(np.stack(panel_rotations))
             result.append(np.stack(panel_translations))
         if with_stitches:
             result.append(stitches_indicies)
+            result.append(len(self.pattern['stitches']))  # actual number of stitches
         if with_stitch_tags:
             result.append(tags_per_edge)
 
@@ -226,18 +250,24 @@ class BasicPattern(object):
             panel_name = 'panel_' + str(idx)
             in_panel_order.append(panel_name)
             
-            self.panel_from_numeric(
-                panel_name, 
-                pattern_representation[idx], 
-                rotation=panel_rotations[idx] if panel_rotations is not None else None,
-                translation=panel_translations[idx] if panel_translations is not None else None,
-                padded=padded)
+            try:
+                self.panel_from_numeric(
+                    panel_name, 
+                    pattern_representation[idx], 
+                    rotation=panel_rotations[idx] if panel_rotations is not None else None,
+                    translation=panel_translations[idx] if panel_translations is not None else None,
+                    padded=padded)
+            except EmptyPanelError as e:
+                # Found an empty panel in the input
+                # While the rest of the panels should also be empty (normally), 
+                # the checks are run for all panels to make errors in predictions obvious if they occur
+                pass
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
         if stitches is not None and len(stitches) > 0:
             if not padded:
-                # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for non-padded panels
+                # TODO implement mapping of pattern-level edge ids -> (panel_id, edge_id) for panels with different number of edges
                 raise NotImplementedError('BasicPattern::Recovering stitches for unpadded pattern is not supported')
             
             edges_per_panel = pattern_representation.shape[1]
@@ -297,10 +327,10 @@ class BasicPattern(object):
             shift += shift_add  # collect all changes
             rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
 
-            print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
-                self.name,
-                panel_name, panel['rotation'], 
-                np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
+            # DEBUG
+            # print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
+            #     self.name, panel_name, panel['rotation'], 
+            #     np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
         else:
             flip_edges_curve = False
             # and rotation stays the same
@@ -331,14 +361,17 @@ class BasicPattern(object):
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::panel_from_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
 
+        if padded:
+            # edge sequence might be ending with pad values or the whole panel might be a mock object
+            selection = ~np.all(np.isclose(edge_sequence, 0, atol=1.5), axis=1)  # only non-zero rows
+            edge_sequence = edge_sequence[selection]
+            if len(edge_sequence) < 3:
+                # 0, 1, 2 edges are not enough to form a panel -> assuming this is a mock panel
+                raise EmptyPanelError(panel_name)
+
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
             self.pattern['panels'][panel_name] = copy.deepcopy(panel_spec_template)
-
-        if padded:
-            # edge sequence might be ending with pad values
-            selection = ~np.all(np.isclose(edge_sequence, 0, atol=1.5), axis=1)  # only non-zero rows
-            edge_sequence = edge_sequence[selection]
 
         # ---- Convert edge representation ----
         vertices = np.array([[0, 0]])  # first vertex is always at origin

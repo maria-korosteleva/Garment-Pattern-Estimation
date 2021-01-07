@@ -19,7 +19,7 @@ def get_values_from_args():
     # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)  # 19
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
@@ -80,7 +80,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='feature-integration-implicit-stitches', run_id='2oct1440'
+            run_name='multi-dataset-run-tee-skirts', run_id='30lcrfot'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -103,23 +103,25 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    # dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-    # dataset_folder = 'data_500_pants_straight_sides_201223-12-48-10'
-    dataset_folder = 'data_1000_pants_straight_sides_210105-10-49-02'
-    # dataset_folder = 'data_500_pants_flare_201222-11-33-00'
+    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
+    dataset_list = ['data_1000_tee_200527-14-50-42_regen_200612-16-56-43']
+        # 'data_1000_skirt_4_panels_200616-14-14-40', 
+        # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00']
     in_data_config, in_nn_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='pants-1000', 
+        run_name='multi-tee-regress', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     split, data_config = get_data_config(in_data_config, old_stats=False)
+
+    data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(Path(system_info['datasets_path']) / dataset_folder, 
+    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
                                                data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
@@ -147,9 +149,18 @@ if __name__ == "__main__":
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
     experiment.add_statistic('valid_on_best', final_metrics)
+
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'valid_per_data_folder')
+    print('Validation metrics breakdown: {}'.format(final_metrics))
+    experiment.add_statistic('valid_best_breakdown', final_metrics)
+
     final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
+
+    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test_per_data_folder')
+    print('Test metrics breakdown: {}'.format(final_metrics))
+    experiment.add_statistic('test_best_breakdown', final_metrics)
 
     # print(dataset[276]['features'])  # first element of validation set
 
@@ -158,4 +169,7 @@ if __name__ == "__main__":
     print('Predictions saved to {}'.format(prediction_path))
     # reflect predictions info in expetiment
     experiment.add_statistic('predictions_folder', prediction_path.name)
-    experiment.add_artifact(prediction_path, dataset_wrapper.dataset.name, 'result')
+    art_name = 'multi-data' if len(dataset_wrapper.dataset.data_folders) > 1 else dataset_wrapper.dataset.data_folders[0]
+
+    experiment.add_artifact(prediction_path, art_name, 'result')
+

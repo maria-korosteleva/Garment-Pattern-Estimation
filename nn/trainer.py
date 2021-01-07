@@ -27,7 +27,7 @@ class Trainer():
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=400,
-            batch_size=10,
+            batch_size=30,
             learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
@@ -260,7 +260,7 @@ class Trainer():
             try: 
                 img_files = self.datawraper.dataset.save_prediction_batch(
                     model(sample['features'].unsqueeze(0).to(self.device)), 
-                    [sample['name']], 
+                    [sample['name']], [sample['data_folder']],
                     save_to=self.folder_for_preds)
             except BaseException as e:
                 print(e)

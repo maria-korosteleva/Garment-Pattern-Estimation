@@ -287,8 +287,8 @@ class GarmentPattern3D(BaseModule):
         self.config.update(config) 
 
         # output props
-        self.max_panel_len = data_config['panel_len']
-        self.max_pattern_size = data_config['pattern_len']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
 
         # extra loss object
         self.loop_loss = metrics.PanelLoopLoss(data_stats=data_config['standardize'])
@@ -383,8 +383,8 @@ class GarmentFullPattern3D(BaseModule):
 
         # output props
         self.panel_elem_len = data_config['element_size']
-        self.max_panel_len = data_config['panel_len']
-        self.max_pattern_size = data_config['pattern_len']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
         self.rotation_size = data_config['rotation_size']
         self.translation_size = data_config['translation_size']
 
@@ -406,6 +406,9 @@ class GarmentFullPattern3D(BaseModule):
         
         # setup non-loss quality evaluation metrics
         self.with_quality_eval = True  # on by default
+        self.pattern_quality = metrics.NumbersInPanelsAccuracies(self.max_panel_len, data_stats={
+            'shift': data_config['standardize']['gt_shift']['outlines'], 
+            'scale': data_config['standardize']['gt_scale']['outlines']})
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
@@ -478,11 +481,16 @@ class GarmentFullPattern3D(BaseModule):
         preds = self(features)
         device = features.device
 
+        loss_dict = {}
+
         # Loss for panel shapes
-        outlines = ground_truth['outlines'].to(device)
-        pattern_loss = self.regression_loss(preds['outlines'], outlines)   
+        gt_outlines = ground_truth['outlines'].to(device)
+        pattern_loss = self.regression_loss(preds['outlines'], gt_outlines)   
         # Loop loss per panel
-        loop_loss = self.loop_loss(preds['outlines'], outlines)
+        loop_loss = self.loop_loss(preds['outlines'], gt_outlines)
+        if self.with_quality_eval:
+            num_panels_acc, num_edges_acc = self.pattern_quality(preds['outlines'], gt_outlines, ground_truth['num_panels'], pattern_names=names)
+            loss_dict.update(num_panels_accuracy=num_panels_acc, num_edges_accuracy=num_edges_acc)
 
         # panel placement
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
@@ -491,7 +499,7 @@ class GarmentFullPattern3D(BaseModule):
         # total loss
         full_loss = pattern_loss + loop_loss + (rot_loss + translation_loss)
 
-        loss_dict = dict(
+        loss_dict.update(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
 
@@ -499,7 +507,7 @@ class GarmentFullPattern3D(BaseModule):
         if epoch >= self.config['epoch_with_stitches']:
             # loss on stitch tags
             stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                    preds['stitch_tags'], ground_truth['stitches']) 
+                preds['stitch_tags'], ground_truth['stitches'], ground_truth['num_stitches']) 
             loss_dict.update(stitch_loss_breakdown)
             full_loss += stitch_loss
             
@@ -518,7 +526,10 @@ class GarmentFullPattern3D(BaseModule):
             if self.with_quality_eval:
                 with torch.no_grad():
                     stitch_prec, stitch_recall = self.stitch_quality(
-                        preds['stitch_tags'], preds['free_edge_mask'], ground_truth['stitches'].type(torch.IntTensor), pattern_names=names)
+                        preds['stitch_tags'], preds['free_edge_mask'], 
+                        ground_truth['stitches'].type(torch.IntTensor), 
+                        ground_truth['num_stitches'],
+                        pattern_names=names)
 
                     # free edges accuracy
                     free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))

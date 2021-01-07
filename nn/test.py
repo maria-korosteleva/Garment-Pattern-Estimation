@@ -23,20 +23,17 @@ if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
+# data_config also contains the names of datasets to use
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
 datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 # data_config.update({'num_verts': 500})
 # dataset = data.ParametrizedShirtDataSet(datapath, data_config)
-# dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-# dataset = data.GarmentParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config)
-# dataset = data.Garment3DParamsDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
-# dataset = data.GarmentPanelDataset(Path(system_info['datasets_path']) / data_config['name'], data_config)
+# dataset = data.GarmentParamsDataset(system_info['datasets_path'], data_config)
+# dataset = data.Garment3DParamsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+# dataset = data.GarmentPanelDataset(system_info['datasets_path'], data_config)
 dataset = data.Garment3DPatternFullDataset(
-    Path(system_info['datasets_path']) / dataset_folder, 
-    data_config, 
-    gt_caching=True, feature_caching=True)
+    system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
@@ -55,13 +52,20 @@ model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 # ------- Evaluate --------
 valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
 print('Validation metrics: {}'.format(valid_loss))
+valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
+print('Validation metrics per dataset: {}'.format(valid_breakdown))
+
 test_metrics = metrics.eval_metrics(model, datawrapper, 'test')
 print('Test metrics: {}'.format(test_metrics))
+test_breakdown = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
+print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # print(dataset[276]['features'])  # first element of validation set
 
 # experiment.add_statistic('valid_on_best', valid_loss)
+# experiment.add_statistic('valid_best_breakdown', valid_breakdown)
 # experiment.add_statistic('test_on_best', test_metrics)
+# experiment.add_statistic('test_best_breakdown', test_breakdown)
 
 # -------- Predict ---------
 # save prediction for validation to file
