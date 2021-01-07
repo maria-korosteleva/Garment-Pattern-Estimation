@@ -106,7 +106,8 @@ if __name__ == "__main__":
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = ['data_1000_tee_200527-14-50-42_regen_200612-16-56-43']
         # 'data_1000_skirt_4_panels_200616-14-14-40', 
-        # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00']
+        # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00',
+        # 'data_1000_pants_straight_sides_210105-10-49-02']
     in_data_config, in_nn_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
