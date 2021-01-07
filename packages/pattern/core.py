@@ -134,7 +134,7 @@ class BasicPattern(object):
         if location_dict is None:  # obtain location for all panels to use in sorting further
             location_dict = {}
             for name in name_list:
-                location_dict[name] = self._panel_universal_transtation(name)
+                location_dict[name], _ = self._panel_universal_transtation(name)
 
         # consider only translations of the requested panel names
         reference = [location_dict[panel_n][dim] for panel_n in name_list]
@@ -347,12 +347,10 @@ class BasicPattern(object):
                 edge_sequence.append(np.zeros_like(edge_sequence[0]))
         
         # ----- 3D placement convertion  ------
-        # Global Translation with compensative update for local origin change (shift)
-        shift = np.append(shift, 0)  # to 3D
-        comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
-        translation = np.array(panel['translation']) + comenpensating_shift
+        # Global Translation (more-or-less stable across designs)
+        translation, _ = self._panel_universal_transtation(panel_name)
 
-        rotation_representation = np.array(panel_rotation.as_euler('xyz', degrees=True))
+        rotation_representation = np.array(panel_rotation.as_quat())
 
         return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
 
@@ -402,12 +400,21 @@ class BasicPattern(object):
         panel['edges'] = edges
 
         # ----- 3D placement setup --------
-        if translation is not None:
-            # simply set as is
-            panel['translation'] = translation.tolist()
-        
         if rotation is not None:
-            panel['rotation'] = rotation.tolist()
+            rotation_obj = Rotation.from_quat(rotation)
+            panel['rotation'] = rotation_obj.as_euler('xyz', degrees=True).tolist()
+
+        if translation is not None:
+            # we are getting translation of 3D top-midpoint (aka 'universal translation')
+            # convert it to the translation from the origin 
+            _, transl_origin = self._panel_universal_transtation(panel_name)
+
+            shift = np.append(transl_origin, 0)  # to 3D
+            panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)
+            comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
+            translation = translation + comenpensating_shift
+
+            panel['translation'] = translation.tolist()
         
     def stitches_as_tags(self, panel_order=None, pad_to_len=None):
         """For every stitch, assign an approximate identifier (tag) of the stitch to the edges that are part of that stitch
@@ -552,16 +559,19 @@ class BasicPattern(object):
         low_left = vertices.min(axis=0)
         mid_x = (top_right[0] + low_left[0]) / 2
         mid_y = (top_right[1] + low_left[1]) / 2
+        mid_points_2D = [
+            [mid_x, top_right[1]], 
+            [mid_x, low_left[1]],
+            [top_right[0], mid_y],
+            [low_left[0], mid_y]
+        ]
         rot_matrix = Rotation.from_euler('xyz', panel['rotation'], degrees=True).as_matrix()  # calculate once for all points
-        mid_points = np.vstack((
-            self._point_in_3D([mid_x, top_right[1]], rot_matrix, panel['translation']), 
-            self._point_in_3D([mid_x, low_left[1]], rot_matrix, panel['translation']), 
-            self._point_in_3D([top_right[0], mid_y], rot_matrix, panel['translation']), 
-            self._point_in_3D([low_left[0], mid_y], rot_matrix, panel['translation'])
+        mid_points_3D = np.vstack(tuple(
+            [self._point_in_3D(coords, rot_matrix, panel['translation']) for coords in mid_points_2D]
         ))
-        top_mid_point = mid_points[:, 1].argmax()
+        top_mid_point = mid_points_3D[:, 1].argmax()
 
-        return mid_points[top_mid_point]
+        return mid_points_3D[top_mid_point], np.array(mid_points_2D[top_mid_point])
 
     # --------- Pattern operations (changes inner dicts) ----------
     def _normalize_template(self):
@@ -1185,5 +1195,5 @@ if __name__ == "__main__":
     # print(pattern.pattern['stitches'])
     print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_origin'
+    empty_pattern.name = pattern.name + '_translation'
     empty_pattern.serialize(system_config['output'], to_subfolder=True)

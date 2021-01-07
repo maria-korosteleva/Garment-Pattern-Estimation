@@ -375,6 +375,7 @@ class GarmentFullPattern3D(BaseModule):
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
             'epoch_with_stitches': 40, 
+            'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
             'stitch_hardnet_version': False 
         })
         # update with input settings
@@ -513,7 +514,7 @@ class GarmentFullPattern3D(BaseModule):
             if self.stitch_loss_supervised is not None:
                 stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
                 loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
-                full_loss += stitch_sup_loss
+                full_loss += self.config['stitch_supervised_weight'] * stitch_sup_loss
 
             # free\stitches edges classification
             gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
