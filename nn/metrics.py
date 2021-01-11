@@ -177,7 +177,7 @@ class PatternStitchLoss():
             * Uses trick from HardNet: only evaluate the loss on the closest negative example!
         """
         total_neg_loss = []
-        for pattern_tags in total_tags:  # per pattern in batch
+        for idx, pattern_tags in enumerate(total_tags):  # per pattern in batch
             # slice pattern tags to remove consideration for stitch padding
             half_size = len(pattern_tags) // 2
             num_stitches = gt_stitches_nums[idx]
