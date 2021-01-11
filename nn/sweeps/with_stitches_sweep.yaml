@@ -1,0 +1,72 @@
+# How to run
+entity: maria_korosteleva
+# Assume running from the root of git directory
+program: ./nn/train.py
+command:
+  - ${env}
+  - C:/ProgramData/Anaconda3/python.exe
+  - ${program}
+  - ${args}
+
+# Description of this sweep
+project: Garments-Reconstruction
+name: multi-data-parameters
+decription: 3D-to-pattern with stitches training on all three garment types
+
+# Setup
+method: random  # avoid local minima
+metric:
+  name: best_valid_loss  # best is what we are intresed in
+  goal: minimize  
+parameters:
+  # basic
+  mesh_samples_multiplier:
+    min: 4
+    max: 8
+  # Decoder
+  pattern_encoding_multiplier:
+    min: 9
+    max: 15
+  panel_encoding_multiplier:
+    min: 6
+    max: 14
+  pattern_n_layers:
+    min: 2
+    max: 4
+  panel_n_layers:
+    min: 2
+    max: 4
+  pattern_decoder:
+    values: ["LSTMDecoderModule", "LSTMDoubleReverseDecoderModule"]
+  panel_decoder:
+    values: ["LSTMDecoderModule", "LSTMDoubleReverseDecoderModule"]
+  # stitches
+  st_tag_len:
+    min: 3
+    max: 10
+  st_tag_margin:
+    min: 0.2
+    max: 1.0
+  st_tag_hardnet:
+    values: [0, 1]
+  # EdgeConv
+  conv_depth:
+    min: 1
+    max: 3
+  k_multiplier:
+    min: 1
+    max: 2
+  ec_hidden_multiplier:
+    min: 20
+    max: 30
+  ec_hidden_depth:
+    min: 2
+    max: 4
+  ec_feature_multiplier:
+    min: 10
+    max: 25
+  # with skip connections
+  ec_skip:
+    values: [0, 1]
+   
+  

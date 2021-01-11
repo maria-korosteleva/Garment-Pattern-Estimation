@@ -28,6 +28,11 @@ def get_values_from_args():
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
     parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')
     parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
+    # stitches
+    parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
+    parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
+    parser.add_argument('--st_tag_hardnet', '-sthard', help='weather to use hardnet in stitch loss', type=int, default=0)
+
     # EdgeConv
     parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=2)
     parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=1)  # 2
@@ -55,6 +60,11 @@ def get_values_from_args():
         'pattern_n_layers': args.pattern_n_layers,
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
+
+        # stitches
+        'stitch_tag_dim': args.st_tag_len, 
+        'stitch_tags_margin': args.st_tag_margin,
+        'stitch_hardnet_version': args.st_tag_hardnet,
 
         # EdgeConv params
         'conv_depth': args.conv_depth, 
