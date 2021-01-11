@@ -207,7 +207,9 @@ class BasicPattern(object):
                     stitches_num, len(self.pattern['stitches']), self.name
                 ))
         
-        stitches_indicies = np.zeros((2, stitches_num), dtype=np.int)
+        # Padded value is zero allows to treat the whole thing as index array
+        # But need care when using -- as indexing will not crush when padded values are not filtered
+        stitches_indicies = np.zeros((2, stitches_num), dtype=np.int) 
         if with_stitch_tags:
             # padding happens automatically, if panels are padded =)
             stitch_tags = self.stitches_as_tags()

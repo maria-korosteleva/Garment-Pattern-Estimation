@@ -301,7 +301,7 @@ class NumbersInPanelsAccuracies():
             for panel_id in range(max_num_panels):
                 predicted_bool_matrix = torch.isclose(
                     predicted_outlines[pattern_idx][panel_id], 
-                    self.empty_panel_template, atol=0.05)  # this value is adjusted to have similat effect to what is used in core.py
+                    self.empty_panel_template, atol=0.07)  # this value is adjusted to have similar effect to what is used in core.py
                 # empty panel detected -- stop further eval
                 if torch.all(predicted_bool_matrix):
                     break
@@ -315,7 +315,7 @@ class NumbersInPanelsAccuracies():
                 # othervise, we have a real panel
                 predicted_num_panels += 1
 
-                gt_bool_matrix = torch.isclose(gt_outlines[pattern_idx][panel_id], self.empty_panel_template, atol=0.05)
+                gt_bool_matrix = torch.isclose(gt_outlines[pattern_idx][panel_id], self.empty_panel_template, atol=0.07)
                 gt_num_edges = (~torch.all(gt_bool_matrix, axis=1)).sum()  # only non-padded rows
 
                 panel_correct = (predicted_num_edges == gt_num_edges)

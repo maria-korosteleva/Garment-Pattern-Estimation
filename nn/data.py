@@ -1137,13 +1137,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return torch.tensor(stitches).transpose(0, 1).to(stitch_tags.device) if len(stitches) > 0 else torch.tensor([])
 
     @staticmethod
-    def free_edges_mask(pattern, stitches):
+    def free_edges_mask(pattern, stitches, num_stitches):
         """
         Construct the mask to identify edges that are not connected to any other
         """
         mask = np.ones((pattern.shape[0], pattern.shape[1]), dtype=np.bool)
         max_edge = pattern.shape[1]
-        for side in stitches:
+
+        for side in stitches[:, :num_stitches]:  # ignore the padded part
             for edge_id in side:
                 mask[edge_id // max_edge][edge_id % max_edge] = False
         
@@ -1162,7 +1163,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pad_panel_num=self.config['max_pattern_len'],
             pad_stitches_num=self.config['max_num_stitches'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
-        mask = self.free_edges_mask(pattern, stitches)
+        mask = self.free_edges_mask(pattern, stitches, num_stitches)
 
         return {
             'outlines': pattern, 'rotations': rots, 'translations': tranls, 
