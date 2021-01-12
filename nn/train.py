@@ -90,7 +90,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='multi-dataset-run-tee-skirts', run_id='30lcrfot'
+            run_name='multi-all-both-stitch-losses', run_id='5gd5ln7x'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -98,7 +98,7 @@ def get_data_config(in_config, old_stats=False):
             'standardize': data_config['standardize']  # the rest of the info is not needed here
         }
     else:  # default split for reproducibility
-        split = {'valid_percent': 10, 'test_percent': 10, 'random_seed': 10} 
+        split = {'valid_percent': 20, 'test_percent': 20, 'random_seed': 10} 
         data_config = {}
 
     print(data_config)
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='multi-tee-skirt-pants', 
+        run_name='multi-all-fin-question-mark', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
