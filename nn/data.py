@@ -527,30 +527,37 @@ class GarmentBaseDataset(BaseDataset):
             * the initial value is only given for reference
         """
         # initialize keys for correct dataset initialization
-        start_config.update(max_pattern_len=None, max_panel_len=None, max_num_stitches=None)
+        if ('max_pattern_len' not in start_config 
+                or 'max_panel_len' not in start_config
+                or 'max_num_stitches' not in start_config):
+            start_config.update(max_pattern_len=None, max_panel_len=None, max_num_stitches=None)
+            pattern_size_initialized = False
+        else:
+            pattern_size_initialized = True
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
-        num_panels = []
-        num_edges_in_panel = []
-        num_stitches = []
-        for data_folder, start_id in self.dataset_start_ids:
-            if data_folder is None: 
-                break
+        if not pattern_size_initialized:
+            num_panels = []
+            num_edges_in_panel = []
+            num_stitches = []
+            for data_folder, start_id in self.dataset_start_ids:
+                if data_folder is None: 
+                    break
 
-            datapoint = self.datapoints_names[start_id]
-            folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
-            pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
-            num_panels.append(pattern_flat.shape[0])
-            num_edges_in_panel.append(pattern_flat.shape[1])
-            num_stitches.append(stitches.shape[1])
+                datapoint = self.datapoints_names[start_id]
+                folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
+                pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
+                num_panels.append(pattern_flat.shape[0])
+                num_edges_in_panel.append(pattern_flat.shape[1])
+                num_stitches.append(stitches.shape[1])
 
-        self.config.update(
-            max_pattern_len=max(num_panels),
-            max_panel_len=max(num_edges_in_panel),
-            max_num_stitches=max(num_stitches)
-        )
+            self.config.update(
+                max_pattern_len=max(num_panels),
+                max_panel_len=max(num_edges_in_panel),
+                max_num_stitches=max(num_stitches)
+            )
 
         # to make sure that all the new datapoints adhere to evaluated structure!
         self._drop_cache() 
