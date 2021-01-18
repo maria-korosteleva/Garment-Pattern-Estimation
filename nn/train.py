@@ -100,14 +100,23 @@ def get_data_config(in_config, old_stats=False):
             'max_panel_len': data_config['max_panel_len'],
             'max_num_stitches': data_config['max_num_stitches']  # the rest of the info is not needed here
         }
+        # failsafety
+        try:
+            old_experiment.load_file('data_split.json', './wandb')
+            split['filename'] = './wandb/data_split.json'
+        except ValueError as e:  # if file not found, training will just proceed with generated split
+            print(e)
+            print('Experiment::Warning::Skipping..')
+
     else:  # default split for reproducibility
+        # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_percent': 20, 'test_percent': 20, 'random_seed': 10} 
         data_config = {}
 
-    print(data_config)
     # update with freshly configured values
     data_config.update(in_config)
-    print(data_config)
+    
+    print(split)
 
     return split, data_config
 
@@ -118,9 +127,9 @@ if __name__ == "__main__":
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = [
-        'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+        # 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         'data_1000_skirt_4_panels_200616-14-14-40', 
-        'data_1000_pants_straight_sides_210105-10-49-02'
+        # 'data_1000_pants_straight_sides_210105-10-49-02'
     ]
         # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00']
     in_data_config, in_nn_config, net_seed = get_values_from_args()
@@ -128,12 +137,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='multi-all-new-architecture', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='multi-split-serialize', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)
+    split, data_config = get_data_config(in_data_config, old_stats=True)
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)

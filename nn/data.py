@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import os
 from pathlib import Path
@@ -114,10 +115,19 @@ class DatasetWrapper(object):
 
         torch.manual_seed(self.split_info['random_seed'])
 
-        self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
-            self.split_info['valid_percent'], 
-            self.split_info['test_percent'], 
-            with_breakdown=True)
+        # if file is provided
+        if 'filename' in self.split_info:
+            print('DataWrapper::Loading data split from {}'.format(self.split_info['filename']))
+            with open(self.split_info['filename'], 'r') as f_json:
+                split_dict = json.load(f_json)
+            self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.split_from_dict(
+                split_dict, 
+                with_breakdown=True)
+        else:
+            self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
+                self.split_info['valid_percent'], 
+                self.split_info['test_percent'], 
+                with_breakdown=True)
 
         if batch_size is not None:
             self.batch_size = batch_size
@@ -150,6 +160,14 @@ class DatasetWrapper(object):
         """Save current data info to the wandb experiment"""
         # Split
         experiment.add_config('data_split', self.split_info)
+        # save serialized split s.t. it's loaded to wandb
+        split_datanames = {}
+        split_datanames['training'] = [self.dataset.datapoints_names[idx] for idx in self.training.indices]
+        split_datanames['validation'] = [self.dataset.datapoints_names[idx] for idx in self.validation.indices]
+        split_datanames['test'] = [self.dataset.datapoints_names[idx] for idx in self.test.indices]
+        with open(experiment.local_path() / 'data_split.json', 'w') as f_json:
+            json.dump(split_datanames, f_json, indent=2, sort_keys=True)
+
         # data info
         self.dataset.save_to_wandb(experiment)
 
@@ -468,6 +486,54 @@ class BaseDataset(Dataset):
             torch.utils.data.Subset(self, train_ids), 
             torch.utils.data.Subset(self, valid_ids),
             torch.utils.data.Subset(self, test_ids) if test_percent else None
+        )
+
+    def split_from_dict(self, split_dict, with_breakdown=False):
+        """
+            Reproduce the data split in the provided dictionary: 
+            the elements of the currect dataset should play the same role as in provided dict
+        """
+        train_ids, valid_ids, test_ids = [], [], []
+        train_breakdown, valid_breakdown, test_breakdown = {}, {}, {}
+
+        training_datanames = set(split_dict['training'])
+        valid_datanames = set(split_dict['validation'])
+        test_datanames = set(split_dict['test'])
+        
+        for idx in range(len(self.datapoints_names)):
+            if self.datapoints_names[idx] in training_datanames:  # usually the largest, so check first
+                train_ids.append(idx)
+            elif len(test_datanames) > 0 and self.datapoints_names[idx] in test_datanames:
+                test_ids.append(idx)
+            else:  
+                # validation set is not that significant to reproduce exactly, so just put all leftovers there
+                valid_ids.append(idx)
+
+        if with_breakdown:
+            # train
+            per_data = self.indices_by_data_folder(train_ids)
+            for folder, ids_list in per_data.items():
+                train_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+            
+            per_data = self.indices_by_data_folder(valid_ids)
+            for folder, ids_list in per_data.items():
+                valid_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+            
+            per_data = self.indices_by_data_folder(test_ids)
+            for folder, ids_list in per_data.items():
+                test_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+
+            return (
+                torch.utils.data.Subset(self, train_ids), 
+                torch.utils.data.Subset(self, valid_ids),
+                torch.utils.data.Subset(self, test_ids) if len(test_ids) > 0 else None,
+                train_breakdown, valid_breakdown, test_breakdown
+            )
+
+        return (
+            torch.utils.data.Subset(self, train_ids), 
+            torch.utils.data.Subset(self, valid_ids),
+            torch.utils.data.Subset(self, test_ids) if len(test_ids) > 0 else None
         )
 
     # -------- Data-specific functions --------

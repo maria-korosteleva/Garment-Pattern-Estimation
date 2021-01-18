@@ -41,7 +41,7 @@ class Trainer():
         )
 
         if dataset is not None:
-            self.use_dataset(dataset, **data_split)
+            self.use_dataset(dataset, data_split)
    
     def init_randomizer(self, random_seed=None):
         """Init randomizatoin for torch globally for reproducibility. 
@@ -62,10 +62,13 @@ class Trainer():
         """add given values to training config"""
         self.setup.update(kwargs)
 
-    def use_dataset(self, dataset, valid_percent=None, test_percent=None, random_seed=None):
+    def use_dataset(self, dataset, split_info):
         """Use specified dataset for training with given split settings"""
         self.datawraper = data.DatasetWrapper(dataset)
-        self.datawraper.new_split(valid_percent, test_percent, random_seed)
+        if 'filename' not in split_info:
+            self.datawraper.new_split(split_info['valid_percent'], split_info['test_percent'], split_info['random_seed'])
+        else:
+            self.datawraper.load_split(split_info)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
 
         if self.standardize_data:

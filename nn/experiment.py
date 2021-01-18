@@ -224,6 +224,12 @@ class WandbRunWrappper(object):
         if wait_for_upload:
             self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter-1))
 
+    def load_file(self, filename, to_path='.'):
+        """Download a file from the wandb experiment to given path or to currect directory"""
+        if not self.run_id:
+            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore a file from the could')
+        wb.restore(filename, run_path=self.project + '/' + self.run_id, replace=True, root=to_path)
+
     # ------- utils -------
     def _load_artifact(self, artifact_name, to_path=None):
         """Download a requested artifact withing current project. Return loaded path"""
