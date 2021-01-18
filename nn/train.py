@@ -90,7 +90,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='multi-all-fin', run_id='216nexgv'
+            run_name='multi-all-split-info', run_id='2m2w6uns'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -127,9 +127,9 @@ if __name__ == "__main__":
     # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = [
-        # 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+        'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         'data_1000_skirt_4_panels_200616-14-14-40', 
-        # 'data_1000_pants_straight_sides_210105-10-49-02'
+        'data_1000_pants_straight_sides_210105-10-49-02'
     ]
         # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00']
     in_data_config, in_nn_config, net_seed = get_values_from_args()
@@ -137,8 +137,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='multi-split-serialize', 
+        project_name='Garments-Reconstruction', 
+        run_name='multi-all', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
