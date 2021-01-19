@@ -81,7 +81,7 @@ class DatasetWrapper(object):
         self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
 
         self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
-        self.loader_test_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.test else None
+        self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
 
         self.loader_full = DataLoader(self.dataset, self.batch_size)
 
