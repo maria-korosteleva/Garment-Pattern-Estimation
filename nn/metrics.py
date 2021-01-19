@@ -342,7 +342,7 @@ class NumbersInPanelsAccuracies():
         return correct_num_panels / batch_size, num_edges_accuracies / batch_size
     
 
-class PanelVertsMSE():
+class PanelVertsL2():
     """
         Aims to evaluate the quality of panel shape prediction independently from loss evaluation
         * Convers panels edge lists to vertex representation (including curvature coordinates)
@@ -432,6 +432,10 @@ class PanelVertsMSE():
         vertices = vertices - torch.mean(vertices, axis=0)  # shift to average coordinate
 
         return vertices
+
+
+class UniversalMSE():
+    pass
 
 
 # ------- Model evaluation shortcut -------------
