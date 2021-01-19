@@ -22,26 +22,26 @@ def get_values_from_args():
     parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     # Pattern decoder
-    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=15)  # 9
+    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
-    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=8)  # 10
-    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=2)  # 3
+    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=10)
+    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
     parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')
     parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
     # stitches
     parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
-    parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.24)  # 0.3
+    parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
     parser.add_argument('--st_tag_hardnet', '-sthard', help='weather to use hardnet in stitch loss', type=int, default=0)
 
     # EdgeConv
     parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=2)
     parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=1)
-    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=30)  # 25
+    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 8', type=int, default=25)
     parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
-    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=23)  # 14
+    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 8', type=int, default=14)
     parser.add_argument('--ec_conv_aggr', '-ecca', help='type of feature aggregation in EdgeConv on edge level', type=str, default='max')
     parser.add_argument('--ec_global_aggr', '-ecga', help='type of feature aggregation in EdgeConv on graph level', type=str, default='mean')
-    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=1)  # 0
+    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=0)
     parser.add_argument('--ec_gpool', '-ecgp', help='Wether to use graph pooling after convolution in EdgeConv', type=int, default=0)
     parser.add_argument('--ec_gpool_ratio', '-ecr', help='ratio of graph pooling in EdgeConv', type=float, default=0.1)
 
@@ -128,8 +128,8 @@ if __name__ == "__main__":
     dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = [
         'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
-        'data_1000_skirt_4_panels_200616-14-14-40', 
-        'data_1000_pants_straight_sides_210105-10-49-02'
+        # 'data_1000_skirt_4_panels_200616-14-14-40', 
+        # 'data_1000_pants_straight_sides_210105-10-49-02'
     ]
         # 'data_500_pants_straight_sides_201223-12-48-10', 'data_500_pants_flare_201222-11-33-00']
     in_data_config, in_nn_config, net_seed = get_values_from_args()
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='multi-all', 
+        run_name='multi-tee-fin', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
