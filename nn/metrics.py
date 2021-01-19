@@ -16,7 +16,7 @@ def eval_pad_vector(data_stats={}):
         return None
 
 
-# ------- custom metrics --------
+# ------- custom losses --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
         ensuring edges within panel loop & return to origin"""
@@ -46,7 +46,7 @@ class PanelLoopLoss():
             if len(original_panels.shape) > 3:
                 original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
             if data_stats:  # update pad vector
-                self._eval_pad_vector(data_stats)
+                self.pad_tenzor = eval_pad_vector(data_stats)
             if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
                 self.pad_tenzor = torch.zeros(original_panels.shape[-1])
             pad_tenzor_propagated = self.pad_tenzor.repeat(original_panels.shape[1], 1)
@@ -203,6 +203,7 @@ class PatternStitchLoss():
         # average neg loss per tag
         return sum(total_neg_loss) / len(total_neg_loss)
 
+# ------- custom quality metrics --------
 
 class PatternStitchPrecisionRecall():
     """Evaluate Precision and Recall scores for pattern stitches prediction
@@ -340,6 +341,97 @@ class NumbersInPanelsAccuracies():
         # average by batch
         return correct_num_panels / batch_size, num_edges_accuracies / batch_size
     
+
+class PanelVertsMSE():
+    """
+        Aims to evaluate the quality of panel shape prediction independently from loss evaluation
+        * Convers panels edge lists to vertex representation (including curvature coordinates)
+        * and evaluated MSE on them
+    """
+    def __init__(self, max_edges_in_panel, data_stats={}):
+        """Info for evaluating padding vector if data statistical info is applied to it.
+            * if standardization/normalization transform is applied to padding, 'data_stats' should be provided
+                'data_stats' format: {'shift': <torch.tenzor>, 'scale': <torch.tensor>} 
+        """
+        self.data_stats = data_stats
+        self.max_panel_len = max_edges_in_panel
+        self.empty_panel_template = torch.zeros((max_edges_in_panel, len(self.data_stats['shift'])))
+    
+    def __call__(self, predicted_outlines, gt_outlines):
+        """
+         Evaluate on the batch of panel outlines predictoins 
+        """
+        # flatten input into list of panels
+        predicted_outlines = predicted_outlines.view(-1, predicted_outlines.shape[-2], predicted_outlines.shape[-1])
+        gt_outlines = gt_outlines.view(-1, gt_outlines.shape[-2], gt_outlines.shape[-1])
+
+        # un-std
+        predicted_outlines = predicted_outlines * self.data_stats['scale'] + self.data_stats['shift']
+        gt_outlines = gt_outlines * self.data_stats['scale'] + self.data_stats['shift']
+
+        # for unpadding
+        if self.empty_panel_template.device != predicted_outlines.device:
+            self.empty_panel_template = self.empty_panel_template.to(predicted_outlines.device)
+
+        # per-panel evaluation
+        panel_errors = []
+        for panel_idx in range(len(predicted_outlines)):
+            prediced_panel = predicted_outlines[panel_idx]
+            gt_panel = gt_outlines[panel_idx]
+
+            # unpad by gt info
+            # TODO this repeats in many metrics -- might need a shared function
+            gt_bool_matrix = torch.isclose(gt_panel, self.empty_panel_template, atol=0.07)  # tol doesn't matter much, as we work on ground truth
+            # empty panel detected -- stop further eval
+            if torch.all(gt_bool_matrix):
+                break
+            # per-row matrix
+            # check is the num of edges matches
+            predicted_num_edges = (~torch.all(predicted_bool_matrix, axis=1)).sum()  # only non-padded rows
+        
+            if predicted_num_edges < 3:
+                # 0, 1, 2 edges are not enough to form a panel -> assuming this is an empty panel
+                break
+
+            prediced_panel = prediced_panel[:predicted_num_edges, :]  # TODO not sure this is the correct way to extract the unpadded thing
+            gt_panel = gt_panel[:predicted_num_edges, :]
+
+            print('Error eval')
+
+            # average squred error per vertex (not per coordinate!!) hence internal sum
+            panel_errors.append(
+                torch.mean(((_to_verts(gt_panel) - _to_verts(prediced_panel)) ** 2).sum(dim=1))
+            )
+        
+        # mean of errors per panel
+        return sum(panel_errors) / len(panel_errors)
+
+    def _to_verts(self, panel_edges):
+        """Convert normalized panel edges into the vertex representation"""
+
+        print(panel_edges)
+
+        vert_list = [torch.tenzor([0, 0])]  # always starts at zero
+        # edge: first two elements are the 2D vector coordinates, next two elements are curvature coordinates
+        for edge in panel_edges:
+            next_vertex = vert_list[-1] + edge[:2]
+            edge_perp = torch.tenzor([-edge[1], edge[0]])
+
+            # NOTE: on non-curvy edges, the curvature vertex in panel space will be on the previous vertex
+            #       it might result in some error amplification, but we could not find optimal yet simple solution
+            next_curvature = vert_list[-1] + edge[2] * edge[:2]  # X curvature coordinate
+            next_curvature = next_curvature + edge[3] * edge_perp  # Y curvature coordinate
+
+            vert_list.append(next_curvature)
+            vert_list.append(next_vertex)
+        vertices = torch.cat(vert_list)
+
+        vertices = vertices - torch.mean(vertices, axis=1)  # shift to average coordinate
+
+        print(vertices)
+
+        return vertices
+
 
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
