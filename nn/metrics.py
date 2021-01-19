@@ -434,8 +434,38 @@ class PanelVertsL2():
         return vertices
 
 
-class UniversalMSE():
-    pass
+class UniversalL2():
+    """
+        Evaluate L2 on the provided (un-standardized) data -- useful for 3D placement
+    """
+    def __init__(self, data_stats={}):
+        """Info for un-doing the shift&scale of the data 
+        """
+        self.data_stats = {
+            'shift': torch.tensor(data_stats['shift']),
+            'scale': torch.tensor(data_stats['scale']),
+        }
+    
+    def __call__(self, predicted, gt):
+        """
+         Evaluate on the batch of predictions 
+        """
+        # flatten input 
+        predicted = predicted.view(-1, predicted.shape[-1])
+        gt = gt.view(-1, gt.shape[-1])
+
+        # devices
+        for key in self.data_stats:
+            if self.data_stats[key].device != predicted.device:
+                self.data_stats[key] = self.data_stats[key].to(predicted.device)
+
+        # un-std
+        predicted = predicted * self.data_stats['scale'] + self.data_stats['shift']
+        gt = gt * self.data_stats['scale'] + self.data_stats['shift']
+
+        L2_norms = torch.sqrt(((gt - predicted) ** 2).sum(dim=1))
+
+        return torch.mean(L2_norms)
 
 
 # ------- Model evaluation shortcut -------------

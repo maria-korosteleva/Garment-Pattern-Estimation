@@ -412,6 +412,14 @@ class GarmentFullPattern3D(BaseModule):
         self.pattern_shape_quality = metrics.PanelVertsL2(self.max_panel_len, data_stats={
             'shift': data_config['standardize']['gt_shift']['outlines'], 
             'scale': data_config['standardize']['gt_scale']['outlines']})
+        self.rotation_quality = metrics.UniversalL2(data_stats={
+            'shift': data_config['standardize']['gt_shift']['rotations'], 
+            'scale': data_config['standardize']['gt_scale']['rotations']}
+        )
+        self.translation_quality = metrics.UniversalL2(data_stats={
+            'shift': data_config['standardize']['gt_shift']['translations'], 
+            'scale': data_config['standardize']['gt_scale']['translations']}
+        )
         self.stitch_quality = metrics.PatternStitchPrecisionRecall(
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
@@ -491,14 +499,6 @@ class GarmentFullPattern3D(BaseModule):
         pattern_loss = self.regression_loss(preds['outlines'], gt_outlines)   
         # Loop loss per panel
         loop_loss = self.loop_loss(preds['outlines'], gt_outlines)
-        if self.with_quality_eval:
-            with torch.no_grad():
-                num_panels_acc, num_edges_acc = self.pattern_nums_quality(preds['outlines'], gt_outlines, ground_truth['num_panels'], pattern_names=names)
-                shape_mse = self.pattern_shape_quality(preds['outlines'], gt_outlines)
-                loss_dict.update(
-                    num_panels_accuracy=num_panels_acc, 
-                    num_edges_accuracy=num_edges_acc,
-                    panel_shape_mse=shape_mse)
 
         # panel placement
         rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
@@ -510,6 +510,19 @@ class GarmentFullPattern3D(BaseModule):
         loss_dict.update(
             pattern_loss=pattern_loss, loop_loss=loop_loss, 
             rotation_loss=rot_loss, translation_loss=translation_loss)
+
+        if self.with_quality_eval:
+            with torch.no_grad():
+                num_panels_acc, num_edges_acc = self.pattern_nums_quality(
+                    preds['outlines'], gt_outlines, ground_truth['num_panels'], pattern_names=names)
+                shape_l2 = self.pattern_shape_quality(preds['outlines'], gt_outlines)
+                rotation_l2 = self.rotation_quality(preds['rotations'], ground_truth['rotations'].to(device))
+                translation_l2 = self.translation_quality(preds['translations'], ground_truth['translations'].to(device))
+                loss_dict.update(
+                    num_panels_accuracy=num_panels_acc, 
+                    num_edges_accuracy=num_edges_acc,
+                    panel_shape_l2=shape_l2, 
+                    rotation_l2=rotation_l2, translation_l2=translation_l2)
 
         # if we are far enough in the training, evaluate stitch loss too
         if epoch >= self.config['epoch_with_stitches']:

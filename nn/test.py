@@ -16,8 +16,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='panel-origin-fix', 
-    run_id='1svo6wuc')  # finished experiment
+    run_name='multi-tee-fin', 
+    run_id='odc1rrdl')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -26,7 +26,6 @@ if not experiment.is_finished():
 # data_config also contains the names of datasets to use
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
-datapath = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
 # data_config.update({'num_verts': 500})
 # dataset = data.ParametrizedShirtDataSet(datapath, data_config)
 # dataset = data.GarmentParamsDataset(system_info['datasets_path'], data_config)
@@ -37,6 +36,8 @@ dataset = data.Garment3DPatternFullDataset(
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
+
+batch_size = 5
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
@@ -69,8 +70,8 @@ print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # -------- Predict ---------
 # save prediction for validation to file
-prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-print('Saved to {}'.format(prediction_path))
+# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+# print('Saved to {}'.format(prediction_path))
 # reflect predictions info in expetiment
 # experiment.add_statistic('predictions_folder', prediction_path.name)
 # experiment.add_artifact('D:/GK-Pattern-Data-Gen/nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201113-17-27-49', datawrapper.dataset.name, 'result')
