@@ -97,16 +97,16 @@ class EdgeConvFeatures(nn.Module):
         super().__init__()
 
         self.config = {
-            'conv_depth': 3, 
-            'k_neighbors': 10, 
-            'EConv_hidden': 64, 
+            'conv_depth': 2, 
+            'k_neighbors': 5, 
+            'EConv_hidden': 200, 
             'EConv_hidden_depth': 2, 
-            'EConv_feature': 64, 
+            'EConv_feature': 112, 
             'EConv_aggr': 'max', 
-            'global_pool': 'max', 
-            'skip_connections': True, 
-            'graph_pooling': True,
-            'pool_ratio': 0.5  # only used when the graph pooling is enabled
+            'global_pool': 'mean', 
+            'skip_connections': False, 
+            'graph_pooling': False,
+            'pool_ratio': 0.1  # only used when the graph pooling is enabled
         }  # defaults for this net
         self.config.update(config)  # from input
 

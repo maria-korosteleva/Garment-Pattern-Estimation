@@ -427,13 +427,13 @@ class GarmentFullPattern3D(BaseModule):
             } if data_config['explicit_stitch_tags'] else None
         )
 
-        # Feature extractor definition
+        # ---- Feature extractor definition -------
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
         self.feature_extractor = feature_extractor_module(self.config['pattern_encoding_size'], self.config)
         if hasattr(self.feature_extractor, 'config'):
             self.config.update(self.feature_extractor.config)   # save extractor's additional configuration
 
-        # Decode into pattern definition
+        # ----- Decode into pattern definition -------
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
