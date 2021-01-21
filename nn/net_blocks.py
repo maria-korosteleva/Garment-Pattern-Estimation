@@ -57,17 +57,17 @@ class PointNetPlusPlus(nn.Module):
     def __init__(self, out_size, config={}):
         super().__init__()
 
-        self.config = {'r1': 3, 'r2': 4, 'r3': 5, 'r4': 7}  # defaults for this net
+        self.config = {'r1': 0.3, 'r2': 0.4, 'r3': 5, 'r4': 7}  # defaults for this net
         self.config.update(config)  # from input
 
-        # self.sa1_module = _SetAbstractionModule(0.2, self.config['r1'], _MLP([3, 64, 64, 128]))
-        # self.sa2_module = _SetAbstractionModule(0.25, self.config['r2'], _MLP([128 + 3, 128, 128, 128]))
-        # self.sa3_module = _SetAbstractionModule(0.25, self.config['r3'], _MLP([128 + 3, 128, 128, 128]))
-        # self.sa4_module = _SetAbstractionModule(0.25, self.config['r4'], _MLP([128 + 3, 128, 128, 256]))
-        # self.sa_last_module = _GlobalSetAbstractionModule(_MLP([256 + 3, 256, 512, 1024]))
-        self.sa_last_module = _GlobalSetAbstractionModule(MLP([3, 256, 512, 1024]))
+        self.sa1_module = _SetAbstractionModule(0.2, self.config['r1'], MLP([3, self.config['EConv_hidden'], self.config['EConv_hidden'], self.config['EConv_feature']]))
+        # self.sa2_module = _SetAbstractionModule(0.25, self.config['r2'], MLP([112 + 3, 200, 200, 112]))
+        # self.sa3_module = _SetAbstractionModule(0.25, self.config['r3'], MLP([128 + 3, 128, 128, 128]))
+        # self.sa4_module = _SetAbstractionModule(0.25, self.config['r4'], MLP([128 + 3, 128, 128, 256]))
+        self.sa_last_module = _GlobalSetAbstractionModule(MLP([3 + self.config['EConv_feature'], self.config['EConv_hidden'], self.config['EConv_hidden'], self.config['EConv_feature']]))
+        # self.sa_last_module = _GlobalSetAbstractionModule(MLP([3, 256, 512, 1024]))
 
-        self.lin = nn.Linear(1024, out_size)
+        self.lin = nn.Linear(self.config['EConv_feature'], out_size)
 
     def forward(self, positions):
 
@@ -79,8 +79,8 @@ class PointNetPlusPlus(nn.Module):
 
         # forward pass
         sa_out = (None, pos_flat, batch)
-        # sa1_out = self.sa1_module(*sa0_out)
-        # sa2_out = self.sa2_module(*sa1_out)
+        sa_out = self.sa1_module(*sa_out)
+        # sa_out = self.sa2_module(*sa_out)
         # sa3_out = self.sa3_module(*sa2_out)
         # sa4_out = self.sa4_module(*sa3_out)
         sa_last_out = self.sa_last_module(*sa_out)
