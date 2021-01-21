@@ -601,6 +601,9 @@ class GarmentBaseDataset(BaseDataset):
         else:
             pattern_size_initialized = True
 
+        if 'obj_filetag' not in start_config:
+            start_config['obj_filetag'] = 'sim'  # look for objects with this tag in filename when loading 3D models
+
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
@@ -695,9 +698,9 @@ class GarmentBaseDataset(BaseDataset):
     # ------------- Datapoints Utils --------------
     def _sample_points(self, datapoint_name, folder_elements):
         """Make a sample from the 3d surface from a given datapoint files"""
-        obj_list = [file for file in folder_elements if 'sim.obj' in file]
+        obj_list = [file for file in folder_elements if self.config['obj_filetag'] in file and '.obj' in file]
         if not obj_list:
-            raise RuntimeError('Dataset:Error: geometry file *sim.obj not found for {}'.format(datapoint_name))
+            raise RuntimeError('Dataset:Error: geometry file *{}*.obj not found for {}'.format(self.config['obj_filetag'], datapoint_name))
         
         verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
         points = GarmentBaseDataset.sample_mesh_points(self.config['mesh_samples'], verts, faces)

@@ -16,8 +16,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='multi-pants-fin', 
-    run_id='3sj1k9va')  # finished experiment
+    run_name='multi-all-fin', 
+    run_id='216nexgv')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -26,7 +26,7 @@ if not experiment.is_finished():
 # data_config also contains the names of datasets to use
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
-# data_config.update({'num_verts': 500})
+data_config.update({'obj_filetag': 'scan_imitation'})  # scan imitation stats
 # dataset = data.ParametrizedShirtDataSet(datapath, data_config)
 # dataset = data.GarmentParamsDataset(system_info['datasets_path'], data_config)
 # dataset = data.Garment3DParamsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
@@ -61,15 +61,17 @@ print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # print(dataset[276]['features'])  # first element of validation set
 
-experiment.add_statistic('valid_on_best', valid_loss)
-experiment.add_statistic('valid_best_breakdown', valid_breakdown)
-experiment.add_statistic('test_on_best', test_metrics)
-experiment.add_statistic('test_best_breakdown', test_breakdown)
+experiment.add_statistic('valid_on_scan', valid_loss)
+experiment.add_statistic('valid_scan_breakdown', valid_breakdown)
+experiment.add_statistic('test_on_scan', test_metrics)
+experiment.add_statistic('test_scan_breakdown', test_breakdown)
 
 # -------- Predict ---------
 # save prediction for validation to file
-# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-# print('Saved to {}'.format(prediction_path))
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+print('Saved to {}'.format(prediction_path))
 # reflect predictions info in expetiment
-# experiment.add_statistic('predictions_folder', prediction_path.name)
-# experiment.add_artifact('D:/GK-Pattern-Data-Gen/nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201113-17-27-49', datawrapper.dataset.name, 'result')
+experiment.add_statistic('scan_folder', prediction_path.name)
+
+art_name = 'multi-data-scan' if len(dataset_wrapper.dataset.data_folders) > 1 else dataset_wrapper.dataset.data_folders[0] + '-scan'
+experiment.add_artifact(prediction_path, art_name, 'result')

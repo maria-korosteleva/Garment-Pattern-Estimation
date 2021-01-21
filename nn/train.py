@@ -21,6 +21,7 @@ def get_values_from_args():
     # basic
     parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
+    parser.add_argument('--obj_nametag', '-obj', help='substring to identify 3D model files to load', type=str, default='sim')
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=9)
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
@@ -49,7 +50,8 @@ def get_values_from_args():
     print(args)
 
     data_config = {
-        'mesh_samples': args.mesh_samples_multiplier * 500
+        'mesh_samples': args.mesh_samples_multiplier * 500,
+        'obj_filetag': args.obj_nametag
     }
 
     nn_config = {
