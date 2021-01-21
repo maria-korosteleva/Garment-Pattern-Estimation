@@ -16,8 +16,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='multi-tee-fin', 
-    run_id='odc1rrdl')  # finished experiment
+    run_name='multi-pants-fin', 
+    run_id='3sj1k9va')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -36,8 +36,6 @@ dataset = data.Garment3DPatternFullDataset(
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
-
-batch_size = 5
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
@@ -63,10 +61,10 @@ print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # print(dataset[276]['features'])  # first element of validation set
 
-# experiment.add_statistic('valid_on_best', valid_loss)
-# experiment.add_statistic('valid_best_breakdown', valid_breakdown)
-# experiment.add_statistic('test_on_best', test_metrics)
-# experiment.add_statistic('test_best_breakdown', test_breakdown)
+experiment.add_statistic('valid_on_best', valid_loss)
+experiment.add_statistic('valid_best_breakdown', valid_breakdown)
+experiment.add_statistic('test_on_best', test_metrics)
+experiment.add_statistic('test_best_breakdown', test_breakdown)
 
 # -------- Predict ---------
 # save prediction for validation to file
