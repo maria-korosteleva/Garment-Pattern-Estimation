@@ -40,10 +40,10 @@ print('Batch: {}, Split: {}'.format(batch_size, split))
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-# model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-# model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
-# model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], experiment.NN_config())
-# model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
+model = nets.ShirtfeaturesMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+model = nets.GarmentParamsMLP(dataset.config['feature_size'], dataset.config['ground_truth_size'])
+model = nets.GarmentParamsPoint(dataset.config['ground_truth_size'], experiment.NN_config())
+model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
 model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
 
 model.load_state_dict(experiment.load_best_model()['model_state_dict'])
@@ -73,5 +73,5 @@ print('Saved to {}'.format(prediction_path))
 # reflect predictions info in expetiment
 experiment.add_statistic('scan_folder', prediction_path.name)
 
-art_name = 'multi-data-scan' if len(dataset_wrapper.dataset.data_folders) > 1 else dataset_wrapper.dataset.data_folders[0] + '-scan'
+art_name = 'multi-data-scan' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-scan'
 experiment.add_artifact(prediction_path, art_name, 'result')
