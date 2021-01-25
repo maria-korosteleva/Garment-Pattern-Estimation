@@ -454,15 +454,20 @@ class GarmentFullPattern3D(BaseModule):
             self.config['panel_encoding_size'], 
             self.rotation_size + self.translation_size)
 
-    def forward(self, positions_batch):
-        self.device = positions_batch.device
-        batch_size = positions_batch.size(0)
+    def forward_encode(self, positions_batch):
+        """
+            Predict garment encodings for input point coulds batch
+        """
+        return self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
 
-        # Extract info from geometry 
-        pattern_encoding = self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
+    def forward_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into the sewing pattens
+        """
+        self.device = garment_encodings.device
+        batch_size = garment_encodings.size(0)
 
-        # Decode 
-        panel_encodings = self.pattern_decoder(pattern_encoding, self.max_pattern_size)
+        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
         flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
 
         # Panel outlines & stitch info
@@ -473,7 +478,7 @@ class GarmentFullPattern3D(BaseModule):
         flat_rotations = flat_placement[:, :self.rotation_size]
         flat_translations = flat_placement[:, self.rotation_size:]
 
-        # reshape to per-pattern predictions
+        # reshape back to per-pattern predictions
         panel_predictions = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
         stitch_tags = panel_predictions[:, :, :, self.panel_elem_len:-1]
         free_edge_class = panel_predictions[:, :, :, -1]
@@ -483,6 +488,13 @@ class GarmentFullPattern3D(BaseModule):
         translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
 
         return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+
+    def forward(self, positions_batch):
+        # Extract info from geometry 
+        pattern_encodings = self.forward_encode(positions_batch)
+
+        # Decode 
+        return self.forward_decode(pattern_encodings)
 
     def loss(self, features, ground_truth, names=None, epoch=1000):
         """Evalute loss when predicting patterns.

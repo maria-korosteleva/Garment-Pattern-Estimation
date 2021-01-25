@@ -20,6 +20,5 @@ __pycache__
 system.json
 
 # file for small script tries
-tmp*.py
-tmp*.txt
+tmp*
 *tmp*.mb
