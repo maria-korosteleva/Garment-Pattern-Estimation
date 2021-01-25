@@ -37,9 +37,9 @@ classes = np.array([mapping[label] for label in classes])
 
 # define colors
 colors = {
-    'Shirts and dresses': (0.747, 0.236, 0.048),
-    'Skirts': (0.048, 0.0290, 0.747),
-    'Pants': (0.025, 0.354, 0.152)
+    'Shirts and dresses': (0.747, 0.236, 0.048), # (190, 60, 12)
+    'Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
+    'Pants': (0.025, 0.354, 0.152)  # (6, 90. 39)
 }
 
 # plot
