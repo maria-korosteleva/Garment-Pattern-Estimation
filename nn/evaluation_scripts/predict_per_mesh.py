@@ -8,6 +8,12 @@ from pathlib import Path
 import shutil
 import torch
 
+# Do avoid a need for changing Evironmental Variables outside of this script
+import os,sys,inspect
+currentdir = os.path.dirname(os.path.realpath(__file__) )
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir) 
+
 # My modules
 import customconfig, nets
 from experiment import WandbRunWrappper
@@ -71,6 +77,7 @@ if __name__ == "__main__":
 
     # ----- Model architecture -----
     # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
+    # NOTE this is an old model. This script needs updating!!!
     model = nets.GarmentPattern3D(data_config, experiment.NN_config())
     
     # model.load_state_dict(experiment.load_final_model()['model_state_dict'])
