@@ -55,16 +55,10 @@ if __name__ == "__main__":
     model.eval()
 
     # ------ prepare input data & construct batch -------
-    points_list = []
-    for mesh in mesh_paths:
-        verts, faces = igl.read_triangle_mesh(str(mesh))
-        points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
-        if 'standardize' in data_config:
-            points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
-        points_list.append(torch.Tensor(points))
+    points_list = data.sample_points_from_meshes(mesh_paths, data_config)
 
     # -------- Interpolation ---------
-    # Predict encodings
+    # Encode
     with torch.no_grad():
         points_batch = torch.stack(points_list).to(device)
         pred_encodings = model.forward_encode(points_batch)
@@ -88,39 +82,6 @@ if __name__ == "__main__":
         preds = model.forward_decode(encodings)
 
     # ---- save ----
-    t = 0
-    for idx in range(preds['outlines'].shape[0]):
-        # Save each prediction as pattern object
+    names = ['t_{:.2f}'.format(i / (num_in_between + 1)) for i in range(num_in_between + 2)]
 
-        # "unbatch" dictionary
-        prediction = {}
-        for key in preds:
-            prediction[key] = preds[key][idx]
-
-        if 'standardize' in data_config:
-            # undo standardization  (outside of generinc conversion function due to custom std structure)
-            gt_shifts = data_config['standardize']['gt_shift']
-            gt_scales = data_config['standardize']['gt_scale']
-            for key in gt_shifts:
-                if key == 'stitch_tags' and not data_config['explicit_stitch_tags']:  
-                    # ignore stitch tags update if explicit tags were not used
-                    continue
-                prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
-
-        # stitch tags to stitch list
-        stitches = data.Garment3DPatternFullDataset.tags_to_stitches(
-            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edge_mask']
-        )
-
-        pattern = VisPattern(view_ids=False)
-        pattern.name = 't_{:.2f}'.format(t)
-        pattern.pattern_from_tensors(
-            prediction['outlines'], prediction['rotations'], prediction['translations'], 
-            stitches=stitches,
-            padded=True)   
-
-
-        log_dir = pattern.serialize(save_to, to_subfolder=True)
-
-        t += 1. / (num_in_between + 1)
+    data.save_garments_prediction(preds, save_to, data_config, names)

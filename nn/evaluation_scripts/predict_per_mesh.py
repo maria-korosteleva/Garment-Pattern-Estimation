@@ -15,10 +15,9 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir) 
 
 # My modules
-import customconfig, nets
+import customconfig, nets, data
 from experiment import WandbRunWrappper
 from pattern.wrappers import VisPattern
-from data import GarmentBaseDataset
 
 def get_meshes_from_args():
     """command line arguments to get a path to geometry file with a garment or a folder with OBJ files"""
@@ -49,7 +48,7 @@ def get_meshes_from_args():
         if args.directory is not None:
             directory = Path(args.directory)
             for elem in directory.glob('*'):
-                if elem.is_file() and '.obj' in elem:
+                if elem.is_file() and '.obj' in str(elem):
                     paths_list.append(elem)
 
     saving_path = Path(system_info['output']) / (args.save_tag + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
@@ -66,9 +65,9 @@ if __name__ == "__main__":
 
     # --------------- Experiment to evaluate on ---------
     experiment = WandbRunWrappper(system_info['wandb_username'],
-        project_name='Test-Garments-Reconstruction', 
-        run_name='Pattern3D-data-transforms', 
-        run_id='cgkk8eb7') 
+        project_name='Garments-Reconstruction', 
+        run_name='multi-all-fin', 
+        run_id='216nexgv')  # finished experiment
     if not experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
 
@@ -76,37 +75,19 @@ if __name__ == "__main__":
     _, _, data_config = experiment.data_info()  # need to get data stats
 
     # ----- Model architecture -----
-    # model = nets.GarmentPanelsAE(dataset.config['element_size'], dataset.config['feature_size'], experiment.NN_config())
-    # NOTE this is an old model. This script needs updating!!!
-    model = nets.GarmentPattern3D(data_config, experiment.NN_config())
-    
-    # model.load_state_dict(experiment.load_final_model()['model_state_dict'])
-    # model.load_state_dict(experiment.load_checkpoint_file()['model_state_dict'])
+    model = nets.GarmentFullPattern3D(data_config, experiment.NN_config())
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
     model = model.to(device=device)
+    model.eval()
 
     # ------ prepare input data & construct batch -------
-    points_list = []
-    for mesh in mesh_paths:
-        verts, faces = igl.read_triangle_mesh(str(mesh))
-        points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
-        if 'standardize' in data_config:
-            points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
-        points_list.append(torch.Tensor(points))
+    points_list = data.sample_points_from_meshes(mesh_paths, data_config)
 
     # -------- Predict ---------
     with torch.no_grad():
         points_batch = torch.stack(points_list).to(device)
-        preds = model(points_batch).cpu().numpy()
+        predictions = model(points_batch)
 
     # ---- save ----
-    for pred, mesh in zip(preds, mesh_paths):
-        if 'standardize' in data_config:
-            pred = pred * data_config['standardize']['scale'] + data_config['standardize']['shift']
-
-        pattern = VisPattern(view_ids=False)
-        pattern.name = VisPattern.name_from_path(mesh)
-        pattern.pattern_from_tensor(pred, padded=True)   
-
-        log_dir = pattern.serialize(save_to)
-        shutil.copy2(str(mesh), str(log_dir))
+    names = [VisPattern.name_from_path(mesh) for mesh in mesh_paths]
+    data.save_garments_prediction(predictions, save_to, data_config, names)

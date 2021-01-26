@@ -1132,7 +1132,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
-        """Saves predicted params of the datapoint to the requested data folder.
+        """ 
+            Saving predictions on batched from the current dataset
+            Saves predicted params of the datapoint to the requested data folder.
             Returns list of paths to files with prediction visualizations
             Assumes that the number of predictions matches the number of provided data names"""
 
@@ -1333,7 +1335,70 @@ class ParametrizedShirtDataSet(BaseDataset):
             lines = f.readlines()
             params = np.fromstring(lines[-1], sep=' ')
         return params
-       
+
+
+# ------------------------- Utils for non-dataset examples --------------------------
+
+def sample_points_from_meshes(mesh_paths, data_config):
+    """
+        Sample points from the given list of triangle meshes (as .obj files -- or other file formats supported by libigl)
+    """
+    points_list = []
+    for mesh in mesh_paths:
+        verts, faces = igl.read_triangle_mesh(str(mesh))
+        points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
+        if 'standardize' in data_config:
+            points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
+        points_list.append(torch.Tensor(points))
+    return points_list
+
+
+def save_garments_prediction(predictions, save_to, data_config=None, datanames=None):
+    """ 
+        Saving arbitrary sewing pattern predictions that
+        
+        * They do NOT have to be coming from garmet dataset samples.
+    """
+
+    save_to = Path(save_to)
+    batch_size = predictions['outlines'].shape[0]
+
+    if datanames is None:
+        datanames = ['pred_{}'.format(i) for i in range(batch_size)]
+        
+    for idx, name in enumerate(datanames):
+        # "unbatch" dictionary
+        prediction = {}
+        for key in predictions:
+            prediction[key] = predictions[key][idx]
+
+        if data_config is not None and 'standardize' in data_config:
+            # undo standardization  (outside of generinc conversion function due to custom std structure)
+            gt_shifts = data_config['standardize']['gt_shift']
+            gt_scales = data_config['standardize']['gt_scale']
+            for key in gt_shifts:
+                if key == 'stitch_tags' and not data_config['explicit_stitch_tags']:  
+                    # ignore stitch tags update if explicit tags were not used
+                    continue
+                prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
+
+        # stitch tags to stitch list
+        stitches = Garment3DPatternFullDataset.tags_to_stitches(
+            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
+            prediction['free_edge_mask']
+        )
+
+        pattern = VisPattern(view_ids=False)
+        pattern.name = name
+        pattern.pattern_from_tensors(
+            prediction['outlines'], prediction['rotations'], prediction['translations'], 
+            stitches=stitches,
+            padded=True)   
+
+        # save
+        pattern.serialize(save_to, to_subfolder=True)
+
+
 
 if __name__ == "__main__":
 
