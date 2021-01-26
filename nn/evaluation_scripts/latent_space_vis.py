@@ -43,10 +43,21 @@ colors = {
 }
 
 # plot
-plt.figure(figsize=(6, 5))
+fig, ax = plt.subplots()
 
+# plot data
 for label, color in colors.items():
-    plt.scatter(enc_2d[classes == label, 0], enc_2d[classes == label, 1], color=color, label=label)
+    plt.scatter(
+        enc_2d[classes == label, 0], enc_2d[classes == label, 1], 
+        color=color, label=label,
+        edgecolors=None, alpha=0.5, s=17)
 plt.legend()
-plt.savefig('D:/MyDocs/GigaKorea/SIGGRAPH2021 submission materials/Latent space/tsne.pdf')
+
+# Axes colors
+# https://stackoverflow.com/questions/7778954/elegantly-changing-the-color-of-a-plot-frame-in-matplotlib/7944576
+plt.setp(ax.spines.values(), color='#737373')
+ax.tick_params(axis='x', colors='#737373')
+ax.tick_params(axis='y', colors='#737373')
+
+plt.savefig('D:/MyDocs/GigaKorea/SIGGRAPH2021 submission materials/Latent space/tsne.pdf', dpi=300, bbox_inches='tight')
 plt.show()
