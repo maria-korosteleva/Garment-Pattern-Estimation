@@ -25,15 +25,19 @@ if __name__ == "__main__":
     
     system_info = customconfig.Properties('./system.json')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    save_to = Path(system_info['output']) / ('interpolate' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+    #save_to = Path(system_info['output']) / ('interpolate' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+    save_to = Path('D:\MyDocs\GigaKorea\SIGGRAPH2021 submission materials\Interpolation') / ('pants_interpolate' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
     save_to.mkdir(parents=True)
 
     # exactly 2
     mesh_paths = [
-        Path(system_info['datasets_path']) / 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43' / 'tee_6ZX9WWODMX' / 'tee_6ZX9WWODMX_sim.obj',  # long and wide
-        Path(system_info['datasets_path']) / 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43' / 'tee_4U1YS26K29' / 'tee_4U1YS26K29_sim.obj',  # short, long sleeves
+        # Path(system_info['datasets_path']) / 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43' / 'tee_6ZX9WWODMX' / 'tee_6ZX9WWODMX_sim.obj',  # long and wide
+        # Path(system_info['datasets_path']) / 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43' / 'tee_4U1YS26K29' / 'tee_4U1YS26K29_sim.obj',  # short, long sleeves
         # Path(system_info['datasets_path']) / 'data_1000_pants_straight_sides_210105-10-49-02' / 'pants_straight_sides_1VDATY2TSF' / 'pants_straight_sides_1VDATY2TSF_sim.obj',
-        # Path(system_info['datasets_path']) / 'data_1000_skirt_4_panels_200616-14-14-40' / 'skirt_4_panels_G41P6Z17HH' / 'skirt_4_panels_G41P6Z17HH_sim.obj',  # short & slim skirt
+        Path(system_info['datasets_path']) / 'data_1000_pants_straight_sides_210105-10-49-02' / 'pants_straight_sides_SAD7HA2LGE' / 'pants_straight_sides_SAD7HA2LGE_sim.obj',
+        Path(system_info['datasets_path']) / 'data_1000_pants_straight_sides_210105-10-49-02' / 'pants_straight_sides_SVFYS0EX50' / 'pants_straight_sides_SVFYS0EX50_sim.obj',
+        # Path(system_info['datasets_path']) / 'data_1000_skirt_4_panels_200616-14-14-40' / 'skirt_4_panels_2H2PV4GECN' / 'skirt_4_panels_2H2PV4GECN_sim.obj',  # short & slim skirt
+        # Path(system_info['datasets_path']) / 'data_1000_skirt_4_panels_200616-14-14-40' / 'skirt_4_panels_WV3Z327KQ8' / 'skirt_4_panels_WV3Z327KQ8_sim.obj',  # short & slim skirt
     ]
     num_in_between = 5
 
