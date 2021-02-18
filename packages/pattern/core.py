@@ -14,7 +14,7 @@ import os
 import random
 import sys
 if sys.version_info[0] >= 3:
-    from scipy.spatial.transform import Rotation  # Not available in scipy 0.19.1 installed for Maya
+    from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
 
 import rotation
 
@@ -188,13 +188,11 @@ class BasicPattern(object):
 
         # Main info per panel
         panel_seqs, panel_translations, panel_rotations = [], [], []
-        panel_edge_ids_map = {}
         for panel_name in panel_order:
-            edges, rot, transl, edge_ids = self.panel_as_numeric(panel_name, pad_to_len=max_len)
+            edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
             panel_seqs.append(edges)
             panel_translations.append(transl)
             panel_rotations.append(rot)
-            panel_edge_ids_map[panel_name] = edge_ids
         # add padded panels
         if pad_panels_num is not None:
             for _ in range(len(panel_seqs), pad_panels_num):
@@ -220,7 +218,7 @@ class BasicPattern(object):
         for idx, stitch in enumerate(self.pattern['stitches']):
             for id_side, side in enumerate(stitch):
                 panel_id = panel_order.index(side['panel'])
-                edge_id = panel_edge_ids_map[side['panel']][side['edge']]
+                edge_id = side['edge']
                 stitches_indicies[id_side][idx] = panel_id * max_len + edge_id  # pattern-level edge id
                 if with_stitch_tags:
                     tags_per_edge[panel_id][edge_id] = stitch_tags[idx]
@@ -291,57 +289,26 @@ class BasicPattern(object):
             print('BasicPattern::Warning::{}::Panels were updated but new stitches info was not provided. Stitches are removed.'.format(self.name))
 
     def panel_as_numeric(self, panel_name, pad_to_len=None):
-        """Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
-            * Vertex coordinates are recalculated s.t. zero is at the low left corner; 
+        """
+            Represent panel as sequence of edges with each edge as vector of fixed length plus the info on panel placement.
             * Edges are returned in additive manner: 
                 each edge as a vector that needs to be added to previous edges to get a 2D coordinate of end vertex
-            * Panel placement (translation & Rotation) is returned according to the shift needed for sequential representation
+            * Panel translation is represented with "universal" heuristic -- as translation of midpoint of the top-most bounding box edge
+            * Panel rotation is returned as is but in quaternions
+
+            NOTE: 
+                The conversion uses the panels edges order as is, and 
+                DOES NOT take resposibility to ensure the same traversal order of panel edges is used across datapoints of similar garment type.
+                (the latter is done on sampling or on load)
         """
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::panel_as_numeric() is only supported for Python 3.6+ and Scipy 1.2+')
 
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
-        panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)  # pattern rotation follows the Maya convention: intrinsic xyz Euler Angles
-
-        # offset vertices to have one (~low-left) vertex at (0, 0) 
-        vertices, shift, origin_id = self._verts_to_left_corner(vertices)
-        # edge order according to new origin 
-        rotated_edges, rotated_edge_ids = self._rotate_edges(panel['edges'], list(range(len(panel['edges']))), origin_id)
-
-        # ------- Flip normal if needed -------
-        # make sure that edges traverse the panel in countercloclwise direction -- s.t. all panels are consistent
-
-        # due to the choice of origin (at the corner), first & last edge cross-product will reliably show panel normal direction 
-        first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
-        last_edge = self._edge_as_vector(vertices, rotated_edges[-1])[:2]
-        if np.cross(first_edge, last_edge) > 0:  # should be negative -- counterclockwise
-            vertices[:, 0] = - vertices[:, 0]  # flip by X coordinate -- we'll rotate around Y
-            shift[0] -= 2 * shift[0]  # local coord frame change -- update translation accordingly 
-            flip_edges_curve = True  # flip the curvature on the edges to the other side on reading
-
-            # adjust rotation to get the same panel palcement in 3D as it was before flipping
-            flip_rotation = Rotation.from_euler('xyz', [0, 180, 0], degrees=True)
-            panel_rotation = panel_rotation * flip_rotation
-
-            # intrestingly, there is no need to re-evaluare edge ids mapping after X coord flip
-            # as every edge will be on the orifinal place in 3D
-
-            # update origin too -- s.t. all panels start in low-left corner
-            vertices, shift_add, origin_id = self._verts_to_left_corner(vertices)
-            shift += shift_add  # collect all changes
-            rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, origin_id)
-
-            # DEBUG
-            # print('BasicPattern::Info::Flipping {}.{} from {} to {}'.format(
-            #     self.name, panel_name, panel['rotation'], 
-            #     np.array2string(panel_rotation.as_euler('xyz', degrees=True), precision=4, suppress_small=True)))
-        else:
-            flip_edges_curve = False
-            # and rotation stays the same
-
+        
         # -- Construct the edge sequence in the recovered order --
-        edge_sequence = [self._edge_as_vector(vertices, edge, flip_curve_side=flip_edges_curve) for edge in rotated_edges]
+        edge_sequence = [self._edge_as_vector(vertices, edge) for edge in panel['edges']]
 
         # padding if requested
         if pad_to_len is not None:
@@ -355,9 +322,10 @@ class BasicPattern(object):
         # Global Translation (more-or-less stable across designs)
         translation, _ = self._panel_universal_transtation(panel_name)
 
+        panel_rotation = scipy_rot.from_euler('xyz', panel['rotation'], degrees=True)  # pattern rotation follows the Maya convention: intrinsic xyz Euler Angles
         rotation_representation = np.array(panel_rotation.as_quat())
 
-        return np.stack(edge_sequence, axis=0), rotation_representation, translation, rotated_edge_ids
+        return np.stack(edge_sequence, axis=0), rotation_representation, translation
 
     def panel_from_numeric(self, panel_name, edge_sequence, rotation=None, translation=None, padded=False):
         """ Updates or creates panel from NN-compatible numeric representation
@@ -406,7 +374,7 @@ class BasicPattern(object):
 
         # ----- 3D placement setup --------
         if rotation is not None:
-            rotation_obj = Rotation.from_quat(rotation)
+            rotation_obj = scipy_rot.from_quat(rotation)
             panel['rotation'] = rotation_obj.as_euler('xyz', degrees=True).tolist()
 
         if translation is not None:
@@ -415,7 +383,7 @@ class BasicPattern(object):
             _, transl_origin = self._panel_universal_transtation(panel_name)
 
             shift = np.append(transl_origin, 0)  # to 3D
-            panel_rotation = Rotation.from_euler('xyz', panel['rotation'], degrees=True)
+            panel_rotation = scipy_rot.from_euler('xyz', panel['rotation'], degrees=True)
             comenpensating_shift = - panel_rotation.as_matrix().dot(shift)
             translation = translation + comenpensating_shift
 
@@ -457,8 +425,7 @@ class BasicPattern(object):
         return np.array(stitch_tags)
 
     # -- sub-utils --
-    # TODO Simplify this routine -- no need for flipping on the go!
-    def _edge_as_vector(self, vertices, edge_dict, flip_curve_side=False, flip_edge=False):
+    def _edge_as_vector(self, vertices, edge_dict):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
                 Original edge endvertex positions can be restored if edge vector is added to the start point,
@@ -466,21 +433,10 @@ class BasicPattern(object):
             * Next 2 elements: Curvature values 
                 Given in relative coordinates. With zeros if edge is not curved 
 
-            The latter two setting allow modifying edges on vector construction 
-            * flip_edge -- reverse the edge direction. The curvature values are adjusted s.t. the overall shape of the edge stays the same
-            * flip_curve_side -- updates the Y coordinate of curvature s.t. the curve appears on the other side of the straight edge vector
-                (e.g. used when flipping the panel normal)
         """
         edge_verts = vertices[edge_dict['endpoints']]
-        edge_vector = edge_verts[1] - edge_verts[0] if not flip_edge else edge_verts[0] - edge_verts[1]
+        edge_vector = edge_verts[1] - edge_verts[0]
         curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
-        # if edge was reveresed, flip curvature too
-        if flip_edge:
-            curvature[0] = 1 - curvature[0] if curvature[0] != 0 else 0
-            curvature[1] = -curvature[1]
-        
-        if flip_curve_side:
-            curvature[1] *= -1
 
         return np.concatenate([edge_vector, curvature])
 
@@ -490,43 +446,6 @@ class BasicPattern(object):
         if not all(np.isclose(curvature, 0, atol=0.01)):  # 0.01 is tolerable error for local curvature coords
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
-
-    @staticmethod
-    def _verts_to_left_corner(vertices):
-        """
-            Choose the vertex in the left corner as a new origin, shift vertex coordinates accordingly (2D)
-            * Determenistic process
-        """
-        left_corner = np.min(vertices, axis=0)
-        vertices = vertices - left_corner
-        
-        # choose the one closest to zero (=low-left corner) as new origin
-        verts_norms = np.linalg.norm(vertices, axis=1)  # numpy 1.9+
-        origin_id = np.argmin(verts_norms)
-
-        # Chosen vertex as to origin
-        vertices = vertices - vertices[origin_id]
-
-        # From old to new origin
-        shift = - left_corner - vertices[origin_id]
-
-        return vertices, shift, origin_id
-
-    @staticmethod
-    def _rotate_edges(edges, edge_ids, new_origin_id):
-        """
-            Rotate provided list of edges s.t. the first edge starts from vertex with id = new_origin_id
-            Map old edge_ids to new ones accordingly
-            * edges expects list of edges structures
-        """
-        first_edge_orig_id = [idx for idx, edge in enumerate(edges) if edge['endpoints'][0] == new_origin_id]
-        first_edge_orig_id = first_edge_orig_id[0]
-        rotated_edges = edges[first_edge_orig_id:] + edges[:first_edge_orig_id]
-
-        # map from old ids to new ids
-        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
-
-        return rotated_edges, rotated_edge_ids
 
     @staticmethod
     def _point_in_3D(local_coord, rotation, translation):
@@ -539,7 +458,7 @@ class BasicPattern(object):
         # Rotate
         rotation = np.array(rotation)
         if rotation.size == 3:  # transform Euler angles to matrix
-            rotation = Rotation.from_euler('xyz', rotation, degrees=True).as_matrix()
+            rotation = scipy_rot.from_euler('xyz', rotation, degrees=True).as_matrix()
             # otherwise we already have the matrix
         elif rotation.size != 9:
             raise ValueError('BasicPattern::Error::You need to provide Euler angles or Rotation matrix for _point_in_3D(..)')
@@ -571,7 +490,7 @@ class BasicPattern(object):
             [top_right[0], mid_y],
             [low_left[0], mid_y]
         ]
-        rot_matrix = Rotation.from_euler('xyz', panel['rotation'], degrees=True).as_matrix()  # calculate once for all points
+        rot_matrix = scipy_rot.from_euler('xyz', panel['rotation'], degrees=True).as_matrix()  # calculate once for all points
         mid_points_3D = np.vstack(tuple(
             [self._point_in_3D(coords, rot_matrix, panel['translation']) for coords in mid_points_2D]
         ))
@@ -672,7 +591,7 @@ class BasicPattern(object):
         vertices = np.array(panel['vertices'])
 
         # Loop Origin
-        _, _, loop_origin_id = self._verts_to_left_corner(vertices)
+        loop_origin_id = self._vert_at_left_corner(vertices)
         print('{}:{}: Origin: {} -> {}'.format(
             self.name, panel_name, panel['edges'][0]['endpoints'][0], loop_origin_id))
 
@@ -684,7 +603,7 @@ class BasicPattern(object):
         first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
         last_edge = self._edge_as_vector(vertices, rotated_edges[-1])[:2]
         flipped = False
-        # This test is correct due to the shoice of new loop origin at the corner!
+        # due to the choice of origin (at the corner), first & last edge cross-product will reliably show panel normal direction 
         if np.cross(first_edge, last_edge) > 0:  # should be negative -- counterclockwise
             print('{}::{}::panel <{}> flipped'.format(
                 self.__class__.__name__, self.name, panel_name
@@ -697,7 +616,7 @@ class BasicPattern(object):
 
             # Edges
             # new loop origin after update
-            _, _, loop_origin_id = self._verts_to_left_corner(vertices)
+            loop_origin_id = self._vert_at_left_corner(vertices)
             print('{}:{}: Origin: {} -> {}'.format(
                 self.name, panel_name, panel['edges'][0]['endpoints'][0], loop_origin_id))
 
@@ -775,6 +694,37 @@ class BasicPattern(object):
             np.array(panel['vertices'][v_id_end])
         
         return np.linalg.norm(v_end - v_start)
+
+    @staticmethod
+    def _vert_at_left_corner(vertices):
+        """
+            Find, which vertex is in the left corner
+            * Determenistic process
+        """
+        left_corner = np.min(vertices, axis=0)
+        vertices = vertices - left_corner
+        
+        # choose the one closest to zero (=low-left corner) as new origin
+        verts_norms = np.linalg.norm(vertices, axis=1)  # numpy 1.9+
+        origin_id = np.argmin(verts_norms)
+
+        return origin_id
+
+    @staticmethod
+    def _rotate_edges(edges, edge_ids, new_origin_id):
+        """
+            Rotate provided list of edges s.t. the first edge starts from vertex with id = new_origin_id
+            Map old edge_ids to new ones accordingly
+            * edges expects list of edges structures
+        """
+        first_edge_orig_id = [idx for idx, edge in enumerate(edges) if edge['endpoints'][0] == new_origin_id]
+        first_edge_orig_id = first_edge_orig_id[0]
+        rotated_edges = edges[first_edge_orig_id:] + edges[:first_edge_orig_id]
+
+        # map from old ids to new ids
+        rotated_edge_ids = edge_ids[(len(rotated_edges) - first_edge_orig_id):] + edge_ids[:(len(rotated_edges) - first_edge_orig_id)]
+
+        return rotated_edges, rotated_edge_ids
 
     def _restore(self, backup_copy):
         """Restores spec structure from given backup copy 
@@ -1296,8 +1246,8 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
-    # pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    # pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
@@ -1307,14 +1257,15 @@ if __name__ == "__main__":
 
     # print(pattern.stitches_as_tags())
 
+    print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
 
-    # tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
+    tensor, num_panels, rot, transl, stitches, stitch_num, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
 
-    # empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # print(pattern.pattern['stitches'])
     # print(empty_pattern.panel_order())
 
-    pattern.name = pattern.name + '_edge_loop_norm_flip' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
-    pattern.serialize(system_config['output'], to_subfolder=True)
+    empty_pattern.name = pattern.name + '_edge_loop_norm_in_NN' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    empty_pattern.serialize(system_config['output'], to_subfolder=True)
 
 
