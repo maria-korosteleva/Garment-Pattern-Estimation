@@ -10,6 +10,7 @@ from datetime import datetime
 import errno
 import json
 import numpy as np
+import math as m
 import os
 import random
 import sys
@@ -455,6 +456,7 @@ class BasicPattern(object):
         return np.array(stitch_tags)
 
     # -- sub-utils --
+    # TODO Simplify this routine -- no need for flipping on the go!
     def _edge_as_vector(self, vertices, edge_dict, flip_curve_side=False, flip_edge=False):
         """Represent edge as vector of fixed length: 
             * First 2 elements: Vector endpoint. 
@@ -627,13 +629,13 @@ class BasicPattern(object):
                     original[2], 
                 ]
 
-        # Recalculate origins of panel edge loops if not normalized already
+        # Recalculate origins and traversal order of panel edge loops if not normalized already
         if ('normalized_edge_loops' not in self.properties
                 or not self.properties['normalized_edge_loops']):
             print('{}::Warning::normalizing the order and origin choice for edge loops in panels'.format(self.__class__.__name__))
             self.properties['normalized_edge_loops'] = True
             for panel in self.pattern['panels']:
-                self._normalize_edge_loop_origin(panel)
+                self._normalize_edge_loop(panel)
 
     def _normalize_panel_translation(self, panel_name):
         """ Convert panel vertices to local coordinates: 
@@ -660,30 +662,65 @@ class BasicPattern(object):
         translation = self.pattern['panels'][panel_name]['translation']
         self.pattern['panels'][panel_name]['translation'] = [scaling * coord for coord in translation]
 
-    def _normalize_edge_loop_origin(self, panel_name):
-        """Re-order edges s.t. the edge loop starts from low-left vertex"""
+    def _normalize_edge_loop(self, panel_name):
+        """
+            * Re-order edges s.t. the edge loop starts from low-left vertex
+            * Make the edge loop follow counter-clockwise direction (uniform traversal)
+        """
         panel = self.pattern['panels'][panel_name]
         vertices = np.array(panel['vertices'])
 
         # Loop Origin
         _, _, loop_origin_id = self._verts_to_left_corner(vertices)
-
-        print('{}: Origin: {} -> {}'.format(panel_name, panel['edges'][0]['endpoints'][0], loop_origin_id))
-
-        # edge order according to new origin 
         rotated_edges, rotated_edge_ids = self._rotate_edges(
             panel['edges'], list(range(len(panel['edges']))), loop_origin_id)
         panel['edges'] = rotated_edges
 
-        # Update the edge references according to the new ids
-        # Stitches
+        # Panel flip for uniform edge loop order (and normal direction)
+        first_edge = self._edge_as_vector(vertices, rotated_edges[0])[:2]
+        last_edge = self._edge_as_vector(vertices, rotated_edges[-1])[:2]
+        flipped = False
+        # This test is correct due to the shoice of new loop origin at the corner!
+        if np.cross(first_edge, last_edge) > 0:  # should be negative -- counterclockwise
+            print('{}::{}::panel <{}> flipped'.format(
+                self.__class__.__name__, self.name, panel_name
+            ))
+            flipped = True
+
+            # Vertices
+            vertices[:, 0] = - vertices[:, 0]  # flip by X coordinate -- we'll rotate around Y
+            panel['vertices'] = vertices.tolist()
+
+            # Edges
+            # new loop origin after update
+            _, _, loop_origin_id = self._verts_to_left_corner(vertices)
+            rotated_edges, rotated_edge_ids = self._rotate_edges(rotated_edges, rotated_edge_ids, loop_origin_id)
+            panel['edges'] = rotated_edges
+            # update the curvatures in edges as they changed left\right symmetry in 3D
+            for edge_id in range(len(rotated_edges)):
+                if 'curvature' in panel['edges'][edge_id]:
+                    curvature = panel['edges'][edge_id]['curvature']
+                    panel['edges'][edge_id]['curvature'][1] = -curvature[1]
+
+            # Panel translation and rotation -- local coord frame changed!
+            panel['translation'][0] -= 2 * panel['translation'][0] 
+
+            panel_R = euler_xyz_to_R(panel['rotation'])
+            flip_R = np.eye(3)
+            flip_R[0, 0] = flip_R[2, 2] = -1  # by 180 around Y
+
+            panel['rotation'] = R_to_euler(panel_R * flip_R)
+        
+        print('{}:{}: Origin: {} -> {}'.format(self.name, panel_name, panel['edges'][0]['endpoints'][0], loop_origin_id))
+
+        # Stitches -- update the edge references according to the new ids
         for stitch_id in range(len(self.pattern['stitches'])):
             for side_id in [0, 1]:
                 if self.pattern['stitches'][stitch_id][side_id]['panel'] == panel_name:
                     old_edge_id = self.pattern['stitches'][stitch_id][side_id]['edge']
                     self.pattern['stitches'][stitch_id][side_id]['edge'] = rotated_edge_ids[old_edge_id]
 
-        return rotated_edge_ids
+        return rotated_edge_ids, flipped
 
     # -- sub-utils --
     def _control_to_abs_coord(self, start, end, control_scale):
@@ -892,23 +929,29 @@ class ParametrizedPattern(BasicPattern):
 
             print('Warning: Parameter units were converted to cm')
 
-    def _normalize_edge_loop_origin(self, panel_name):
+    def _normalize_edge_loop(self, panel_name):
         """Update the edge loops and edge ids references in parameters & constraints after change"""
-        rotated_edge_ids = super(ParametrizedPattern, self)._normalize_edge_loop_origin(panel_name)
+        rotated_edge_ids, flipped = super(ParametrizedPattern, self)._normalize_edge_loop(panel_name)
 
         # Parameters
         for parameter_name in self.spec['parameters']:
             self._influence_after_edge_loop_update(
-                self.spec['parameters'][parameter_name]['influence'], panel_name, rotated_edge_ids)
+                self.spec['parameters'][parameter_name]['influence'], 
+                panel_name, rotated_edge_ids)
 
         # Constraints
         if 'constraints' in self.spec:
             for constraint_name in self.spec['constraints']:
                 self._influence_after_edge_loop_update(
-                    self.spec['constraints'][constraint_name]['influence'], panel_name, rotated_edge_ids)
+                    self.spec['constraints'][constraint_name]['influence'], 
+                    panel_name, rotated_edge_ids)
 
     def _influence_after_edge_loop_update(self, infl_list, panel_name, new_edge_ids):
-        """Update the list of parameter\constraint influence with the new edge ids of given panel"""
+        """
+            Update the list of parameter\constraint influence with the new edge ids of given panel.
+            
+            flipped -- indicates if in the new edges start & end vertices have been swapped
+        """
         for infl_id in range(len(infl_list)):
             if infl_list[infl_id]['panel'] == panel_name:
                 # update
@@ -924,7 +967,7 @@ class ParametrizedPattern(BasicPattern):
                     else:  # edge description in length parameters & constraints
                         old_id = edge_list[edge_list_id]['id']
                         edge_list[edge_list_id]['id'] = new_edge_ids[old_id]
-
+                
     def _update_pattern_by_param_values(self):
         """
         Recalculates vertex positions and edge curves according to current
@@ -1237,6 +1280,60 @@ class ParametrizedPattern(BasicPattern):
                 self.parameters[parameter]['value'] = self._new_value(param_ranges)
 
 
+# -------- Rotation Conversion routines (Maya-Python2.7-Compatible!!) ------
+# Thanks to https://www.meccanismocomplesso.org/en/3d-rotations-and-euler-angles-in-python/ for the code
+
+def Rx(theta):
+    return np.matrix([
+        [1, 0           , 0           ],
+        [0, m.cos(theta), -m.sin(theta)],
+        [0, m.sin(theta), m.cos(theta)]])
+
+
+def Ry(theta):
+    return np.matrix([
+        [m.cos(theta), 0, m.sin(theta)],
+        [0           , 1, 0           ],
+        [-m.sin(theta), 0, m.cos(theta)]])
+
+
+def Rz(theta):
+    return np.matrix([
+        [m.cos(theta), -m.sin(theta), 0],
+        [m.sin(theta), m.cos(theta) , 0],
+        [0           , 0            , 1]])
+
+
+def euler_xyz_to_R(euler):
+    """Convert to Rotation matrix.
+        Expects input in degrees.
+        Only support Maya convension of intrinsic xyz Euler Angles
+    """
+    return Rz(np.deg2rad(euler[2])) * Ry(np.deg2rad(euler[1])) * Rx(np.deg2rad(euler[0]))
+
+
+def R_to_euler(R):
+    """
+        Convert Rotation matrix to Euler-angles in degrees (in Maya convension of intrinsic xyz Euler Angles)
+        NOTE: 
+            Routine produces one of the possible Euler angles, corresponding to input rotations (the Euler angles are not uniquely defined)
+    """
+    tol = sys.float_info.epsilon * 10
+  
+    if abs(R[0, 0]) < tol and abs(R[1, 0]) < tol:
+        eul1 = 0
+        eul2 = m.atan2(-R[2, 0], R[0, 0])
+        eul3 = m.atan2(-R[1, 2], R[1, 1])
+    else:   
+        eul1 = m.atan2(R[1, 0], R[0, 0])
+        sp = m.sin(eul1)
+        cp = m.cos(eul1)
+        eul2 = m.atan2(-R[2, 0], cp * R[0, 0] + sp * R[1, 0])
+        eul3 = m.atan2(sp * R[0, 2] - cp * R[1, 2], cp * R[1, 1] - sp * R[0, 1])
+    
+    return [np.rad2deg(eul3), np.rad2deg(eul2), np.rad2deg(eul1)]
+
+
 # ---------- test -------------
 if __name__ == "__main__":
     import customconfig
@@ -1246,8 +1343,8 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
-    # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    # pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
@@ -1261,8 +1358,10 @@ if __name__ == "__main__":
     # tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
 
     # empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
-    print(pattern.pattern['stitches'])
+    # print(pattern.pattern['stitches'])
     # print(empty_pattern.panel_order())
 
-    pattern.name = pattern.name + '_edge_loop_norm' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    pattern.name = pattern.name + '_edge_loop_norm_flip' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
     pattern.serialize(system_config['output'], to_subfolder=True)
+
+
