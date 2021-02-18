@@ -16,7 +16,8 @@ import sys
 if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
 
-import rotation
+# My
+from pattern import rotation
 
 standard_filenames = [
     'specification',  # e.g. used by dataset generation
