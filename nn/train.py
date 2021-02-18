@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # model = nets.GarmentPatternAE(dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'], 
     #     in_nn_config)
     model = nets.GarmentFullPattern3D(dataset.config, in_nn_config)
-    model.with_quality_eval = False  # False to save compute time
+    model.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
 
