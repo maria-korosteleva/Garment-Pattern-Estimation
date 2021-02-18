@@ -6,6 +6,7 @@
 from __future__ import print_function
 from __future__ import division
 import copy
+from datetime import datetime
 import errno
 import json
 import numpy as np
@@ -626,6 +627,14 @@ class BasicPattern(object):
                     original[2], 
                 ]
 
+        # Recalculate origins of panel edge loops if not normalized already
+        if ('normalized_edge_loops' not in self.properties
+                or not self.properties['normalized_edge_loops']):
+            print('{}::Warning::normalizing the order and origin choice for edge loops in panels'.format(self.__class__.__name__))
+            self.properties['normalized_edge_loops'] = True
+            for panel in self.pattern['panels']:
+                self._normalize_edge_loop_origin(panel)
+
     def _normalize_panel_translation(self, panel_name):
         """ Convert panel vertices to local coordinates: 
             Shifts all panel vertices s.t. origin is at the center of the panel
@@ -650,6 +659,31 @@ class BasicPattern(object):
         # translation
         translation = self.pattern['panels'][panel_name]['translation']
         self.pattern['panels'][panel_name]['translation'] = [scaling * coord for coord in translation]
+
+    def _normalize_edge_loop_origin(self, panel_name):
+        """Re-order edges s.t. the edge loop starts from low-left vertex"""
+        panel = self.pattern['panels'][panel_name]
+        vertices = np.array(panel['vertices'])
+
+        # Loop Origin
+        _, _, loop_origin_id = self._verts_to_left_corner(vertices)
+
+        print('{}: Origin: {} -> {}'.format(panel_name, panel['edges'][0]['endpoints'][0], loop_origin_id))
+
+        # edge order according to new origin 
+        rotated_edges, rotated_edge_ids = self._rotate_edges(
+            panel['edges'], list(range(len(panel['edges']))), loop_origin_id)
+        panel['edges'] = rotated_edges
+
+        # Update the edge references according to the new ids
+        # Stitches
+        for stitch_id in range(len(self.pattern['stitches'])):
+            for side_id in [0, 1]:
+                if self.pattern['stitches'][stitch_id][side_id]['panel'] == panel_name:
+                    old_edge_id = self.pattern['stitches'][stitch_id][side_id]['edge']
+                    self.pattern['stitches'][stitch_id][side_id]['edge'] = rotated_edge_ids[old_edge_id]
+
+        return rotated_edge_ids
 
     # -- sub-utils --
     def _control_to_abs_coord(self, start, end, control_scale):
@@ -857,6 +891,39 @@ class ParametrizedPattern(BasicPattern):
             self.properties.pop('original_units_in_meter', None)
 
             print('Warning: Parameter units were converted to cm')
+
+    def _normalize_edge_loop_origin(self, panel_name):
+        """Update the edge loops and edge ids references in parameters & constraints after change"""
+        rotated_edge_ids = super(ParametrizedPattern, self)._normalize_edge_loop_origin(panel_name)
+
+        # Parameters
+        for parameter_name in self.spec['parameters']:
+            self._influence_after_edge_loop_update(
+                self.spec['parameters'][parameter_name]['influence'], panel_name, rotated_edge_ids)
+
+        # Constraints
+        if 'constraints' in self.spec:
+            for constraint_name in self.spec['constraints']:
+                self._influence_after_edge_loop_update(
+                    self.spec['constraints'][constraint_name]['influence'], panel_name, rotated_edge_ids)
+
+    def _influence_after_edge_loop_update(self, infl_list, panel_name, new_edge_ids):
+        """Update the list of parameter\constraint influence with the new edge ids of given panel"""
+        for infl_id in range(len(infl_list)):
+            if infl_list[infl_id]['panel'] == panel_name:
+                # update
+                edge_list = infl_list[infl_id]['edge_list']
+                for edge_list_id in range(len(edge_list)):
+                    if isinstance(edge_list[edge_list_id], int):  # Simple edge id lists in curvature params
+                        old_id = edge_list[edge_list_id]
+                        edge_list[edge_list_id] = new_edge_ids[old_id]
+                    elif isinstance(edge_list[edge_list_id]['id'], list):  # Meta-edge in length parameters  & constraints
+                        for i in range(len(edge_list[edge_list_id]['id'])):
+                            old_id = edge_list[edge_list_id]['id'][i]
+                            edge_list[edge_list_id]['id'][i] = new_edge_ids[old_id]
+                    else:  # edge description in length parameters & constraints
+                        old_id = edge_list[edge_list_id]['id']
+                        edge_list[edge_list_id]['id'] = new_edge_ids[old_id]
 
     def _update_pattern_by_param_values(self):
         """
@@ -1179,7 +1246,7 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = BasicPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee.json'))
     # pattern = BasicPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
@@ -1191,11 +1258,11 @@ if __name__ == "__main__":
     # print(pattern.stitches_as_tags())
 
 
-    tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
+    # tensor, rot, transl, stitches, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
 
-    empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
-    # print(pattern.pattern['stitches'])
-    print(empty_pattern.panel_order())
+    # empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    print(pattern.pattern['stitches'])
+    # print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_translation'
-    empty_pattern.serialize(system_config['output'], to_subfolder=True)
+    pattern.name = pattern.name + '_edge_loop_norm' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    pattern.serialize(system_config['output'], to_subfolder=True)
