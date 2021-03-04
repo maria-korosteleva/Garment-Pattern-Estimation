@@ -261,7 +261,6 @@ class BasicPattern(object):
         in_panel_order = []
         for idx in range(len(pattern_representation)):
             panel_name = 'panel_' + str(idx)
-            in_panel_order.append(panel_name)
             
             try:
                 self.panel_from_numeric(
@@ -270,6 +269,7 @@ class BasicPattern(object):
                     rotation=panel_rotations[idx] if panel_rotations is not None else None,
                     translation=panel_translations[idx] if panel_translations is not None else None,
                     padded=padded)
+                in_panel_order.append(panel_name)
             except EmptyPanelError as e:
                 # Found an empty panel in the input
                 # While the rest of the panels should also be empty (normally), 
@@ -352,7 +352,7 @@ class BasicPattern(object):
             edge_sequence = edge_sequence[selection]
             if len(edge_sequence) < 3:
                 # 0, 1, 2 edges are not enough to form a panel -> assuming this is a mock panel
-                raise EmptyPanelError(panel_name)
+                raise EmptyPanelError('{}::EmptyPanelError::Supplied <{}> is empty'.format(self.__class__.__name__, panel_name))
 
         if panel_name not in self.pattern['panels']:
             # add new panel! =)
