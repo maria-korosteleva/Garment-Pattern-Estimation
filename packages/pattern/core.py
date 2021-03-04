@@ -127,7 +127,16 @@ class BasicPattern(object):
         return name
 
     # --------- Info ------------------------
-    def panel_order(self, name_list=None, location_dict=None, dim=0, tolerance=5):
+    def panel_order(self, force_update=False):
+        """
+            Return current agreed-upon order of panels
+            * if not defined in the pattern or if  'force_update' is enabled, re-evaluate it based on curent panel translation and save
+        """
+        if 'panel_order' not in self.pattern or force_update:
+            self.pattern['panel_order'] = self.define_panel_order()
+        return self.pattern['panel_order']
+
+    def define_panel_order(self, name_list=None, location_dict=None, dim=0, tolerance=10):
         """ (Recursive) Ordering of the panels based on their 3D translation values.
             * Using cm as units for tolerance (when the two coordinates are considered equal)
             * Sorting by all dims as keys X -> Y -> Z (left-right (looking from Z) then down-up then back-front)
@@ -153,13 +162,13 @@ class BasicPattern(object):
                 if sorted_reference[fuzzy_end] - sorted_reference[fuzzy_start] >= tolerance:
                     # the range of similar values is completed
                     if fuzzy_end - fuzzy_start > 1:
-                        sorted_names[fuzzy_start:fuzzy_end] = self.panel_order(
+                        sorted_names[fuzzy_start:fuzzy_end] = self.define_panel_order(
                             sorted_names[fuzzy_start:fuzzy_end], location_dict, dim + 1, tolerance)
                     fuzzy_start = fuzzy_end  # start counting similar values anew
 
             # take care of the tail
             if fuzzy_start != fuzzy_end:
-                sorted_names[fuzzy_start:] = self.panel_order(
+                sorted_names[fuzzy_start:] = self.define_panel_order(
                     sorted_names[fuzzy_start:], location_dict, dim + 1, tolerance)
 
         return sorted_names
@@ -266,6 +275,8 @@ class BasicPattern(object):
                 # While the rest of the panels should also be empty (normally), 
                 # the checks are run for all panels to make errors in predictions obvious if they occur
                 pass
+
+        self.pattern['panel_order'] = in_panel_order  # save the incoming panel order
 
         # remove existing stitches -- start anew
         self.pattern['stitches'] = []
@@ -557,6 +568,9 @@ class BasicPattern(object):
             self.properties['normalized_edge_loops'] = True
             for panel in self.pattern['panels']:
                 self._normalize_edge_loop(panel)
+        
+        # Recalculate panel order if not given already
+        self.panel_order()
 
     def _normalize_panel_translation(self, panel_name):
         """ Convert panel vertices to local coordinates: 
@@ -1247,8 +1261,8 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    # pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
-    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
+    pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'basic tee', 'tee_rotated.json'))
+    # pattern = ParametrizedPattern(os.path.join(system_config['templates_path'], 'skirts', 'skirt_4_panels.json'))
     # pattern = BasicPattern(os.path.join(system_config['datasets_path'], 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_init = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', 'specification.json'))
     # pattern_predicted = BasicPattern(os.path.join(base_path, 'nn_pred_data_1000_tee_200527-14-50-42_regen_200612-16-56-43201106-14-46-31', 'test', 'tee_8O9CU32Q8G', '_predicted_specification.json'))
@@ -1258,15 +1272,16 @@ if __name__ == "__main__":
 
     # print(pattern.stitches_as_tags())
 
-    print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
+    # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
 
-    tensor, num_panels, rot, transl, stitches, stitch_num, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
+    # tensor, num_panels, rot, transl, stitches, stitch_num, stitch_tags = pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)
 
-    empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    # empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # print(pattern.pattern['stitches'])
     # print(empty_pattern.panel_order())
 
-    empty_pattern.name = pattern.name + '_edge_loop_norm_in_NN' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
-    empty_pattern.serialize(system_config['output'], to_subfolder=True)
+    pattern.name = pattern.name + '_save_pattern_order' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    # empty_pattern.serialize(system_config['output'], to_subfolder=True)
+    pattern.serialize(system_config['output'], to_subfolder=True)
 
 
