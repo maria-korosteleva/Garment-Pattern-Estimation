@@ -10,9 +10,10 @@ import traceback
 import sys
 
 # for system info
-import platform,json,psutil
-if 'win' in platform.system() or 'Win' in platform.system():
-    import wmi # pip install wmi
+if sys.version_info.major >= 3:  # prevent from loading within Maya -- Py2.7 compatibility
+    import platform, json, psutil
+    if 'win' in platform.system() or 'Win' in platform.system():
+        import wmi # pip install wmi
 
 
 class Properties():
@@ -85,6 +86,9 @@ class Properties():
 
     def add_sys_info(self):
         """Add or update system information on the top level of config"""
+
+        if sys.version_info.major < 3:
+            raise NotImplementedError('{}::Requesting system info is not supported for Python 2'.format(self.__class__.__name__))
 
         # https://stackoverflow.com/questions/3103178/how-to-get-the-system-info-with-python
 
