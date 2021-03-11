@@ -22,8 +22,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='multi-all-fin', 
-    run_id='216nexgv')  # finished experiment
+    run_name='multi-all-order-fix', 
+    run_id='5cnaly5h')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -70,7 +70,7 @@ print('Test metrics per dataset: {}'.format(test_breakdown))
 # prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 # print('Saved to {}'.format(prediction_path))
 # # reflect predictions info in expetiment
-# experiment.add_statistic('scan_folder', prediction_path.name)
+# experiment.add_statistic('pred_folder', prediction_path.name)
 
 # art_name = 'multi-data-scan' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-scan'
 # experiment.add_artifact(prediction_path, art_name, 'result')
