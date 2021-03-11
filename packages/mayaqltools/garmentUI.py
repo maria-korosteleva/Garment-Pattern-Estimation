@@ -381,10 +381,19 @@ def imitate_3D_scan_callback(button, state, *args):
                 command=partial(stop_sim_callback, button, state))
     cmds.refresh(currentView=True)
 
-    mymaya.scan_imitation.remove_invisible(
-        state.garment.get_qlcloth_geomentry(),
-        [state.scene.body] if state.scene is not None else []
-    )
+    if 'scan_imitation' in state.config:
+        num_rays = state.config['scan_imitation']['config']['test_rays_num']
+        vis_rays = state.config['scan_imitation']['config']['visible_rays_num']
+        mymaya.scan_imitation.remove_invisible(
+            state.garment.get_qlcloth_geomentry(),
+            [state.scene.body] if state.scene is not None else [], 
+            num_rays, vis_rays
+        )
+    else:  # go with function defaults
+        mymaya.scan_imitation.remove_invisible(
+            state.garment.get_qlcloth_geomentry(),
+            [state.scene.body] if state.scene is not None else []
+        )
 
     cmds.button(button, edit=True, 
                 label='Imitate 3D Scan', backgroundColor=[150 / 256, 225 / 256, 80 / 256],
