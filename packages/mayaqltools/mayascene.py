@@ -417,7 +417,7 @@ class MayaGarment(core.ParametrizedPattern):
         cloths = [obj for obj in children if 'qlCloth' in obj]
         cmds.parent(cloths, self.MayaObjects['pattern'])
 
-    def save_mesh(self, folder=''):
+    def save_mesh(self, folder='', tag='sim'):
         """
             Saves cloth as obj file to a given folder or 
             to the folder with the pattern if not given.
@@ -430,7 +430,7 @@ class MayaGarment(core.ParametrizedPattern):
             filepath = folder
         else:
             filepath = self.path
-        self._save_to_path(filepath, self.name + '_sim')
+        self._save_to_path(filepath, self.name + '_' + tag)
 
     def cache_if_enabled(self, frame):
         """If caching is enabled -> saves current geometry to cache folder

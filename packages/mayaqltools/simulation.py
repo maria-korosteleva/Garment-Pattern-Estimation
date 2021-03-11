@@ -212,12 +212,13 @@ def template_simulation(spec, scene, sim_props, delete_on_clean=False, caching=F
         shader_group=scene.cloth_SG(), 
         obstacles=[scene.body]  # I don't add floor s.t. garment falls infinitely if falls
     )
+    garment.save_mesh(tag='stitched')
     garment.sim_caching(caching)
 
     qw.run_sim(garment, sim_props)
 
     # save even if sim failed -- to see what happened!
-    garment.save_mesh()
+    garment.save_mesh(tag='sim')
     scene.render(garment.path, garment.name)
     if save_maya_scene:
         # save current Maya scene
