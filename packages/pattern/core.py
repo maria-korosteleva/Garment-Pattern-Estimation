@@ -470,7 +470,7 @@ class BasicPattern(object):
         # Rotate
         rotation = np.array(rotation)
         if rotation.size == 3:  # transform Euler angles to matrix
-            rotation = scipy_rot.from_euler('xyz', rotation, degrees=True).as_matrix()
+            rotation = rotation.euler_xyz_to_R(rotation)
             # otherwise we already have the matrix
         elif rotation.size != 9:
             raise ValueError('BasicPattern::Error::You need to provide Euler angles or Rotation matrix for _point_in_3D(..)')
@@ -502,7 +502,7 @@ class BasicPattern(object):
             [top_right[0], mid_y],
             [low_left[0], mid_y]
         ]
-        rot_matrix = scipy_rot.from_euler('xyz', panel['rotation'], degrees=True).as_matrix()  # calculate once for all points
+        rot_matrix = rotation.euler_xyz_to_R(panel['rotation'])  # calculate once for all points # Maya (Python 2.7) compatible
         mid_points_3D = np.vstack(tuple(
             [self._point_in_3D(coords, rot_matrix, panel['translation']) for coords in mid_points_2D]
         ))
