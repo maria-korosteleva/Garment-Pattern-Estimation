@@ -9,6 +9,11 @@ from numbers import Number
 import traceback
 import sys
 
+# for system info
+import platform,json,psutil
+if 'win' in platform.system() or 'Win' in platform.system():
+    import wmi # pip install wmi
+
 
 class Properties():
     """Keeps, loads, and saves cofiguration & statistic information
@@ -77,6 +82,25 @@ class Properties():
         # section exists
         for key, value in kwconfig.items():
             self.properties[key] = value
+
+    def add_sys_info(self):
+        """Add or update system information on the top level of config"""
+
+        # https://stackoverflow.com/questions/3103178/how-to-get-the-system-info-with-python
+
+        self.properties['system_info'] = {}
+
+        self.properties['system_info']['platform']=platform.system()
+        self.properties['system_info']['platform-release']=platform.release()
+        self.properties['system_info']['platform-version']=platform.version()
+        self.properties['system_info']['architecture']=platform.machine()
+        self.properties['system_info']['processor']=platform.processor()
+        self.properties['system_info']['ram']=str(round(psutil.virtual_memory().total / (1024.0 **3)))+" GB"
+
+        if 'win' in platform.system() or 'Win' in platform.system():
+            # only works on WIndows machines
+            computer = wmi.WMI() 
+            self.properties['system_info']['GPU'] = [computer.Win32_VideoController()[i].name for i in range(len(computer.Win32_VideoController()))]
 
     def clean_stats(self, properties):
         """ Remove info from all Stats sub sections """
