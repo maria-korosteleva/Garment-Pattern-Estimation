@@ -479,9 +479,6 @@ class MayaGarment(core.ParametrizedPattern):
         solvers = [obj for obj in panel_geom if 'Solver' in obj]
         panel_geom = list(set(panel_geom) - set(solvers))
         panel_geom = cmds.parent(panel_geom, panel_group)  # organize
-        
-        # fix normals if needed
-        self._match_normal(panel_geom, panel_name)
 
         return panel_group
 
@@ -503,47 +500,6 @@ class MayaGarment(core.ParametrizedPattern):
         points = np.c_[points, np.zeros(len(points))]
 
         return list(map(tuple, points))
-
-    def _match_normal(self, panel_geom, panel_name):
-        """Check if the normal of loaded geometry matches the expected normal of the pattern 
-            and flips the normal of the first is not matched"""
-        
-        # get intended normal direction from spec
-        # enough to check cross-product of two consecutive edges of a panel (with non-zero cross product)
-        panel = self.pattern['panels'][panel_name]
-        vertices = np.asarray(panel['vertices'])
-        cross = 0
-        
-        for i in range(len(panel['edges']) - 1):
-            # TODO this test is not reliable test of normal -- update
-            edge_i = panel['edges'][i]
-            edge_i = vertices[edge_i['endpoints'][1]] - vertices[edge_i['endpoints'][0]]
-            edge_i_next = panel['edges'][i + 1]
-            edge_i_next = vertices[edge_i_next['endpoints'][1]] - vertices[edge_i_next['endpoints'][0]]
-            cross = np.cross(edge_i, edge_i_next)
-            if not np.isclose(cross, 0):
-                break
-
-        if np.isclose(cross, 0):
-            raise ValueError('In panel {} all edges are collinear'.format(panel_name))
-
-        # rotate to get normal
-        cross = np.array([0, 0, cross / abs(cross)])
-        normal = self._applyEuler(cross, panel['rotation'])
-
-        # get normal direction from panel 
-        # NOTE all the mesh faces have the same orientation
-        maya_normals = cmds.polyInfo(panel_geom, faceNormals=True)
-        maya_normal_str = maya_normals[0].split(':')[1]  # 'FACE_NORMAL      0: -0.000031 0.000000 18.254578'
-        maya_normal = np.fromstring(maya_normal_str, count=3, sep=' ')   
-        maya_normal /= np.linalg.norm(maya_normal)  # assume no zero normals
-
-        # check
-        if np.dot(normal, maya_normal) < 0:
-            # normals are opposite directions
-            print('Warning: panel {} normal seems to be loaded wrong, BUT NOT flipping (detection has bugs)'.format(panel_name))
-            # qw.flipPanelNormal(panel_geom)
-        pass
 
     def _applyEuler(self, vector, eulerRot):
         """Applies Euler angles (in degrees) to provided 3D vector"""
