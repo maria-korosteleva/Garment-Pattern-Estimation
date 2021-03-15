@@ -17,7 +17,7 @@ if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
 
 # My
-from pattern import rotation
+from pattern import rotation as rotation_tools
 
 standard_filenames = [
     'specification',  # e.g. used by dataset generation
@@ -470,7 +470,7 @@ class BasicPattern(object):
         # Rotate
         rotation = np.array(rotation)
         if rotation.size == 3:  # transform Euler angles to matrix
-            rotation = rotation.euler_xyz_to_R(rotation)
+            rotation = rotation_tools.euler_xyz_to_R(rotation)
             # otherwise we already have the matrix
         elif rotation.size != 9:
             raise ValueError('BasicPattern::Error::You need to provide Euler angles or Rotation matrix for _point_in_3D(..)')
@@ -502,7 +502,7 @@ class BasicPattern(object):
             [top_right[0], mid_y],
             [low_left[0], mid_y]
         ]
-        rot_matrix = rotation.euler_xyz_to_R(panel['rotation'])  # calculate once for all points # Maya (Python 2.7) compatible
+        rot_matrix = rotation_tools.euler_xyz_to_R(panel['rotation'])  # calculate once for all points # Maya (Python 2.7) compatible
         mid_points_3D = np.vstack(tuple(
             [self._point_in_3D(coords, rot_matrix, panel['translation']) for coords in mid_points_2D]
         ))
@@ -646,11 +646,11 @@ class BasicPattern(object):
             # Panel translation and rotation -- local coord frame changed!
             panel['translation'][0] -= 2 * panel['translation'][0] 
 
-            panel_R = rotation.euler_xyz_to_R(panel['rotation'])
+            panel_R = rotation_tools.euler_xyz_to_R(panel['rotation'])
             flip_R = np.eye(3)
             flip_R[0, 0] = flip_R[2, 2] = -1  # by 180 around Y
 
-            panel['rotation'] = rotation.R_to_euler(panel_R * flip_R)
+            panel['rotation'] = rotation_tools.R_to_euler(panel_R * flip_R)
         
         
 
