@@ -555,7 +555,7 @@ class BaseDataset(Dataset):
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
         # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
-        pass
+        return datapoints_names
 
     def _get_features(self, datapoint_name, folder_elements=None):
         """Read/generate datapoint features"""
