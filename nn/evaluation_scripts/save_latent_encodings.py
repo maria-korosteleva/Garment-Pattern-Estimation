@@ -2,6 +2,7 @@ from pathlib import Path
 import torch
 import pickle
 import numpy as np
+from datetime import datetime
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect
@@ -21,8 +22,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='multi-all-fin', 
-    run_id='216nexgv')  # finished experiment
+    run_name='teesl-pants-Jump-300-PN-server', 
+    run_id='317608zd')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -59,6 +60,8 @@ with torch.no_grad():
 
 all_encodings = torch.cat(all_encodings).cpu().numpy()
 
-np.save('tmp_enc.npy', all_encodings)
-with open('tmp_data_folders.pkl', 'wb') as fp:
+out_folder = Path(system_info['output']) / ('tsne' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+out_folder.mkdir(parents=True, exist_ok=True)
+np.save(out_folder / 'enc.npy', all_encodings)
+with open(out_folder / 'data_folders.pkl', 'wb') as fp:
     pickle.dump(classes, fp)
