@@ -17,7 +17,7 @@ import customconfig
 system_info = customconfig.Properties('./system.json')
 
 # ---- load data ---- 
-encodings_folder_name = 'tsne_210323-14-52-20'
+encodings_folder_name = 'tsne_210324-11-20-31'
 encodings_folder = Path(system_info['output']) / encodings_folder_name
 
 all_encodings = np.load(encodings_folder / 'enc.npy')
@@ -49,7 +49,7 @@ colors = {
     'Shirts and dresses': (0.747, 0.236, 0.048), # (190, 60, 12)
     'Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
     'Pants': (0.025, 0.354, 0.152),  # (6, 90. 39)
-    'Jumpsuit': (0.6104, 0.3023, 0.872)  # (105,52,15)
+    'Jumpsuit': (0.6104, 0.3023, 0.0872)  # (105,52,15)
 }
 
 # plot
