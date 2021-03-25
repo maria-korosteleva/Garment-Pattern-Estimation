@@ -460,6 +460,16 @@ class GarmentFullPattern3D(BaseModule):
         """
         return self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
 
+    def forward_pattern_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into per-panel encodings
+            Useful for obtaining the latent space for Panels
+        """
+        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
+        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+
+        return flat_panel_encodings
+
     def forward_decode(self, garment_encodings):
         """
             Unfold provided garment encodings into the sewing pattens
@@ -467,8 +477,7 @@ class GarmentFullPattern3D(BaseModule):
         self.device = garment_encodings.device
         batch_size = garment_encodings.size(0)
 
-        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
-        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+        flat_panel_encodings = self.forward_pattern_decode(garment_encodings)
 
         # Panel outlines & stitch info
         flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)

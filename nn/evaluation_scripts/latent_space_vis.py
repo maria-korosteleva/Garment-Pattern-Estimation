@@ -15,13 +15,14 @@ import matplotlib.pyplot as plt
 import customconfig
 
 system_info = customconfig.Properties('./system.json')
+encodings_folder_name = 'tsne_teesl-pants-Jump-300-server_210325-13-33-29'
+ecn_type = 'panels'  # 'panels' "garments"
 
 # ---- load data ---- 
-encodings_folder_name = 'tsne_210325-12-07-41'
 encodings_folder = Path(system_info['output']) / encodings_folder_name
 
-all_encodings = np.load(encodings_folder / 'enc.npy')
-with open(encodings_folder / 'data_folders.pkl', 'rb') as fp:
+all_encodings = np.load(encodings_folder / ('enc_' + ecn_type + '.npy'))
+with open(encodings_folder / ('data_folders_' + ecn_type + '.pkl'), 'rb') as fp:
     classes = pickle.load(fp)
 
 print(all_encodings.shape, len(classes))
@@ -62,10 +63,11 @@ fig, ax = plt.subplots()
 
 # plot data
 for label, color in colors.items():
-    plt.scatter(
-        enc_2d[classes == label, 0], enc_2d[classes == label, 1], 
-        color=color, label=label,
-        edgecolors=None, alpha=0.5, s=17)
+    if len(enc_2d[classes == label, 0] > 0):  # skip unused classes
+        plt.scatter(
+            enc_2d[classes == label, 0], enc_2d[classes == label, 1], 
+            color=color, label=label,
+            edgecolors=None, alpha=0.5, s=17)
 plt.legend()
 
 # Axes colors
@@ -76,6 +78,6 @@ ax.tick_params(axis='y', colors='#737373')
 
 # plt.savefig('D:/MyDocs/GigaKorea/SIGGRAPH2021 submission materials/Latent space/tsne.pdf', dpi=300, bbox_inches='tight')
 
-plt.savefig(encodings_folder / 'tsne.pdf', dpi=300, bbox_inches='tight')
-plt.savefig(encodings_folder / 'tsne.jpg', dpi=300, bbox_inches='tight')
+plt.savefig(encodings_folder / ('tsne_' + ecn_type + '.pdf'), dpi=600, bbox_inches='tight')
+plt.savefig(encodings_folder / ('tsne_' + ecn_type + '.jpg'), dpi=600, bbox_inches='tight')
 plt.show()

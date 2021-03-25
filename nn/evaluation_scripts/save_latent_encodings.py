@@ -22,8 +22,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='tee-skirt-dresses-300-server', 
-    run_id='3ffg3xdy')  # finished experiment
+    run_name='teesl-pants-Jump-300-server', 
+    run_id='311kha7h')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -48,20 +48,32 @@ model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 model.eval()
-all_encodings = []
-classes = []
+all_garment_encodings = []
+all_panel_encodings = []
+classes_garments = []
+classes_panels = []
 with torch.no_grad():
     for batch in test_loader:
         features = batch['features'].to(device)
         garment_encodings = model.forward_encode(features)
 
-        all_encodings.append(garment_encodings)
-        classes += batch['data_folder']
+        panel_encodings = model.forward_pattern_decode(garment_encodings)
 
-all_encodings = torch.cat(all_encodings).cpu().numpy()
+        all_garment_encodings.append(garment_encodings)
+        all_panel_encodings.append(panel_encodings)
 
-out_folder = Path(system_info['output']) / ('tsne' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        classes_garments += batch['data_folder']
+        classes_panels += [batch['data_folder'][0] for _ in range(panel_encodings.shape[0])]
+
+all_garment_encodings = torch.cat(all_garment_encodings).cpu().numpy()
+all_panel_encodings = torch.cat(all_panel_encodings).cpu().numpy()
+
+out_folder = Path(system_info['output']) / ('tsne_' + experiment.run_name + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
 out_folder.mkdir(parents=True, exist_ok=True)
-np.save(out_folder / 'enc.npy', all_encodings)
-with open(out_folder / 'data_folders.pkl', 'wb') as fp:
-    pickle.dump(classes, fp)
+
+np.save(out_folder / 'enc_garments.npy', all_garment_encodings)
+np.save(out_folder / 'enc_panels.npy', all_panel_encodings)
+with open(out_folder / 'data_folders_garments.pkl', 'wb') as fp:
+    pickle.dump(classes_garments, fp)
+with open(out_folder / 'data_folders_panels.pkl', 'wb') as fp:
+    pickle.dump(classes_panels, fp)
