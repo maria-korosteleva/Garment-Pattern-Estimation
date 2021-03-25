@@ -17,7 +17,7 @@ import customconfig
 system_info = customconfig.Properties('./system.json')
 
 # ---- load data ---- 
-encodings_folder_name = 'tsne_210324-11-20-31'
+encodings_folder_name = 'tsne_210325-12-07-41'
 encodings_folder = Path(system_info['output']) / encodings_folder_name
 
 all_encodings = np.load(encodings_folder / 'enc.npy')
@@ -37,10 +37,13 @@ enc_2d = tsne.fit_transform(all_encodings)
 mapping = {
     "data_uni_300_tee_sleeveless_210311-14-04-37": 'Shirts and dresses',
     "data_uni_1000_pants_straight_sides_210105-10-49-02": 'Pants',
-    "data_uni_300_jumpsuit_sleeveless_210317-17-45-04": 'Jumpsuit'
+    "data_uni_300_jumpsuit_sleeveless_210317-17-45-04": 'Jumpsuit',
     # 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
-    # 'data_1000_skirt_4_panels_200616-14-14-40': 'Skirts',
-    # 'data_1000_pants_straight_sides_210105-10-49-02': 'Pants'
+    'data_uni_1000_skirt_4_panels_200616-14-14-40': 'Skirts',
+    # 'data_1000_pants_straight_sides_210105-10-49-02': 'Pants',
+    "data_uni_300_skirt_8_panels_210312-18-07-45": 'Skirts',
+    "data_uni_300_dress_sleeveless_210317-17-40-31": 'Dresses',
+    "data_uni_300_wb_dress_sleeveless_210319-18-40-01": 'wb_dresses'
 }
 classes = np.array([mapping[label] for label in classes])
 
@@ -49,7 +52,9 @@ colors = {
     'Shirts and dresses': (0.747, 0.236, 0.048), # (190, 60, 12)
     'Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
     'Pants': (0.025, 0.354, 0.152),  # (6, 90. 39)
-    'Jumpsuit': (0.6104, 0.3023, 0.0872)  # (105,52,15)
+    'Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)
+    'wb_dresses': (0.2, 0.007, 0.192),  
+    'Dresses': (0.527, 0.0, 0.0)  # (134,0,0)
 }
 
 # plot

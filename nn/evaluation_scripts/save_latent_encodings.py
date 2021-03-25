@@ -22,8 +22,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='teesl-pants-Jump-300-PN-server', 
-    run_id='317608zd')  # finished experiment
+    run_name='tee-skirt-dresses-300-server', 
+    run_id='3ffg3xdy')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
