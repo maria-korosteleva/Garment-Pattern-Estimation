@@ -975,6 +975,9 @@ class Scene(object):
         # Put camera
         self.cameras = [self._add_simple_camera()]
 
+        # save config
+        self.config['garment_color'] = colors['cloth_color']
+
     def _load_maya_scene(self, scenefile):
         """Load scene from external file. 
             NOTE Assumes certain naming of nodes in the scene!"""
@@ -995,6 +998,9 @@ class Scene(object):
         # shader groups (to be used in cmds.sets())
         self.scene['body_SG'] = self._create_shader_group(self.scene['body_shader'], 'bodySG')
         self.scene['cloth_SG'] = self._create_shader_group(self.scene['cloth_shader'], 'garmentSG')
+
+        # save garment color to config
+        self.config['garment_color'] = self._fetch_color(self.scene['cloth_shader'])
 
         # apply coloring to body object
         if self.body:
