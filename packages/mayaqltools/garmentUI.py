@@ -30,7 +30,7 @@ def start_GUI():
     state = State()  
 
     # init window
-    window_width = 400
+    window_width = 420
     main_offset = 10
     win = cmds.window(
         title="Template editing", width=window_width,
@@ -60,13 +60,16 @@ def start_GUI():
     cmds.separator()
 
     # Operations
-    equal_rowlayout(3, win_width=window_width, offset=main_offset)
-    cmds.button(label='Reload from JSON', backgroundColor=[255 / 256, 169 / 256, 119 / 256], 
+    equal_rowlayout(4, win_width=window_width, offset=(main_offset / 2))
+    cmds.button(label='Reload Spec', backgroundColor=[255 / 256, 169 / 256, 119 / 256], 
                 command=partial(reload_garment_callback, state))
     sim_button = cmds.button(label='Start Sim', backgroundColor=[227 / 256, 255 / 256, 119 / 256])
     cmds.button(sim_button, edit=True, 
                 command=partial(start_sim_callback, sim_button, state))
-    scan_button = cmds.button(label='Imitate 3D Scan', backgroundColor=[150 / 256, 225 / 256, 80 / 256])
+    collisions_button = cmds.button(label='Test Collisions', backgroundColor=[250 / 256, 200 / 256, 119 / 256])
+    cmds.button(collisions_button, edit=True, 
+                command=partial(check_collisions_callback, collisions_button, state))
+    scan_button = cmds.button(label='Imitate 3D Scan', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
     cmds.button(scan_button, edit=True, 
                 command=partial(imitate_3D_scan_callback, scan_button, state))
                              
@@ -333,14 +336,6 @@ def start_sim_callback(button, state, *args):
     # Reload geometry in case something changed
     state.reload_garment()
 
-    if state.garment.intersect_colliders_3D() or state.garment.self_intersect_3D():
-        result = cmds.confirmDialog(
-            title='Confirm simulating with initial penetrations', 
-            message='Garment either penetrates colliders or itself. Do you want to proceed with simulation?', 
-            button=['Yes', 'No'], defaultButton='Yes', cancelButton='No', dismissString='No')
-        if result == 'No':
-            return  # Do not start simulation
-
     mymaya.qualothwrapper.start_maya_sim(state.garment, state.config['sim'])
 
     # Update button 
@@ -361,6 +356,16 @@ def stop_sim_callback(button, state, *args):
 
     cmds.select(state.garment.get_qlcloth_props_obj())  # for props change
 
+
+def check_collisions_callback(button, state, *args):
+    """Run removal of faces that might be invisible to 3D scanner"""
+
+    # indicate waiting for imitation finish
+    cmds.button(button, edit=True, 
+                label='Checking...', backgroundColor=[245 / 256, 96 / 256, 66 / 256],
+                command=partial(stop_sim_callback, button, state))
+    cmds.refresh(currentView=True)
+
     cmds.confirmDialog(
         title='Simulation quality info:', 
         message=(
@@ -370,6 +375,10 @@ def stop_sim_callback(button, state, *args):
                 'Yes' if state.garment.intersect_colliders_3D() else 'No', 
                 'Yes' if state.garment.self_intersect_3D(verbose=True) else 'No'), 
         button=['Ok'], defaultButton='Ok', cancelButton='Ok', dismissString='Ok')
+
+    cmds.button(button, edit=True, 
+                label='Test Collisions', backgroundColor=[250 / 256, 200 / 256, 119 / 256],
+                command=partial(check_collisions_callback, button, state))
 
 
 def imitate_3D_scan_callback(button, state, *args):
