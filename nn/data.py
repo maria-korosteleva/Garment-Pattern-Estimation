@@ -313,7 +313,15 @@ class BaseDataset(Dataset):
             # dataset name as part of datapoint name
             datapoints_names = [data_folder + '/' + name for name in dirs]
             self.dataset_start_ids.append((data_folder, len(self.datapoints_names)))
-            self.datapoints_names += self._clean_datapoint_list(datapoints_names, data_folder)
+            clean_list = self._clean_datapoint_list(datapoints_names, data_folder)
+            if ('max_datapoints_per_type' in self.config
+                    and self.config['max_datapoints_per_type'] is not None
+                    and len(clean_list)) > self.config['max_datapoints_per_type']:
+                # There is no need to do random sampling of requested number of datapoints
+                # The sample sewing patterns are randomly generated in the first place without particulat order
+                # hence, simple slicing of elements would be equivalent to sampling them randomly from the list
+                clean_list = clean_list[:self.config['max_datapoints_per_type']] 
+            self.datapoints_names += clean_list
         self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
 
         # cashing setup

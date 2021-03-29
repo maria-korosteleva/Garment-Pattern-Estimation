@@ -101,7 +101,8 @@ def get_data_config(in_config, old_stats=False):
             # 'standardize': data_config['standardize'],
             'max_pattern_len': data_config['max_pattern_len'],
             'max_panel_len': data_config['max_panel_len'],
-            'max_num_stitches': data_config['max_num_stitches']  # the rest of the info is not needed here
+            'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
+            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None # keep the numbers too
         }
         # failsafety
         try:
@@ -114,7 +115,7 @@ def get_data_config(in_config, old_stats=False):
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_percent': 20, 'test_percent': 20, 'random_seed': 10, 'filename': './wandb/data_split.json'} 
-        data_config = {}
+        data_config = {'max_datapoints_per_type': 20}  # no upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -139,12 +140,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
+        project_name='Test-Garments-Reconstruction', 
         run_name='multi-all-order-fix', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)
+    split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(Path(system_info['datasets_path']) / dataset_folder, data_config, gt_caching=True, feature_caching=True)
