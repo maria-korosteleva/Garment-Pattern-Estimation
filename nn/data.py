@@ -137,6 +137,9 @@ class DatasetWrapper(object):
         print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
             len(self.training), len(self.validation) if self.validation else None, 
             len(self.test) if self.test else None))
+        self.split_info['size_train'] = len(self.training)
+        self.split_info['size_valid'] = len(self.validation) if self.validation else 0
+        self.split_info['size_test'] = len(self.test) if self.test else 0
             
         self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
         self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
@@ -149,9 +152,10 @@ class DatasetWrapper(object):
     def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name=''):
         """Print stats on the elements of each datafolder contained in given subset"""
         # gouped by data_folders
-
+        self.split_info[subset_name] = {}
         message = ''
         for data_folder, subset in subset_breakdown_dict.items():
+            self.split_info[subset_name][data_folder] = len(subset)
             message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(subset) / total_len)
         
         print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
@@ -323,6 +327,7 @@ class BaseDataset(Dataset):
                 clean_list = clean_list[:self.config['max_datapoints_per_type']] 
             self.datapoints_names += clean_list
         self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
+        self.config['size'] = len(self)
 
         # cashing setup
         self.gt_cached = {}
