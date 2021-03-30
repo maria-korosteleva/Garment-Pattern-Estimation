@@ -73,7 +73,9 @@ def get_encodings(model, loader, save_to=None):
             all_panel_encodings.append(panel_encodings)
 
             classes_garments += batch['data_folder']
-            classes_panels += [batch['data_folder'][0] for _ in range(panel_encodings.shape[0])]
+            for pattern_id in range(len(batch['data_folder'])):
+                # copy the folder of pattern to every panel in it's patten
+                classes_panels += [batch['data_folder'][pattern_id] for _ in range(model.max_pattern_size)]
 
     all_garment_encodings = torch.cat(all_garment_encodings).cpu().numpy()
     all_panel_encodings = torch.cat(all_panel_encodings).cpu().numpy()
@@ -108,11 +110,11 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
         'data_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
         'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
         'data_5000_tee_200924-16-57-59_regen_210327-15-20-23': 'Shirts and dresses',
-        # 'data_uni_1000_pants_straight_sides_210105-10-49-02': 'Pants',
+        'data_uni_1000_pants_straight_sides_210105-10-49-02': 'Pants',
         'data_1000_pants_straight_sides_210105-10-49-02': 'Pants',
         'data_uni_300_wb_pants_straight_210324-15-38-37': 'Waistband pants',
         'data_uni_300_jumpsuit_sleeveless_210317-17-45-04': 'Jumpsuit',
-        # 'data_uni_1000_skirt_4_panels_200616-14-14-40': 'Simple Skirts',
+        'data_uni_1000_skirt_4_panels_200616-14-14-40': 'Simple Skirts',
         'data_uni_300_skirt_8_panels_210312-18-07-45': 'Wide Skirts',
         'data_uni_300_dress_sleeveless_210317-17-40-31': 'Dresses',
         'data_uni_300_wb_dress_sleeveless_210319-18-40-01': 'Waistband dresses'

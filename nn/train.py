@@ -194,12 +194,8 @@ if __name__ == "__main__":
     # save TSNE plot
     garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'))
 
-    print(panel_classes)
-    print(len(garment_enc), len(garment_classes))
-    print(len(panel_enc), len(panel_classes))
-
-    tsne_plot.tsne_plot(garment_enc, garment_classes, experiment.local_path(), 'garments')
-    tsne_plot.tsne_plot(panel_enc, panel_classes, experiment.local_path(), 'panels')
+    tsne_plot.tsne_plot(garment_enc, garment_classes, experiment.local_path(), 'garments', dpi=150)
+    tsne_plot.tsne_plot(panel_enc, panel_classes, experiment.local_path(), 'panels', dpi=150)
 
     # save predictions
     prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
