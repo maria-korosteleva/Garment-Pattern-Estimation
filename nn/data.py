@@ -320,7 +320,7 @@ class BaseDataset(Dataset):
             clean_list = self._clean_datapoint_list(datapoints_names, data_folder)
             if ('max_datapoints_per_type' in self.config
                     and self.config['max_datapoints_per_type'] is not None
-                    and len(clean_list)) > self.config['max_datapoints_per_type']:
+                    and len(clean_list) > self.config['max_datapoints_per_type']):
                 # There is no need to do random sampling of requested number of datapoints
                 # The sample sewing patterns are randomly generated in the first place without particulat order
                 # hence, simple slicing of elements would be equivalent to sampling them randomly from the list
