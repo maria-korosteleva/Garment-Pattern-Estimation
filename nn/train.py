@@ -9,6 +9,7 @@ import nets
 import metrics
 from trainer import Trainer
 from experiment import WandbRunWrappper
+import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 
 def get_values_from_args():
@@ -115,7 +116,7 @@ def get_data_config(in_config, old_stats=False):
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_percent': 20, 'test_percent': 20, 'random_seed': 10, 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 20}  # no upper limit of how much data to grab from each type
+        data_config = {'max_datapoints_per_type': 30}  # no upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='multi-all-order-fix', 
+        run_name='tsne_save', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -172,32 +173,40 @@ if __name__ == "__main__":
         print(e)
         print('Train::Warning::Proceeding to evaluation with the current (final) model state')
 
-    dataset_wrapper = trainer.datawraper
+    datawrapper = trainer.datawraper
 
-    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'validation')
+    final_metrics = metrics.eval_metrics(model, datawrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
     experiment.add_statistic('valid_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'valid_per_data_folder')
+    final_metrics = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
     print('Validation metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('valid_best_breakdown', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test')
+    final_metrics = metrics.eval_metrics(model, datawrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, dataset_wrapper, 'test_per_data_folder')
+    final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test_best_breakdown', final_metrics)
 
-    # print(dataset[276]['features'])  # first element of validation set
+    # save TSNE plot
+    garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'))
+
+    print(panel_classes)
+    print(len(garment_enc), len(garment_classes))
+    print(len(panel_enc), len(panel_classes))
+
+    tsne_plot.tsne_plot(garment_enc, garment_classes, experiment.local_path(), 'garments')
+    tsne_plot.tsne_plot(panel_enc, panel_classes, experiment.local_path(), 'panels')
 
     # save predictions
-    prediction_path = dataset_wrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+    prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
     print('Predictions saved to {}'.format(prediction_path))
     # reflect predictions info in expetiment
     experiment.add_statistic('predictions_folder', prediction_path.name)
-    art_name = 'multi-data' if len(dataset_wrapper.dataset.data_folders) > 1 else dataset_wrapper.dataset.data_folders[0]
+    art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
 
     experiment.add_artifact(prediction_path, art_name, 'result')
 

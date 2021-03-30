@@ -258,7 +258,7 @@ class WandbRunWrappper(object):
                 self._load_artifact(artifact_name)
                 print('Requested version is successfully syncronized')
                 break
-            except (ValueError, wb.errors.error.CommError):
+            except (ValueError, wb.CommError):
                 attempt += 1
                 print('Trying again')
         if attempt > max_attempts:
