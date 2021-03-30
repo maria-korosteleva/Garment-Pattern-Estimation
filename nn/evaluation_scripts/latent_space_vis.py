@@ -34,7 +34,7 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     # -------- data -------
     # data_config also contains the names of datasets to use
     split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
-    data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
+    data_config.update({'obj_filetag': 'sim'})  # , 'max_datapoints_per_type': 300})
 
     dataset = data.Garment3DPatternFullDataset(
         datasets_path, data_config, gt_caching=True, feature_caching=True)
@@ -91,6 +91,20 @@ def get_encodings(model, loader, save_to=None):
     return all_garment_encodings, classes_garments, all_panel_encodings, classes_panels
 
 
+def load_enc_from_files(encodings_folder, enc_tag='garments'):
+    """
+        Load serialized encodings for particular type of encoding
+        Supported tags (aka types): {'garments', 'panels'}
+    """
+
+    all_encodings = np.load(encodings_folder / ('enc_' + enc_tag + '.npy'))
+    with open(encodings_folder / ('data_folders_' + enc_tag + '.pkl'), 'rb') as fp:
+        classes = pickle.load(fp)
+
+    print(all_encodings.shape, len(classes))
+
+    return all_encodings, classes
+
 
 def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_mode=False, dpi=300):
     """
@@ -110,12 +124,15 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
         'data_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
         'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
         'data_5000_tee_200924-16-57-59_regen_210327-15-20-23': 'Shirts and dresses',
+        'data_uni_300_jacket_210318-13-09-42': 'Jacket',
+        'data_uni_300_jacket_hood_210323-13-58-16': 'Jacket',
         'data_uni_1000_pants_straight_sides_210105-10-49-02': 'Pants',
         'data_1000_pants_straight_sides_210105-10-49-02': 'Pants',
         'data_uni_300_wb_pants_straight_210324-15-38-37': 'Waistband pants',
         'data_uni_300_jumpsuit_sleeveless_210317-17-45-04': 'Jumpsuit',
-        'data_uni_1000_skirt_4_panels_200616-14-14-40': 'Simple Skirts',
-        'data_uni_300_skirt_8_panels_210312-18-07-45': 'Wide Skirts',
+        'data_uni_1000_skirt_4_panels_200616-14-14-40': '4-panel Skirts',
+        'data_uni_300_skirt_2_panels_210326-16-03-22': '2-panel Skirts',
+        'data_uni_300_skirt_8_panels_210312-18-07-45': '8-panel Skirts',
         'data_uni_300_dress_sleeveless_210317-17-40-31': 'Dresses',
         'data_uni_300_wb_dress_sleeveless_210319-18-40-01': 'Waistband dresses'
     }
@@ -124,13 +141,16 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
     # define colors
     colors = {
         'Shirts and dresses': (0.747, 0.236, 0.048), # (190, 60, 12)
-        'Simple Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
-        'Wide Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
+        'Jacket': (0.4793117642402649, 0.10461537539958954, 0.0),
+        'Open Hoody': (0.746999979019165, 0.28518322110176086, 0.11503798514604568), 
+        '8-panel Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
+        '4-panel Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
+        '2-panel Skirts': (0.24227915704250336, 0.6172128915786743, 1.0),  
         'Pants': (0.025, 0.354, 0.152),  # (6, 90. 39)
         'Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)
         'Waistband dresses': (0.2, 0.007, 0.192),  
         'Dresses': (0.527, 0.0, 0.0),  # (134,0,0)
-        'Waistband pants': (0.527, 0.0, 0.0),  # (134,0,0)
+        'Waistband pants': (0.250900000333786, 0.3528999984264374, 0.13330000638961792), 
         'Unknown': (0.15, 0.15, 0.15)
     }
 
@@ -164,30 +184,14 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
     print('Info::Saved TSNE plot for {}'.format(name_tag))
 
 
-def load_enc_from_files(dir_paths, enc_tag='garments'):
-    """
-        Load serialized encodings for particular type of encoding
-        Supported tags (aka types): {'garments', 'panels'}
-    """
-    encodings_folder = Path(system_info['output']) / encodings_folder_name
-
-    all_encodings = np.load(encodings_folder / ('enc_' + enc_tag + '.npy'))
-    with open(encodings_folder / ('data_folders_' + enc_tag + '.pkl'), 'rb') as fp:
-        classes = pickle.load(fp)
-
-    print(all_encodings.shape, len(classes))
-
-    return all_encodings, classes
-
-
 if __name__ == '__main__':
     system_info = customconfig.Properties('./system.json')
 
     experiment = WandbRunWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
-        run_name='teesl-pants-Jump-300-server', 
-        run_id='311kha7h')  # finished experiment
+        run_name='tee-skirt-dresses-300-server', 
+        run_id='3ffg3xdy')  # finished experiment
 
     if not experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
@@ -202,7 +206,8 @@ if __name__ == '__main__':
 
     # if loading from file
     # encodings_folder_name = 'tsne_teesl-pants-Jump-300-server_210325-13-33-29'
-    # ecn_type = 'panels'  # 'panels' "garments"
+    # garment_enc, garment_classes = load_enc_from_files(Path(system_info['output']) / encodings_folder_name, 'garments')
+    # panel_enc, panel_classes = load_enc_from_files(Path(system_info['output']) / encodings_folder_name, 'panels')
 
     # save plots
     tsne_plot(garment_enc, garment_classes, out_folder, 'garments', True, dpi=600)
