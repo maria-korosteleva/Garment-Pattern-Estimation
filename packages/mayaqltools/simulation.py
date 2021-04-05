@@ -212,7 +212,7 @@ def template_simulation(spec, scene, sim_props, delete_on_clean=False, caching=F
         shader_group=scene.cloth_SG(), 
         obstacles=[scene.body]  # I don't add floor s.t. garment falls infinitely if falls
     )
-    garment.save_mesh(tag='stitched')
+    # garment.save_mesh(tag='stitched')  # Saving the geometry before eny forces were applied
     garment.sim_caching(caching)
 
     qw.run_sim(garment, sim_props)
