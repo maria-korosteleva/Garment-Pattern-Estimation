@@ -120,21 +120,18 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
     # This is hardcoded stuff because it's mostly needed for final presentation
     # TODO avoid hardcoding dataset names (or template names) -- picking up from dataset properties?
     mapping = {
-        'data_uni_300_tee_sleeveless_210311-14-04-37': 'Shirts and dresses',
-        'data_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
-        'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43': 'Shirts and dresses',
-        'data_5000_tee_200924-16-57-59_regen_210327-15-20-23': 'Shirts and dresses',
-        'data_uni_300_jacket_210318-13-09-42': 'Jacket',
-        'data_uni_300_jacket_hood_210323-13-58-16': 'Jacket',
-        'data_uni_1000_pants_straight_sides_210105-10-49-02': 'Pants',
-        'data_1000_pants_straight_sides_210105-10-49-02': 'Pants',
-        'data_uni_300_wb_pants_straight_210324-15-38-37': 'Waistband pants',
-        'data_uni_300_jumpsuit_sleeveless_210317-17-45-04': 'Jumpsuit',
-        'data_uni_1000_skirt_4_panels_200616-14-14-40': '4-panel Skirts',
-        'data_uni_300_skirt_2_panels_210326-16-03-22': '2-panel Skirts',
-        'data_uni_300_skirt_8_panels_210312-18-07-45': '8-panel Skirts',
-        'data_uni_300_dress_sleeveless_210317-17-40-31': 'Dresses',
-        'data_uni_300_wb_dress_sleeveless_210319-18-40-01': 'Waistband dresses'
+        'tee_sleeveless': 'Shirts and dresses',
+        'tee': 'Shirts and dresses',
+        'jacket': 'Jacket',
+        'jacket_hood': 'Open Hoody',
+        'pants_straight_sides': 'Pants',
+        'wb_pants_straight': 'Waistband pants',
+        'jumpsuit_sleeveless': 'Sleeveless Jumpsuit',
+        'skirt_4_panels': '4-panel Skirts',
+        'skirt_2_panels': '2-panel Skirts',
+        'skirt_8_panels': '8-panel Skirts',
+        'dress_sleeveless': 'Sleeveless Dresses ',
+        'wb_dress_sleeveless': 'Sleeveless Waistband dresses'
     }
     classes = np.array([mapping.get(label, 'Unknown') for label in classes])
 

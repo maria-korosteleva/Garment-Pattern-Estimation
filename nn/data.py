@@ -308,6 +308,7 @@ class BaseDataset(Dataset):
         self.update_config(start_config)
 
         self.data_folders = start_config['data_folders']
+        self.data_folders_nicknames = dict(zip(self.data_folders, self.data_folders))
         
         # list of items = subfolders
         self.datapoints_names = []
@@ -393,7 +394,7 @@ class BaseDataset(Dataset):
                 self.feature_cached[datapoint_name] = features
         
         folder, name = tuple(datapoint_name.split('/'))
-        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': folder}
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': self.data_folders_nicknames[folder]}
 
         # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
@@ -482,10 +483,12 @@ class BaseDataset(Dataset):
                 test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
                 test_ids += test_sub
             
+            folder_nickname = self.data_folders_nicknames[self.data_folders[dataset_id]]
+
             if with_breakdown:
-                train_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, train_sub)
-                valid_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, valid_sub)
-                test_breakdown[self.data_folders[dataset_id]] = torch.utils.data.Subset(self, test_sub) if test_size else None
+                train_breakdown[folder_nickname] = torch.utils.data.Subset(self, train_sub)
+                valid_breakdown[folder_nickname] = torch.utils.data.Subset(self, valid_sub)
+                test_breakdown[folder_nickname] = torch.utils.data.Subset(self, test_sub) if test_size else None
 
         if with_breakdown:
             return (
@@ -526,15 +529,15 @@ class BaseDataset(Dataset):
             # train
             per_data = self.indices_by_data_folder(train_ids)
             for folder, ids_list in per_data.items():
-                train_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+                train_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
             
             per_data = self.indices_by_data_folder(valid_ids)
             for folder, ids_list in per_data.items():
-                valid_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+                valid_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
             
             per_data = self.indices_by_data_folder(test_ids)
             for folder, ids_list in per_data.items():
-                test_breakdown[folder] = torch.utils.data.Subset(self, ids_list)
+                test_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
 
             return (
                 torch.utils.data.Subset(self, train_ids), 
@@ -619,6 +622,14 @@ class GarmentBaseDataset(BaseDataset):
 
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
+        # To make sure the datafolder names are unique after updates
+        all_nicks = self.data_folders_nicknames.values()
+        if len(all_nicks) > len(set(all_nicks)):
+            print('{}::Warning::Some data folder nicknames are not unique: {}. Reverting to the use of original folder names'.format(
+                self.__class__.__name__, self.data_folders_nicknames
+            ))
+            self.data_folders_nicknames = dict(zip(self.data_folders, self.data_folders))
+
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
         if not pattern_size_initialized:
             num_panels = []
@@ -679,11 +690,17 @@ class GarmentBaseDataset(BaseDataset):
 
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
-        """Remove all elements marked as failure from the provided list"""
+        """
+            Remove all elements marked as failure from the provided list
+            Updates the currect dataset nickname as a small sideeffect
+        """
 
         dataset_props = Properties(self.root_path / dataset_folder / 'dataset_properties.json')
         if not dataset_props['to_subfolders']:
             raise NotImplementedError('Only working with datasets organized with subfolders')
+
+        # NOTE A little side-effect here, since we are loading the dataset_properties anyway
+        self.data_folders_nicknames[dataset_folder] = dataset_props['templates'].split('/')[-1].split('.')[0]
 
         try: 
             datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props

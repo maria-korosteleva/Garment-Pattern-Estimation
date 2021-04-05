@@ -142,7 +142,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='tsne_save', 
+        run_name='datafolder-names', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -177,19 +177,19 @@ if __name__ == "__main__":
 
     final_metrics = metrics.eval_metrics(model, datawrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
-    experiment.add_statistic('valid_on_best', final_metrics)
+    experiment.add_statistic('valid_full', final_metrics)
 
     final_metrics = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
     print('Validation metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('valid_best_breakdown', final_metrics)
+    experiment.add_statistic('valid', final_metrics)
 
     final_metrics = metrics.eval_metrics(model, datawrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
-    experiment.add_statistic('test_on_best', final_metrics)
+    experiment.add_statistic('test_full', final_metrics)
 
     final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('test_best_breakdown', final_metrics)
+    experiment.add_statistic('test', final_metrics)
 
     # save TSNE plot
     garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'))
