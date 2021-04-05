@@ -673,7 +673,7 @@ class GarmentBaseDataset(BaseDataset):
         # TODO update reloads of this function
         save_to = Path(save_to)
         prediction_imgs = []
-        for prediction, name, folder in zip(predictions, datanames, folders):
+        for prediction, name, folder in zip(predictions, datanames, data_folders):
 
             pattern = self._pred_to_pattern(prediction, name)
 
