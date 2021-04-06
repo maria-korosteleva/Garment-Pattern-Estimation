@@ -402,7 +402,7 @@ class BaseDataset(Dataset):
                 self.feature_cached[datapoint_name] = features
         
         folder, name = tuple(datapoint_name.split('/'))
-        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': self.data_folders_nicknames[folder]}
+        sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': folder}
 
         # apply transfomations (equally to samples from files or from cache)
         for transform in self.transforms:
@@ -688,9 +688,10 @@ class GarmentBaseDataset(BaseDataset):
         for prediction, name, folder in zip(predictions, datanames, data_folders):
 
             pattern = self._pred_to_pattern(prediction, name)
+            folder_nick = self.data_folders_nicknames[folder]
 
             # save
-            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
+            final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
@@ -1192,7 +1193,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pattern = self._pred_to_pattern(prediction, name)
 
             # save
-            final_dir = pattern.serialize(save_to / folder, to_subfolder=True, tag='_predicted_')
+            folder_nick = self.data_folders_nicknames[folder]
+            final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
