@@ -51,6 +51,18 @@ class EmptyPanelError(Exception):
     pass
 
 
+class InvalidPatternDefError(Exception):
+    """
+        The given pattern definition (e.g. numeric representation) is not self-consistent.
+        Examples: stitches refer to non-existing edges
+    """
+    def __init__(self, pattern_name='', message=''):
+        self.message = 'Pattern {} is invalid'.format(pattern_name)
+        if message:
+            self.message += ': ' + message
+        super().__init__(self.message)
+
+
 class BasicPattern(object):
     """Loading & serializing of a pattern specification in custom JSON format.
         Input:
@@ -290,9 +302,12 @@ class BasicPattern(object):
                 stitch_object = []
                 for side_id in range(stitches.shape[0]):
                     pattern_edge_id = stitches[side_id][stitch_id]
+                    panel_id = int(pattern_edge_id // edges_per_panel)
+                    if panel_id > (len(in_panel_order) - 1):  # validity of stitch definition
+                        raise InvalidPatternDefError(self.name, 'stitch {} referes to non-existing panel {}'.format(stitch_id, panel_id))
                     stitch_object.append(
                         {
-                            "panel": in_panel_order[int(pattern_edge_id // edges_per_panel)],
+                            "panel": in_panel_order[panel_id],
                             "edge": int(pattern_edge_id % edges_per_panel), 
                         }
                     )

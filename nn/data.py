@@ -13,7 +13,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern.core import ParametrizedPattern, BasicPattern
+from pattern.core import ParametrizedPattern, BasicPattern, InvalidPatternDefError
 from pattern.wrappers import VisPattern
 
 
@@ -781,7 +781,7 @@ class GarmentBaseDataset(BaseDataset):
             pattern.pattern_from_tensors(
                 tenzor, panel_rotations=rotations, panel_translations=translations, stitches=stitches,
                 padded=True)   
-        except RuntimeError as e:
+        except (RuntimeError, InvalidPatternDefError) as e:
             if not supress_error:
                 raise e
             print('Garment3DPatternDataset::Warning::{}: {}'.format(dataname, e))
@@ -1432,14 +1432,17 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
 
         pattern = VisPattern(view_ids=False)
         pattern.name = name
-        pattern.pattern_from_tensors(
-            prediction['outlines'], prediction['rotations'], prediction['translations'], 
-            stitches=stitches,
-            padded=True)   
-
-        # save
-        pattern.serialize(save_to, to_subfolder=True)
-
+        try:
+            pattern.pattern_from_tensors(
+                prediction['outlines'], prediction['rotations'], prediction['translations'], 
+                stitches=stitches,
+                padded=True)   
+            # save
+            pattern.serialize(save_to, to_subfolder=True)
+        except InvalidPatternDefError as e:
+            print(e)
+            print('Saving predictions::Skipping pattern {}'.format(name))
+            pass
 
 
 if __name__ == "__main__":
