@@ -226,7 +226,7 @@ class BasicPattern(object):
         stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
         if stitches_num < len(self.pattern['stitches']):
             raise ValueError(
-                'BasicPattern::Error::requiested number of stitches {} is less the number of stitches {} in pattern {}'.format(
+                'BasicPattern::Error::requested number of stitches {} is less the number of stitches {} in pattern {}'.format(
                     stitches_num, len(self.pattern['stitches']), self.name
                 ))
         
