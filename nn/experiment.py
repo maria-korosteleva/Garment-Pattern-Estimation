@@ -81,12 +81,12 @@ class WandbRunWrappper(object):
         if self.initialized:
             wb.run.summary[tag] = info
         else:
-            run = self._run_object()
             if isinstance(info, dict):
                 # NOTE Related wandb issue: https://github.com/wandb/client/issues/1934
                 for key in info:
                     self.add_statistic(tag + '.' + key, info[key])
             else:
+                run = self._run_object()
                 run.summary[tag] = info
                 run.summary.update()
 
