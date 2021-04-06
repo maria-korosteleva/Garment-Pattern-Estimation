@@ -159,21 +159,24 @@ class WandbRunWrappper(object):
         return path
 
     # ----- working with files -------
-    def load_checkpoint_file(self, to_path=None, version=None):
+    def load_checkpoint_file(self, to_path=None, version=None, device=None):
         """Load checkpoint file for given epoch from the cloud"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore checkpoint from the could')
         try:
             art_path = self._load_artifact(self.artifactname('checkpoint', version=version))
             for file in art_path.iterdir():
-                return torch.load(file)
+                if device is not None:
+                    return torch.load(file, map_location=device)
+                else: 
+                    return torch.load(file)  # to the same device it was saved from
                 # only one file per checkpoint anyway
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
             print('WbRunWrapper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
             raise e
     
-    def load_final_model(self, to_path=None):
+    def load_final_model(self, to_path=None, device=None):
         """Load final model parameters file from the cloud if it exists"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
@@ -181,12 +184,15 @@ class WandbRunWrappper(object):
             art_path = self._load_artifact(self.artifactname('checkpoint'), to_path=to_path)  # loading latest
             for file in art_path.iterdir():
                 print(file)
-                return torch.load(file)
+                if device is not None:
+                    return torch.load(file, map_location=device)
+                else: 
+                    return torch.load(file)  # to the same device it was saved from
 
         except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
             raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
     
-    def load_best_model(self, to_path=None):
+    def load_best_model(self, to_path=None, device=None):
         """Load model parameters (model with best performance) file from the cloud if it exists"""
         if not self.run_id:
             raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
@@ -195,7 +201,10 @@ class WandbRunWrappper(object):
             art_path = self._load_artifact(self.artifactname('checkpoint', custom_alias='best'), to_path=to_path)
             for file in art_path.iterdir():
                 print(file)
-                return torch.load(file)
+                if device is not None:
+                    return torch.load(file, map_location=device)
+                else: 
+                    return torch.load(file)  # to the same device it was saved from
                 # only one file per checkpoint anyway
 
         except (requests.exceptions.HTTPError):  # file not found

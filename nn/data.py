@@ -31,6 +31,7 @@ class DatasetWrapper(object):
         self.training = in_dataset
         self.validation = None
         self.test = None
+        self.full_per_datafolder = None
 
         self.batch_size = None
         self.loader_full = None
@@ -54,6 +55,8 @@ class DatasetWrapper(object):
         """Return loader that corresponds to given data section. None if requested loader does not exist"""
         if data_section == 'full':
             return self.loader_full
+        elif data_section == 'full_per_data_folder':
+            return self.loader_full_per_data
         elif data_section == 'train':
             return self.loader_train
         elif data_section == 'test':
@@ -84,6 +87,9 @@ class DatasetWrapper(object):
         self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
 
         self.loader_full = DataLoader(self.dataset, self.batch_size)
+        if self.full_per_datafolder is None:
+            self.full_per_datafolder = self.dataset.subsets_per_datafolder()
+        self.loader_full_per_data = self._loaders_dict(self.full_per_datafolder, self.batch_size)
 
         return self.loader_train, self.loader_validation, self.loader_test
 
@@ -116,7 +122,7 @@ class DatasetWrapper(object):
         torch.manual_seed(self.split_info['random_seed'])
 
         # if file is provided
-        if 'filename' in self.split_info:
+        if 'filename' in self.split_info and self.split_info['filename'] is not None:
             print('DataWrapper::Loading data split from {}'.format(self.split_info['filename']))
             with open(self.split_info['filename'], 'r') as f_json:
                 split_dict = json.load(f_json)
@@ -135,23 +141,25 @@ class DatasetWrapper(object):
             self.new_loaders()  # s.t. loaders could be used right away
 
         print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
-            len(self.training), len(self.validation) if self.validation else None, 
+            len(self.training) if self.training else None, 
+            len(self.validation) if self.validation else None, 
             len(self.test) if self.test else None))
-        self.split_info['size_train'] = len(self.training)
+        self.split_info['size_train'] = len(self.training) if self.training else 0
         self.split_info['size_valid'] = len(self.validation) if self.validation else 0
         self.split_info['size_test'] = len(self.test) if self.test else 0
-            
+        
         self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
         self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
-
-        if self.test is not None:
-            self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
+        self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
 
         return self.training, self.validation, self.test
 
     def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name=''):
         """Print stats on the elements of each datafolder contained in given subset"""
         # gouped by data_folders
+        if not total_len:
+            print('{}::Warning::Subset {} is empty, no stats printed'.format(self.__class__.__name__, subset_name))
+            return
         self.split_info[subset_name] = {}
         message = ''
         for data_folder, subset in subset_breakdown_dict.items():
@@ -451,6 +459,19 @@ class BaseDataset(Dataset):
         
         return ids_dict
 
+    def subsets_per_datafolder(self, index_list=None):
+        """
+            Group given indices by datafolder and Return dictionary with Subset objects for each group.
+            if None, a breakdown for the full dataset is given
+        """
+        if index_list is None:
+            index_list = range(len(self))
+        per_data = self.indices_by_data_folder(index_list)
+        breakdown = {}
+        for folder, ids_list in per_data.items():
+            breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
+        return breakdown
+
     def random_split_by_dataset(self, valid_percent, test_percent=0, with_breakdown=False):
         """Produce subset wrappers for training set, validations set, and test set (if requested)
             * Enshures the equal proportions of elements from each datafolder in each subset -- 
@@ -464,6 +485,8 @@ class BaseDataset(Dataset):
         train_breakdown, valid_breakdown, test_breakdown = {}, {}, {}
 
         for dataset_id in range(len(self.data_folders)):
+            folder_nickname = self.data_folders_nicknames[self.data_folders[dataset_id]]
+
             start_id = self.dataset_start_ids[dataset_id][1]
             end_id = self.dataset_start_ids[dataset_id + 1][1]   # marker of the dataset end included
             data_len = end_id - start_id
@@ -482,8 +505,6 @@ class BaseDataset(Dataset):
             if test_size:
                 test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
                 test_ids += test_sub
-            
-            folder_nickname = self.data_folders_nicknames[self.data_folders[dataset_id]]
 
             if with_breakdown:
                 train_breakdown[folder_nickname] = torch.utils.data.Subset(self, train_sub)
@@ -526,18 +547,9 @@ class BaseDataset(Dataset):
                 valid_ids.append(idx)
 
         if with_breakdown:
-            # train
-            per_data = self.indices_by_data_folder(train_ids)
-            for folder, ids_list in per_data.items():
-                train_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
-            
-            per_data = self.indices_by_data_folder(valid_ids)
-            for folder, ids_list in per_data.items():
-                valid_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
-            
-            per_data = self.indices_by_data_folder(test_ids)
-            for folder, ids_list in per_data.items():
-                test_breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
+            train_breakdown = self.subsets_per_datafolder(train_ids)
+            valid_breakdown = self.subsets_per_datafolder(valid_ids)
+            test_breakdown = self.subsets_per_datafolder(test_ids)
 
             return (
                 torch.utils.data.Subset(self, train_ids), 
