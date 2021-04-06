@@ -45,10 +45,10 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
 
-    return test_loader, model
+    return test_loader, model, dataset
 
 
-def get_encodings(model, loader, save_to=None):
+def get_encodings(model, loader, dataset, save_to=None):
     """
         Get latent space encodings on the test set from the given experiment (defines both dataset and the model)
         Save then to given folder if provided
@@ -79,6 +79,9 @@ def get_encodings(model, loader, save_to=None):
 
     all_garment_encodings = torch.cat(all_garment_encodings).cpu().numpy()
     all_panel_encodings = torch.cat(all_panel_encodings).cpu().numpy()
+
+    classes_garments = [dataset.data_folders_nicknames[data_folder] for data_folder in classes_garments]
+    classes_panels = [dataset.data_folders_nicknames[data_folder] for data_folder in classes_panels]
 
     if save_to is not None:
         np.save(save_to / 'enc_garments.npy', all_garment_encodings)
@@ -187,8 +190,8 @@ if __name__ == '__main__':
     experiment = WandbRunWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
-        run_name='tee-skirt-dresses-300-server', 
-        run_id='3ffg3xdy')  # finished experiment
+        run_name='tee-1000-800-server', 
+        run_id='2su05cm8')  # finished experiment
 
     if not experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
@@ -197,9 +200,9 @@ if __name__ == '__main__':
     out_folder.mkdir(parents=True, exist_ok=True)
 
     # extract encodings
-    data_loader, model = load_model_loader(experiment, system_info['datasets_path'], 'test')
+    data_loader, model, dataset = load_model_loader(experiment, system_info['datasets_path'], 'test')
 
-    garment_enc, garment_classes, panel_enc, panel_classes = get_encodings(model, data_loader, out_folder)
+    garment_enc, garment_classes, panel_enc, panel_classes = get_encodings(model, data_loader, dataset, out_folder)
 
     # if loading from file
     # encodings_folder_name = 'tsne_teesl-pants-Jump-300-server_210325-13-33-29'

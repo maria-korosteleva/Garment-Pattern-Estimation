@@ -192,7 +192,7 @@ if __name__ == "__main__":
     experiment.add_statistic('test', final_metrics)
 
     # save TSNE plot
-    garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'))
+    garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'), dataset)
 
     tsne_plot.tsne_plot(garment_enc, garment_classes, experiment.local_path(), 'garments', dpi=150)
     tsne_plot.tsne_plot(panel_enc, panel_classes, experiment.local_path(), 'panels', dpi=150)
