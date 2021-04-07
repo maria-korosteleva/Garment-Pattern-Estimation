@@ -100,7 +100,7 @@ def batch_sim(resources, data_path, dataset_props,
             continue
 
         dataset_props['sim']['stats']['processed'].append(pattern_name)
-        _serialize_props_with_stats(dataset_props, data_props_file)  # save info of processed files before potential crash
+        _serialize_props_with_sim_stats(dataset_props, data_props_file)  # save info of processed files before potential crash
 
         template_simulation(pattern_spec_norm, 
                             scene, 
@@ -134,7 +134,7 @@ def batch_sim(resources, data_path, dataset_props,
         pass
 
     # Logs
-    _serialize_props_with_stats(dataset_props, data_props_file)
+    _serialize_props_with_sim_stats(dataset_props, data_props_file)
 
     return process_finished
 
@@ -228,6 +228,12 @@ def template_simulation(spec, scene, sim_props, delete_on_clean=False, caching=F
     garment.clean(delete_on_clean)
 
 
+def _serialize_props_with_sim_stats(dataset_props, filename):
+    """Compute data processing statistics and serialize props to file"""
+    dataset_props.sim_stats_summary()
+    dataset_props.serialize(filename)
+
+
 def _get_pattern_files(data_path, dataset_props):
     """ Collects paths to all the pattern files in given folder"""
 
@@ -250,11 +256,3 @@ def _get_pattern_files(data_path, dataset_props):
                 pattern_specs.append(os.path.normpath(os.path.join(root, file)))
     return pattern_specs
 
-
-def _serialize_props_with_stats(dataset_props, filename):
-    """Compute data processing statistics and serialize props to file"""
-    dataset_props.summarize_stats('render_time', log_sum=True, log_avg=True, as_time=True)
-    dataset_props.summarize_stats('fin_frame', log_avg=True)
-    dataset_props.summarize_stats('sim_time', log_sum=True, log_avg=True, as_time=True)
-    dataset_props.summarize_stats('spf', log_avg=True, as_time=True)
-    dataset_props.serialize(filename)

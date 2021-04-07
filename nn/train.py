@@ -103,7 +103,7 @@ def get_data_config(in_config, old_stats=False):
             'max_pattern_len': data_config['max_pattern_len'],
             'max_panel_len': data_config['max_panel_len'],
             'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
-            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None # keep the numbers too
+            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None  # keep the numbers too
         }
         # failsafety
         try:
@@ -205,4 +205,3 @@ if __name__ == "__main__":
     art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
 
     experiment.add_artifact(prediction_path, art_name, 'result')
-
