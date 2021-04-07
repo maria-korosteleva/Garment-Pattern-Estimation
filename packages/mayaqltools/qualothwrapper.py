@@ -144,7 +144,8 @@ def run_sim(garment, props):
     # Fail checks
     # static equilibrium never detected -- might have false negs!
     if frame == config['max_sim_steps'] - 1:
-        print('\nFailed to achieve static equilibrium for {} with {} non-static vertices'.format(garment.name, non_st_count))
+        print('\nFailed to achieve static equilibrium for {} with {} non-static vertices out of {}'.format(
+            garment.name, non_st_count, len(garment.current_verts)))
         _record_fail(props, 'static_equilibrium', garment.name)
     # 3D penetrations 
     if garment.intersect_colliders_3D():
