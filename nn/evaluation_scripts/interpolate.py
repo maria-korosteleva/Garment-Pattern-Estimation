@@ -34,15 +34,15 @@ def slerp(t, low, high):
     so = torch.sin(omega)
     if so == 0:
         # L'Hopital's rule/LERP
-        return (1.0 - t) * low + val * high
-    return sin((1.0 - t) * omega) / so * low + sin(t * omega) / so * high
+        return (1.0 - t) * low + t * high
+    return torch.sin((1.0 - t) * omega) / so * low + torch.sin(t * omega) / so * high
 
 
 if __name__ == "__main__":
     
     system_info = customconfig.Properties('./system.json')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    save_to = Path(system_info['output']) / ('interpolate' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+    save_to = Path(system_info['output']) / ('s_interpolate' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
     save_to.mkdir(parents=True)
 
     # exactly 2
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     for i in range(num_in_between + 1):
         t += 1. / (num_in_between + 1)
         encodings.append(
-            lerp(t, pred_encodings[0], pred_encodings[1])
+            slerp(t, pred_encodings[0], pred_encodings[1])
         )
     encodings = torch.stack(encodings).to(device)
     # encodings = pred_encodings
