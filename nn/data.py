@@ -526,8 +526,6 @@ class BaseDataset(Dataset):
                 test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
                 test_ids += test_sub
             
-            print(data_len, len(train_sub), len(valid_sub), len(test_sub))
-
             if with_breakdown:
                 train_breakdown[folder_nickname] = torch.utils.data.Subset(self, train_sub)
                 valid_breakdown[folder_nickname] = torch.utils.data.Subset(self, valid_sub)
