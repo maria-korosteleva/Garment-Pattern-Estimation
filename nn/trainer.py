@@ -65,10 +65,7 @@ class Trainer():
     def use_dataset(self, dataset, split_info):
         """Use specified dataset for training with given split settings"""
         self.datawraper = data.DatasetWrapper(dataset)
-        if 'filename' not in split_info:
-            self.datawraper.new_split(split_info['valid_percent'], split_info['test_percent'], split_info['random_seed'])
-        else:
-            self.datawraper.load_split(split_info)
+        self.datawraper.load_split(split_info)
         self.datawraper.new_loaders(self.setup['batch_size'], shuffle_train=True)
 
         if self.standardize_data:

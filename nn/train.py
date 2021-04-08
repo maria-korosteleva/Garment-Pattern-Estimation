@@ -115,8 +115,8 @@ def get_data_config(in_config, old_stats=False):
 
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_percent': 20, 'test_percent': 20, 'random_seed': 10, 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 30}  # no upper limit of how much data to grab from each type
+        split = {'valid_per_type': 20, 'test_per_type': 20, 'random_seed': 10, 'type': 'percent'}   # , 'filename': './wandb/data_split.json'} 
+        data_config = {'max_datapoints_per_type': 150}  # upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='datafolder-names', 
+        run_name='split_exact', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples

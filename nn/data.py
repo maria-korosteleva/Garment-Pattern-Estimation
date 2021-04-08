@@ -41,8 +41,8 @@ class DatasetWrapper(object):
 
         self.split_info = {
             'random_seed': None, 
-            'valid_percent': None, 
-            'test_percent': None
+            'valid_per_type': None, 
+            'test_per_type': None
         }
 
         if known_split is not None:
@@ -101,12 +101,12 @@ class DatasetWrapper(object):
         return loaders_dict
 
     # -------- Reproducibility ---------------
-    def new_split(self, valid_percent, test_percent=None, random_seed=None):
+    def new_split(self, valid, test=None, random_seed=None):
         """Creates train/validation or train/validation/test splits
             depending on provided parameters
             """
         self.split_info['random_seed'] = random_seed if random_seed else int(time.time())
-        self.split_info.update(valid_percent=valid_percent, test_percent=test_percent)
+        self.split_info.update(valid_per_type=valid, test_per_type=test)
         
         return self.load_split()
 
@@ -115,10 +115,14 @@ class DatasetWrapper(object):
             NOTE this function re-initializes torch random number generator!
         """
         if split_info:
+            if 'random_seed' not in split_info:
+                split_info['random_seed'] = int(time.time())
             if any([key not in split_info for key in self.split_info]):
                 raise ValueError('Specified split information is not full: {}'.format(split_info))
             self.split_info = split_info
 
+        if self.split_info['random_seed'] is None:
+            self.split_info['random_seed'] = int(time.time())
         torch.manual_seed(self.split_info['random_seed'])
 
         # if file is provided
@@ -131,8 +135,9 @@ class DatasetWrapper(object):
                 with_breakdown=True)
         else:
             self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
-                self.split_info['valid_percent'], 
-                self.split_info['test_percent'], 
+                self.split_info['valid_per_type'], 
+                self.split_info['test_per_type'], 
+                self.split_info['type'] if 'type' in split_info else 'count',  # use counts as default type
                 with_breakdown=True)
 
         if batch_size is not None:
@@ -148,13 +153,13 @@ class DatasetWrapper(object):
         self.split_info['size_valid'] = len(self.validation) if self.validation else 0
         self.split_info['size_test'] = len(self.test) if self.test else 0
         
-        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
+        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training', log_to_config=True)
         self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
         self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
 
         return self.training, self.validation, self.test
 
-    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name=''):
+    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name='', log_to_config=False):
         """Print stats on the elements of each datafolder contained in given subset"""
         # gouped by data_folders
         if not total_len:
@@ -163,7 +168,8 @@ class DatasetWrapper(object):
         self.split_info[subset_name] = {}
         message = ''
         for data_folder, subset in subset_breakdown_dict.items():
-            self.split_info[subset_name][data_folder] = len(subset)
+            if log_to_config:
+                self.split_info[subset_name][data_folder] = len(subset)
             message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(subset) / total_len)
         
         print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
@@ -472,14 +478,25 @@ class BaseDataset(Dataset):
             breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
         return breakdown
 
-    def random_split_by_dataset(self, valid_percent, test_percent=0, with_breakdown=False):
-        """Produce subset wrappers for training set, validations set, and test set (if requested)
-            * Enshures the equal proportions of elements from each datafolder in each subset -- 
-              according to overall proportions of datafolders in the whole dataset
+    def random_split_by_dataset(self, valid_per_type, test_per_type=0, split_type='count', with_breakdown=False):
+        """
+            Produce subset wrappers for training set, validations set, and test set (if requested)
+            Supported split_types: 
+                * split_type='percent' takes a given percentage of the data for evaluation subsets. It also ensures the equal 
+                proportions of elements from each datafolder in each subset -- according to overall proportions of 
+                datafolders in the whole dataset
+                * split_type='count' takes this exact number of elements for the elevaluation subselts from each datafolder. 
+                    Maximizes the use of training elements, and promotes fair evaluation on uneven datafolder distribution. 
+
         Note: 
             * it's recommended to shuffle the training set on batching as random permute is not 
               guaranteed in this function
         """
+
+        if split_type != 'count' and split_type != 'percent':
+            raise NotImplementedError('{}::Error::Unsupported split type <{}> requested'.format(
+                self.__class__.__name__, split_type))
+
         train_ids, valid_ids, test_ids = [], [], []
 
         train_breakdown, valid_breakdown, test_breakdown = {}, {}, {}
@@ -493,9 +510,13 @@ class BaseDataset(Dataset):
 
             permute = (torch.randperm(data_len) + start_id).tolist()
 
-            valid_size = int(data_len * valid_percent / 100)
-            test_size = int(data_len * test_percent / 100)
+            # size defined according to requested type
+            valid_size = int(data_len * valid_per_type / 100) if split_type == 'percent' else valid_per_type
+            test_size = int(data_len * test_per_type / 100) if split_type == 'percent' else test_per_type
+
             train_size = data_len - valid_size - test_size
+
+            print(data_len, train_size, valid_size, test_size)
 
             train_sub, valid_sub = permute[:train_size], permute[train_size:train_size + valid_size]
 
@@ -505,6 +526,8 @@ class BaseDataset(Dataset):
             if test_size:
                 test_sub = permute[train_size + valid_size:train_size + valid_size + test_size]
                 test_ids += test_sub
+            
+            print(data_len, len(train_sub), len(valid_sub), len(test_sub))
 
             if with_breakdown:
                 train_breakdown[folder_nickname] = torch.utils.data.Subset(self, train_sub)
@@ -515,7 +538,7 @@ class BaseDataset(Dataset):
             return (
                 torch.utils.data.Subset(self, train_ids), 
                 torch.utils.data.Subset(self, valid_ids),
-                torch.utils.data.Subset(self, test_ids) if test_percent else None, 
+                torch.utils.data.Subset(self, test_ids) if test_per_type else None, 
                 train_breakdown, valid_breakdown, test_breakdown
             )
             
