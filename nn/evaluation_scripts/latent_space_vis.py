@@ -40,8 +40,6 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
     data_config.update({'obj_filetag': 'sim'})  # , 'max_datapoints_per_type': 300})
 
-    batch_size = 5
-
     dataset = data.Garment3DPatternFullDataset(
         datasets_path, data_config, gt_caching=True, feature_caching=True)
     datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
