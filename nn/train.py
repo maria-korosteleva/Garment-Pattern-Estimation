@@ -105,14 +105,6 @@ def get_data_config(in_config, old_stats=False):
             'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
             'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None  # keep the numbers too
         }
-        # failsafety
-        try:
-            old_experiment.load_file('data_split.json', './wandb')
-            split['filename'] = './wandb/data_split.json'
-        except ValueError as e:  # if file not found, training will just proceed with generated split
-            print(e)
-            print('Experiment::Warning::Skipping..')
-
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 20, 'test_per_type': 20, 'random_seed': 10, 'type': 'percent'}   # , 'filename': './wandb/data_split.json'} 
@@ -194,8 +186,10 @@ if __name__ == "__main__":
     # save TSNE plot
     garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'), dataset)
 
-    tsne_plot.tsne_plot(garment_enc, garment_classes, experiment.local_path(), 'garments', dpi=150)
-    tsne_plot.tsne_plot(panel_enc, panel_classes, experiment.local_path(), 'panels', dpi=150)
+    tsne_plot.tsne_plot(garment_enc, garment_classes, 2, experiment.local_path(), 'garments', dpi=150)
+    tsne_plot.tsne_plot(panel_enc, panel_classes, 2, experiment.local_path(), 'panels', dpi=150)
+    tsne_plot.tsne_plot(garment_enc, garment_classes, 3, experiment.local_path(), 'garments', dpi=150)
+    tsne_plot.tsne_plot(panel_enc, panel_classes, 3, experiment.local_path(), 'panels', dpi=150)
 
     # save predictions
     prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])

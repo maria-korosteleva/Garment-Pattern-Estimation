@@ -64,7 +64,14 @@ class WandbRunWrappper(object):
         """Info on the data setup from the run config:
             Split & batch size info """
         run = self._run_object()
-        return run.config['data_split'], run.config['batch_size'], run.config['dataset']
+        split_config = run.config['data_split']
+        try:
+            self.load_file('data_split.json', './wandb')
+            split_config['filename'] = './wandb/data_split.json'
+        except ValueError as e:  # if file not found, training will just proceed with generated split
+            print(e)
+            print('Experiment::Warning::Skipping loading split file..')
+        return split_config, run.config['batch_size'], run.config['dataset']
 
     def last_best_validation_loss(self):
         run = self._run_object()

@@ -9,15 +9,19 @@ import pickle
 import numpy as np
 from datetime import datetime
 
-# Do avoid a need for changing Evironmental Variables outside of this script
-import os,sys,inspect
-currentdir = os.path.dirname(os.path.realpath(__file__) )
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir) 
-
 # visualization
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+import matplotlib
+
+
+# Do avoid a need for changing Evironmental Variables outside of this script
+import os
+import sys
+import inspect
+currentdir = os.path.dirname(os.path.realpath(__file__))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir) 
 
 # my
 import customconfig
@@ -35,6 +39,8 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     # data_config also contains the names of datasets to use
     split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
     data_config.update({'obj_filetag': 'sim'})  # , 'max_datapoints_per_type': 300})
+
+    batch_size = 5
 
     dataset = data.Garment3DPatternFullDataset(
         datasets_path, data_config, gt_caching=True, feature_caching=True)
@@ -109,14 +115,18 @@ def load_enc_from_files(encodings_folder, enc_tag='garments'):
     return all_encodings, classes
 
 
-def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_mode=False, dpi=300):
+def tsne_plot(all_encodings, classes, num_components=2, save_to='./', name_tag='enc', interactive_mode=False, dpi=300):
     """
         Plot encodings using TSNE dimentionality reduction
     """
+    if num_components != 2 and num_components != 3:
+        raise NotImplementedError('Unsupported number ({}) of tsne components requested. Only 2D and 3D are supported'.format(
+            num_components
+        ))
     # https://towardsdatascience.com/visualising-high-dimensional-datasets-using-pca-and-t-sne-in-python-8ef87e7915b
     # https://scipy-lectures.org/packages/scikit-learn/auto_examples/plot_tsne.html
-    tsne = TSNE(n_components=2, random_state=0)
-    enc_2d = tsne.fit_transform(all_encodings)
+    tsne = TSNE(n_components=num_components, random_state=0)
+    enc_reduced = tsne.fit_transform(all_encodings)
 
     # ----- Visualize ------
     # update class labeling
@@ -140,7 +150,7 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
 
     # define colors
     colors = {
-        'Shirts and dresses': (0.747, 0.236, 0.048), # (190, 60, 12)
+        'Shirts and dresses': (0.747, 0.236, 0.048),  # (190, 60, 12)
         'Jacket': (0.4793117642402649, 0.10461537539958954, 0.0),
         'Open Hoody': (0.746999979019165, 0.28518322110176086, 0.11503798514604568), 
         '8-panel Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
@@ -154,30 +164,44 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
         'Unknown': (0.15, 0.15, 0.15)
     }
 
+    # global plot edges color setup
+    # https://stackoverflow.com/questions/7778954/elegantly-changing-the-color-of-a-plot-frame-in-matplotlib/7944576
+    base_color = '#737373'
+    matplotlib.rc('axes', edgecolor=base_color)
+
     # plot
-    fig, ax = plt.subplots()
+    if num_components == 3:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+    else:  # 2D
+        fig, ax = plt.subplots()
 
     # plot data
     for label, color in colors.items():
-        if len(enc_2d[classes == label, 0] > 0):  # skip unused classes
-            plt.scatter(
-                enc_2d[classes == label, 0], enc_2d[classes == label, 1], 
-                color=color, label=label,
-                edgecolors=None, alpha=0.5, s=17)
+        if len(enc_reduced[classes == label, 0] > 0):  # skip unused classes
+            if num_components == 3:
+                ax.scatter(
+                    enc_reduced[classes == label, 0], enc_reduced[classes == label, 1], enc_reduced[classes == label, 2],
+                    color=color, label=label,
+                    edgecolors=None, alpha=0.5, s=17)
+            else:
+                ax.scatter(
+                    enc_reduced[classes == label, 0], enc_reduced[classes == label, 1],
+                    color=color, label=label,
+                    edgecolors=None, alpha=0.5, s=17)
             if label == 'Unknown':
                 print('TSNE_plot::Warning::Some labels are unknown and thus colored with Dark Grey')
     plt.legend()
 
     # Axes colors
-    # https://stackoverflow.com/questions/7778954/elegantly-changing-the-color-of-a-plot-frame-in-matplotlib/7944576
-    plt.setp(ax.spines.values(), color='#737373')
-    ax.tick_params(axis='x', colors='#737373')
-    ax.tick_params(axis='y', colors='#737373')
+    ax.tick_params(axis='x', colors=base_color)
+    ax.tick_params(axis='y', colors=base_color)
+    if num_components == 3:
+        ax.tick_params(axis='z', colors=base_color)
 
     # plt.savefig('D:/MyDocs/GigaKorea/SIGGRAPH2021 submission materials/Latent space/tsne.pdf', dpi=300, bbox_inches='tight')
-
-    plt.savefig(save_to / ('tsne_' + name_tag + '.pdf'), dpi=dpi, bbox_inches='tight')
-    plt.savefig(save_to / ('tsne_' + name_tag + '.jpg'), dpi=dpi, bbox_inches='tight')
+    plt.savefig(save_to / ('tsne_' + name_tag + '_' + str(num_components) + 'd.pdf'), dpi=dpi, bbox_inches='tight')
+    plt.savefig(save_to / ('tsne_' + name_tag + '_' + str(num_components) + 'd.jpg'), dpi=dpi, bbox_inches='tight')
     if interactive_mode:
         plt.show()
     
@@ -186,30 +210,34 @@ def tsne_plot(all_encodings, classes, save_to='./', name_tag='enc', interactive_
 
 if __name__ == '__main__':
     system_info = customconfig.Properties('./system.json')
+    from_experiment = False
+    if from_experiment:
+        experiment = WandbRunWrappper(
+            system_info['wandb_username'],
+            project_name='Garments-Reconstruction', 
+            run_name='tee-1000-800-server', 
+            run_id='2su05cm8')  # finished experiment
 
-    experiment = WandbRunWrappper(
-        system_info['wandb_username'],
-        project_name='Garments-Reconstruction', 
-        run_name='tee-1000-800-server', 
-        run_id='2su05cm8')  # finished experiment
+        if not experiment.is_finished():
+            print('Warning::Evaluating unfinished experiment')
 
-    if not experiment.is_finished():
-        print('Warning::Evaluating unfinished experiment')
+        out_folder = Path(system_info['output']) / ('tsne_' + experiment.run_name + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        out_folder.mkdir(parents=True, exist_ok=True)
 
-    out_folder = Path(system_info['output']) / ('tsne_' + experiment.run_name + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
-    out_folder.mkdir(parents=True, exist_ok=True)
+        # extract encodings
+        data_loader, model, dataset = load_model_loader(experiment, system_info['datasets_path'], 'test')
 
-    # extract encodings
-    data_loader, model, dataset = load_model_loader(experiment, system_info['datasets_path'], 'test')
+        garment_enc, garment_classes, panel_enc, panel_classes = get_encodings(model, data_loader, dataset, out_folder)
 
-    garment_enc, garment_classes, panel_enc, panel_classes = get_encodings(model, data_loader, dataset, out_folder)
-
-    # if loading from file
-    # encodings_folder_name = 'tsne_teesl-pants-Jump-300-server_210325-13-33-29'
-    # garment_enc, garment_classes = load_enc_from_files(Path(system_info['output']) / encodings_folder_name, 'garments')
-    # panel_enc, panel_classes = load_enc_from_files(Path(system_info['output']) / encodings_folder_name, 'panels')
+    else:
+        # if loading from file
+        encodings_folder_name = 'tsne_tee-1000-800-server_210408-11-51-05'
+        out_folder = Path(system_info['output']) / encodings_folder_name
+        garment_enc, garment_classes = load_enc_from_files(out_folder, 'garments')
+        panel_enc, panel_classes = load_enc_from_files(out_folder, 'panels')
 
     # save plots
-    tsne_plot(garment_enc, garment_classes, out_folder, 'garments', True, dpi=600)
-    tsne_plot(panel_enc, panel_classes, out_folder, 'panels', True, dpi=600)
-
+    tsne_plot(garment_enc, garment_classes, 2, out_folder, 'garments', True, dpi=600)
+    tsne_plot(garment_enc, garment_classes, 3, out_folder, 'garments', True, dpi=600)
+    tsne_plot(panel_enc, panel_classes, 2, out_folder, 'panels', True, dpi=600)
+    tsne_plot(panel_enc, panel_classes, 3, out_folder, 'panels', True, dpi=600)
