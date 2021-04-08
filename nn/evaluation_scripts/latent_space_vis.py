@@ -49,7 +49,7 @@ def load_model_loader(experiment, datasets_path, subset='test'):
 
     # ----- Model -------
     model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
-    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
     return test_loader, model, dataset
 
@@ -158,6 +158,7 @@ def tsne_plot(all_encodings, classes, num_components=2, save_to='./', name_tag='
         '2-panel Skirts': (0.24227915704250336, 0.6172128915786743, 1.0),  
         'Pants': (0.025, 0.354, 0.152),  # (6, 90. 39)
         'Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)
+        'Sleeveless Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)  TODO DOuble check colors
         'Waistband dresses': (0.2, 0.007, 0.192),  
         'Dresses': (0.527, 0.0, 0.0),  # (134,0,0)
         'Waistband pants': (0.250900000333786, 0.3528999984264374, 0.13330000638961792), 
@@ -210,13 +211,13 @@ def tsne_plot(all_encodings, classes, num_components=2, save_to='./', name_tag='
 
 if __name__ == '__main__':
     system_info = customconfig.Properties('./system.json')
-    from_experiment = False
+    from_experiment = True
     if from_experiment:
         experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='tee-1000-800-server', 
-            run_id='2su05cm8')  # finished experiment
+            run_name='all-new-300-server', 
+            run_id='22n3425w')  # finished experiment
 
         if not experiment.is_finished():
             print('Warning::Evaluating unfinished experiment')
