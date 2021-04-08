@@ -243,7 +243,7 @@ class WandbRunWrappper(object):
         wb.run.log_artifact(artifact, aliases=['latest'] + aliases)
 
         if wait_for_upload:
-            self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter-1))
+            self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter - 1))
 
     def load_file(self, filename, to_path='.'):
         """Download a file from the wandb experiment to given path or to currect directory"""
