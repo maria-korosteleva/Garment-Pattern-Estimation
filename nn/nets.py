@@ -583,6 +583,80 @@ class GarmentFullPattern3D(BaseModule):
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
 
 
+class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
+    """
+        Predicting 2D pattern inluding panel placement and stitches information from 3D garment geometry 
+        Constists of 
+            * (interchangeable) feature extractor 
+            * pattern decoder from GarmentPatternAE
+            * MLP modules to predict panel 3D placement & stitches
+        * Attempt to disentangle panel latent space
+    """
+    def __init__(self, data_config, config={}):
+        super().__init__(data_config, config)
+
+        # ----- Update panel decoders to promote space disentanglement -------
+        self.placement_size = self.rotation_size + self.translation_size
+
+        panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
+        self.panel_decoder = panel_decoder_module(
+            self.config['panel_encoding_size'] - self.placement_size, self.config['panel_encoding_size'], 
+            self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
+            self.config['panel_n_layers'], 
+            dropout=self.config['dropout'], 
+            custom_init=self.config['lstm_init']
+        )
+
+        # decoding the panel placement
+        self.placement_decoder = nn.Linear(
+            self.placement_size, 
+            self.placement_size)
+
+    def forward_pattern_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into per-panel encodings
+            Useful for obtaining the latent space for Panels
+        """
+        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
+        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+
+        # with removed placement prediction
+        return flat_panel_encodings[:, self.placement_size:]
+
+    def forward_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into the sewing pattens
+        """
+        self.device = garment_encodings.device
+        batch_size = garment_encodings.size(0)
+
+        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
+        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
+
+        flat_placement_encodings = flat_panel_encodings[:, :self.placement_size]
+        flat_panel_encodings = flat_panel_encodings[:, self.placement_size:]
+
+        # Panel outlines & stitch info
+        flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
+        
+        # Placement
+        flat_placement = self.placement_decoder(flat_placement_encodings)
+        flat_rotations = flat_placement[:, :self.rotation_size]
+        flat_translations = flat_placement[:, self.rotation_size:]
+
+        # reshape back to per-pattern predictions
+        panel_predictions = flat_panels.contiguous().view(batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        stitch_tags = panel_predictions[:, :, :, self.panel_elem_len:-1]
+        free_edge_class = panel_predictions[:, :, :, -1]
+        outlines = panel_predictions[:, :, :, :self.panel_elem_len]
+
+        rotations = flat_rotations.contiguous().view(batch_size, self.max_pattern_size, -1)
+        translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
+
+        return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+
+
+
 if __name__ == "__main__":
 
     torch.manual_seed(125)

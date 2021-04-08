@@ -131,7 +131,7 @@ class DatasetWrapper(object):
                 with_breakdown=True)
         else:
             keys_required = ['test_per_type', 'valid_per_type', 'type']
-            if any([key not in keys_required for key in self.split_info]):
+            if any([key not in self.split_info for key in keys_required]):
                 raise ValueError('Specified split information is not full: {}. It needs to contain: {}'.format(split_info, keys_required))
             print('DataWrapper::Loading data split from split config: {}: valid per type {} / test per type {}'.format(
                 self.split_info['type'], self.split_info['valid_per_type'], self.split_info['test_per_type']))
@@ -516,8 +516,6 @@ class BaseDataset(Dataset):
             test_size = int(data_len * test_per_type / 100) if split_type == 'percent' else test_per_type
 
             train_size = data_len - valid_size - test_size
-
-            print(data_len, train_size, valid_size, test_size)
 
             train_sub, valid_sub = permute[:train_size], permute[train_size:train_size + valid_size]
 

@@ -134,7 +134,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='split_exact', 
+        run_name='disentanglement', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPatternAE(dataset.config['element_size'], dataset.config['panel_len'], dataset.config['standardize'], 
     #     in_nn_config)
-    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config)
+    model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config)
     model.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
