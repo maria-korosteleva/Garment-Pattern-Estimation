@@ -21,6 +21,23 @@ from pattern.wrappers import VisPattern
 from data import GarmentBaseDataset
 
 
+def lerp(t, low, high):
+    return (1 - t) * low + t * high
+
+
+def slerp(t, low, high):
+    """
+        Spherical Linear interpolation
+        https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
+    """
+    omega = torch.arccos(torch.clamp(torch.dot(low / torch.norm(low, 2), high / torch.norm(high, 2)), -1, 1))
+    so = torch.sin(omega)
+    if so == 0:
+        # L'Hopital's rule/LERP
+        return (1.0 - t) * low + val * high
+    return sin((1.0 - t) * omega) / so * low + sin(t * omega) / so * high
+
+
 if __name__ == "__main__":
     
     system_info = customconfig.Properties('./system.json')
@@ -36,7 +53,8 @@ if __name__ == "__main__":
     num_in_between = 5
 
     # --------------- Experiment to evaluate on ---------
-    experiment = WandbRunWrappper(system_info['wandb_username'],
+    experiment = WandbRunWrappper(
+        system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
         run_name='teesl-pants-Jump-300-server', 
         run_id='311kha7h')  # finished experiment
@@ -68,7 +86,7 @@ if __name__ == "__main__":
     for i in range(num_in_between + 1):
         t += 1. / (num_in_between + 1)
         encodings.append(
-            (1 - t) * pred_encodings[0] + t * pred_encodings[1]
+            lerp(t, pred_encodings[0], pred_encodings[1])
         )
     encodings = torch.stack(encodings).to(device)
     # encodings = pred_encodings
