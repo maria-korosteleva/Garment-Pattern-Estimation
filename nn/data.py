@@ -106,7 +106,7 @@ class DatasetWrapper(object):
             depending on provided parameters
             """
         self.split_info['random_seed'] = random_seed if random_seed else int(time.time())
-        self.split_info.update(valid_per_type=valid, test_per_type=test)
+        self.split_info.update(valid_per_type=valid, test_per_type=test, type='count')
         
         return self.load_split()
 
@@ -115,13 +115,9 @@ class DatasetWrapper(object):
             NOTE this function re-initializes torch random number generator!
         """
         if split_info:
-            if 'random_seed' not in split_info:
-                split_info['random_seed'] = int(time.time())
-            if any([key not in split_info for key in self.split_info]):
-                raise ValueError('Specified split information is not full: {}'.format(split_info))
             self.split_info = split_info
 
-        if self.split_info['random_seed'] is None:
+        if 'random_seed' not in self.split_info or self.split_info['random_seed'] is None:
             self.split_info['random_seed'] = int(time.time())
         torch.manual_seed(self.split_info['random_seed'])
 
@@ -134,10 +130,15 @@ class DatasetWrapper(object):
                 split_dict, 
                 with_breakdown=True)
         else:
+            keys_required = ['test_per_type', 'valid_per_type', 'type']
+            if any([key not in keys_required for key in self.split_info]):
+                raise ValueError('Specified split information is not full: {}. It needs to contain: {}'.format(split_info, keys_required))
+            print('DataWrapper::Loading data split from split config: {}: valid per type {} / test per type {}'.format(
+                self.split_info['type'], self.split_info['valid_per_type'], self.split_info['test_per_type']))
             self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
                 self.split_info['valid_per_type'], 
-                self.split_info['test_per_type'], 
-                self.split_info['type'] if 'type' in split_info else 'count',  # use counts as default type
+                self.split_info['test_per_type'],
+                self.split_info['type'],
                 with_breakdown=True)
 
         if batch_size is not None:
