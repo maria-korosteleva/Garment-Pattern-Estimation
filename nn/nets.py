@@ -278,8 +278,6 @@ class GarmentPatternAE(BaseModule):
     def forward(self, patterns_batch):
         self.device = patterns_batch.device
         self.batch_size = patterns_batch.size(0)
-        self.max_pattern_size = patterns_batch.size(1)
-        self.max_panel_len = patterns_batch.size(2)
 
         # --- Encode ---
         pattern_encoding = self.forward_encode(patterns_batch)
