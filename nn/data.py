@@ -1023,28 +1023,6 @@ class GarmentPanelDataset(GarmentBaseDataset):
         return pattern
 
 
-class Garment2DPatternDataset(GarmentPanelDataset):
-    """Dataset definition for 2D pattern autoencoder
-        * features: a 'front' panel edges represented as a sequence
-        * ground_truth is not used as in Panel dataset"""
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-        self.config['panel_len'] = self[0]['features'].shape[1]
-        self.config['element_size'] = self[0]['features'].shape[2]
-    
-    def _get_features(self, datapoint_name, folder_elements):
-        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        return self._read_pattern(
-            datapoint_name, folder_elements, 
-            pad_panels_to_len=self.config['max_panel_len'],
-            pad_panel_num=self.config['max_pattern_len'])[0]
-        
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-        prediction = prediction.cpu().numpy()
-        return self._pattern_from_tenzor(dataname, prediction, std_config=self.config, supress_error=True)
-
-
 class Garment3DPatternDataset(GarmentBaseDataset):
     """Dataset definition for extracting pattern from 3D garment shape:
         * features: point samples from 3D surface
@@ -1336,6 +1314,32 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             prediction['outlines'], prediction['rotations'], prediction['translations'], 
             stitches, 
             std_config={}, supress_error=True)
+
+
+class Garment2DPatternDataset(Garment3DPatternFullDataset):
+    """Dataset definition for 2D pattern autoencoder
+        * features: a 'front' panel edges represented as a sequence
+        * ground_truth is not used as in Panel dataset"""
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+    
+    def _get_features(self, datapoint_name, folder_elements):
+        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
+        return self._get_ground_truth(datapoint_name, folder_elements)['outlines']
+        
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object"""
+        prediction = prediction['outlines'].cpu().numpy()
+
+        gt_shifts = self.config['standardize']['gt_shift']['outlines']
+        gt_scales = self.config['standardize']['gt_scale']['outlines']
+        prediction = prediction * gt_scales + gt_shifts
+
+        return self._pattern_from_tenzor(
+            dataname, 
+            prediction, 
+            std_config={}, 
+            supress_error=True)
 
 
 class ParametrizedShirtDataSet(BaseDataset):
