@@ -26,31 +26,6 @@ class BaseModule(nn.Module):
 
 
 # -------- Nets architectures -----------
-class GarmentParamsPoint(BaseModule):
-    """PointNet++ processing of input geometry to predict parameters
-        Note that architecture is agnostic of number of input points"""
-    def __init__(self, out_size, config={}):
-        super().__init__()
-
-        self.config.update({'r1': 10, 'r2': 40})  # defaults for this net
-        self.config.update(config)  # from input
-
-        self.feature_extractor = blocks.PointNetPlusPlus(512, {'r1': self.config['r1'], 'r2': self.config['r2']})
-
-        self.lin2 = nn.Linear(512, 256)
-        self.lin3 = nn.Linear(256, out_size)
-
-    def forward(self, positions):
-
-        out = self.feature_extractor(positions)
-        out = F.relu(out)
-        out = F.dropout(out, p=0.5, training=self.training)
-        out = F.relu(self.lin2(out))
-        out = F.dropout(out, p=0.5, training=self.training)
-        out = self.lin3(out)
-        return out
-
-
 class GarmentPanelsAE(BaseModule):
     """
         Model to test encoding & decoding of garment 2D panels (sewing patterns components)

@@ -876,20 +876,6 @@ class GarmentBaseDataset(BaseDataset):
         return min_vector, scale
 
 
-class Garment3DParamsDataset(GarmentParamsDataset):
-    """For loading the custom generated data:
-        * features: list of 3D coordinates of 3D mesh sample points (2D matrix)
-        * Ground_truth: parameters used to generate a garment
-    """
-    def __init__(self, root_dir, start_config={'data_folders': [], 'mesh_samples': 1000}, gt_caching=False, feature_caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-    
-    # the only difference with parent class in the shape of the features
-    def _get_features(self, datapoint_name, folder_elements):
-        points = self._sample_points(datapoint_name, folder_elements)
-        return points  # return in 3D
-
-
 class Garment3DPatternFullDataset(GarmentBaseDataset):
     """Dataset with full pattern definition as ground truth
         * it includes not only every panel outline geometry, but also 3D placement and stitches information
