@@ -179,11 +179,14 @@ class Properties():
         with open(filename, 'r') as f_json:
             return json.load(f_json)
 
-    def _recursive_dict_update(self, in_dict, new_dict, re_write=True, adding_tag='added'):
+    def _recursive_dict_update(self, in_dict, new_dict, re_write=True, adding_tag='added', in_stats=False):
         """
             updates input dictionary with the update_dict properly updating all the inner dictionaries
             re_write = True replaces the values with the ones from new dictionary if they happen to be different, 
             re_write = False extends dictionary to include both values if different 
+
+            "in_stats" shows if we are currently in any of the stats subsections. 
+                In this case, lists are merged instead of being re-written
         """
         if not isinstance(new_dict, dict):
             in_dict = new_dict  # just update with all values
@@ -192,11 +195,18 @@ class Properties():
         for new_key in new_dict:
             if new_key in in_dict and isinstance(in_dict[new_key], dict):
                 # update inner dict properly
-                self._recursive_dict_update(in_dict[new_key], new_dict[new_key], re_write, adding_tag)
+                self._recursive_dict_update(
+                    in_dict[new_key], new_dict[new_key], 
+                    re_write, adding_tag, 
+                    (in_stats or new_key == 'stats'))
             elif not re_write and new_key in in_dict and in_dict[new_key] != new_dict[new_key]:
-                # What to do with leftover keys??
-                in_dict[new_key + '_' + adding_tag] = new_dict[new_key]  
-                in_dict[new_key + '_' + self['name']] = in_dict[new_key]
+                if in_stats and isinstance(in_dict[new_key], list):
+                    # merge lists inside stats sections
+                    in_dict[new_key] = in_dict[new_key] + new_dict[new_key]
+                else:
+                    # Keep both versions (e.g. in configs)
+                    in_dict[new_key + '_' + adding_tag] = new_dict[new_key]  
+                    in_dict[new_key + '_' + self['name']] = in_dict[new_key]
             else:  # at sertain depth there will be no more dicts -- recusrion stops
                 in_dict[new_key] = new_dict[new_key]
         # if new_dict is empty -- no update happens
