@@ -99,78 +99,10 @@ class GarmentParamsPoint(BaseModule):
 
 
 class GarmentPanelsAE(BaseModule):
-    """Model for sequential encoding & decoding of garment panels
-        References: 
-        * https://blog.floydhub.com/a-beginners-guide-on-recurrent-neural-networks-with-pytorch/
-        * for seq2seq decisions https://machinelearningmastery.com/encoder-decoder-long-short-term-memory-networks/
     """
-    def __init__(self, in_elem_len, max_seq_len, data_norm={}, config={}):
-        super().__init__()
-
-        # defaults for this net
-        self.config.update({
-            'hidden_dim_enc': 20, 
-            'hidden_dim_dec': 20, 
-            'n_layers': 3, 
-            'loop_loss_weight': 0.1, 
-            'dropout': 0.1,
-            'lstm_init': 'kaiming_normal_',
-            'decoder': 'LSTMDoubleReverseDecoderModule'
-        })
-        # update with input settings
-        self.config.update(config) 
-
-        # additional info
-        self.config['loss'] = 'MSE Reconstruction with loop'
-
-        self.loop_loss = metrics.PanelLoopLoss(data_stats=data_norm)
-
-        # encode
-        self.seq_encoder = blocks.LSTMEncoderModule(
-            in_elem_len, self.config['hidden_dim_enc'], self.config['n_layers'], dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-
-        # decode
-        if self.config['decoder'] == 'LSTMDecoderModule':
-            self.seq_decoder = blocks.LSTMDecoderModule(
-                self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
-                dropout=self.config['dropout'],
-                custom_init=self.config['lstm_init']
-            )
-        elif self.config['decoder'] == 'LSTMDoubleReverseDecoderModule':
-            self.seq_decoder = blocks.LSTMDoubleReverseDecoderModule(
-                self.config['hidden_dim_enc'], self.config['hidden_dim_dec'], in_elem_len, self.config['n_layers'], 
-                dropout=self.config['dropout'],
-                custom_init=self.config['lstm_init']
-            )
-        else:
-            raise ValueError('GarmentPattern3D::Error::Unsupported decoder {} requested in config'.format(self.config['decoder']))
+        Model to test encoding & decoding of garment 2D panels (sewing patterns components)
+        * Follows similar structure of GarmentFullPattern3D
         
-
-    def forward(self, x):
-
-        encoding = self.seq_encoder(x)  # Yay
-
-        out = self.seq_decoder(encoding, x.shape[-2])  # -2 corresponds to len of paddel panel
-        return out
-
-    def loss(self, features, ground_truth, **kwargs):
-        """Override base class loss calculation to use reconstruction loss"""
-        preds = self(features)
-
-        # Base reconstruction loss
-        reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
-        # ensuring edges within panel loop & return to origin
-        loop_loss = self.loop_loss(preds, features)
-
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, False
-
-
-class GarmentPatternAE(BaseModule):
-    """
-        Model to test hierarchical encoding & decoding of garment 2D patterns (as panel collection)
-        Based on findings from GarmentPanelsAE
     """
     def __init__(self, data_config, config={}):
         super().__init__()
@@ -184,7 +116,7 @@ class GarmentPatternAE(BaseModule):
             'loop_loss_weight': 0.1, 
             'dropout': 0,
             'lstm_init': 'kaiming_normal_', 
-            'decoder': 'LSTMDoubleReverseDecoderModule'
+            'decoder': 'LSTMDecoderModule'
         })
         # update with input settings
         self.config.update(config) 
@@ -223,15 +155,96 @@ class GarmentPatternAE(BaseModule):
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
-        self.panel_decoder = blocks.LSTMDecoderModule(
+        self.panel_decoder = decoder_module(
             self.config['panel_encoding_size'], 
             self.config['panel_encoding_size'], 
             self.panel_elem_len, 
             self.config['panel_n_layers'], 
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
-        )
+        )   
 
+    def forward_encode(self, patterns_batch):
+        """
+            Predict garment encodings for input batch
+            In this case it's just a concatenation of the panel encodings
+        """
+        self.batch_size = patterns_batch.size(0)
+        self.max_pattern_size = patterns_batch.size(1)
+
+        # flatten -- view simply as a list of panels to apply encoding per panel
+        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
+        panel_encodings = self.panel_encoder(all_panels)
+
+        # group by patterns -- garments encoding as concatenated panel encodings
+        panel_encodings = panel_encodings.contiguous().view(self.batch_size, -1) 
+
+        return panel_encodings 
+
+    def forward_pattern_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into per-panel encodings
+            Useful for obtaining the latent space for Panels
+            NOTE In this class, garment is represented as concatenation of panel encodings already, 
+            so it just needs re-shaping it
+        """
+        return garment_encodings.contiguous().view(-1, self.config['panel_encoding_size'])
+
+    def forward(self, patterns_batch):
+        self.device = patterns_batch.device
+        self.batch_size = patterns_batch.size(0)
+
+        # --- Encode ---
+        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
+        flat_panel_encodings = self.panel_encoder(all_panels)
+
+        # --- Decode ---
+        flat_panels_dec = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
+
+        # back to patterns and panels structure
+        prediction = flat_panels_dec.contiguous().view(self.batch_size, self.max_pattern_size, self.max_panel_len, -1)
+        
+        return {'outlines': prediction}
+
+    def loss(self, features, ground_truth, names=None, **kwargs):
+        """Override base class loss calculation to use reconstruction loss"""
+        self.device = features.device
+        gt_outlines = ground_truth['outlines'].to(self.device)  # AE =))
+        features = gt_outlines
+        preds = self(features)['outlines']
+
+        # ---- Base reconstruction loss -----
+        reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
+
+        # ---- Loop loss -----
+        loop_loss = self.loop_loss(preds, features)
+
+        # return format
+        loss_dict = dict(pattern_loss=reconstruction_loss, loop_loss=loop_loss)
+
+        if self.with_quality_eval:
+            with torch.no_grad():
+                num_panels_acc, num_edges_acc = self.pattern_nums_quality(
+                    preds, gt_outlines, ground_truth['num_panels'], pattern_names=names)
+                shape_l2 = self.pattern_shape_quality(preds, gt_outlines)
+                loss_dict.update(
+                    num_panels_accuracy=num_panels_acc, 
+                    num_edges_accuracy=num_edges_acc,
+                    panel_shape_l2=shape_l2)
+
+        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict, False
+
+
+class GarmentPatternAE(GarmentPanelsAE):
+    """
+        Hierarchical Sewing pattern AE -- defines garment-level pattern 
+        * loss evaluation is the same for both AE models
+    """
+    def __init__(self, data_config, config={}):
+        super().__init__(data_config, config)
+        # loss objects & config already defined
+
+        # adding patten-level encoders\decoders
         # ----- patten level ------
         self.pattern_encoder = blocks.LSTMEncoderModule(
             self.config['panel_encoding_size'], 
@@ -240,6 +253,7 @@ class GarmentPatternAE(BaseModule):
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
+        decoder_module = getattr(blocks, self.config['decoder'])
         self.pattern_decoder = decoder_module(
             self.config['pattern_encoding_size'], 
             self.config['pattern_encoding_size'], 
@@ -290,34 +304,6 @@ class GarmentPatternAE(BaseModule):
         prediction = flat_panels_dec.contiguous().view(self.batch_size, self.max_pattern_size, self.max_panel_len, -1)
         
         return {'outlines': prediction}
-
-    def loss(self, features, ground_truth, names=None, **kwargs):
-        """Override base class loss calculation to use reconstruction loss"""
-        self.device = features.device
-        gt_outlines = ground_truth['outlines'].to(self.device)  # AE =))
-        features = gt_outlines
-        preds = self(features)['outlines']
-
-        # ---- Base reconstruction loss -----
-        reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
-
-        # ---- Loop loss -----
-        loop_loss = self.loop_loss(preds, features)
-
-        # return format
-        loss_dict = dict(pattern_loss=reconstruction_loss, loop_loss=loop_loss)
-
-        if self.with_quality_eval:
-            with torch.no_grad():
-                num_panels_acc, num_edges_acc = self.pattern_nums_quality(
-                    preds, gt_outlines, ground_truth['num_panels'], pattern_names=names)
-                shape_l2 = self.pattern_shape_quality(preds, gt_outlines)
-                loss_dict.update(
-                    num_panels_accuracy=num_panels_acc, 
-                    num_edges_accuracy=num_edges_acc,
-                    panel_shape_l2=shape_l2)
-
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict, False
 
 
 class GarmentPattern3D(BaseModule):
