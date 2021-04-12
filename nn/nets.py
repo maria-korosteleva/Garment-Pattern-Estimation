@@ -12,7 +12,10 @@ class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
         super().__init__()
-        self.config = {'loss': 'MSELoss'}
+        self.config = {
+            'loss': 'MSELoss',
+            'model': self.__class__.__name__
+        }
         self.regression_loss = nn.MSELoss()
     
     def loss(self, features, ground_truth, **kwargs):
