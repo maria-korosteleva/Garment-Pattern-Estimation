@@ -1139,69 +1139,6 @@ class Garment2DPatternDataset(Garment3DPatternFullDataset):
             supress_error=True)
 
 
-class ParametrizedShirtDataSet(BaseDataset):
-    """
-    For loading the data of "Learning Shared Shape Space.." paper
-    """
-    
-    def __init__(self, root_dir, start_config={'data_folders': [], 'num_verts': 'all'}, gt_caching=False, feature_caching=False, transforms=[]):
-        """
-        Args:
-            root_dir (string): Directory with all the t-shirt examples as subfolders
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
-        # datapoint folder structure
-        self.mesh_filename = 'shirt_mesh_r.obj'
-        self.pattern_params_filename = 'shirt_info.txt'
-        self.features_filename = 'visfea.mat'
-        self.garment_3d_filename = 'shirt_mesh_r_tmp.obj'
-
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-        
-    def save_prediction_batch(self, predictions, datanames, save_to):
-        """Saves predicted params of the datapoint to the original data folder.
-            Returns list of paths to files with predictions"""
-        
-        prediction_files = []
-        for prediction, name in zip(predictions, datanames):
-            path_to_prediction = Path(save_to) / name
-            path_to_prediction.mkdir(parents=True, exist_ok=True)
-            
-            prediction = prediction.tolist()
-            with open(path_to_prediction / self.pattern_params_filename, 'w+') as f:
-                f.writelines(['0\n', '0\n', ' '.join(map(str, prediction))])
-                print('Saved ' + name)
-            prediction_files.append(str(path_to_prediction / self.pattern_params_filename))
-        return prediction_files
-
-    # ------ Data-specific basic functions  -------
-    def _clean_datapoint_list(self):
-        """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
-        self.datapoints_names.remove('P3ORMPBNJJAJ')
-    
-    def _get_features(self, datapoint_name, folder_elements=None):
-        """features parameters from a given datapoint subfolder"""
-        assert (self.root_path / datapoint_name / self.garment_3d_filename).exists(), datapoint_name
-        
-        verts, _ = igl.read_triangle_mesh(str(self.root_path / datapoint_name / self.garment_3d_filename))
-        
-        if self.config['num_verts'] == 'all':
-            return verts.ravel()
-        
-        return verts[:self.config['num_verts']].ravel()
-        
-    def _get_ground_truth(self, datapoint_name, folder_elements=None):
-        """9 pattern size parameters from a given datapoint subfolder"""
-        assert (self.root_path / datapoint_name / self.pattern_params_filename).exists(), datapoint_name
-        
-        # assuming that we need the numbers from the last line in file
-        with open(self.root_path / datapoint_name / self.pattern_params_filename) as f:
-            lines = f.readlines()
-            params = np.fromstring(lines[-1], sep=' ')
-        return params
-
-
 # ------------------------- Utils for non-dataset examples --------------------------
 
 def sample_points_from_meshes(mesh_paths, data_config):
