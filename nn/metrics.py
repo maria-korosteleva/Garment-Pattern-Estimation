@@ -16,6 +16,24 @@ def eval_pad_vector(data_stats={}):
         return None
 
 
+def panel_len_from_padded(padded_panel, pad_vector=None, pad_propagated=None):
+    """
+        Return length of the unpadded part of given panel (hence, number of edges)
+    """
+    if pad_vector is None and pad_propagated is None:
+        return len(padded_panel)
+
+    if pad_propagated is None:
+        pad_propagated = pad_vector.repeat(padded_panel.shape[0], 1)
+        pad_propagated = pad_tenzor_propagated.to(device=padded_panel.device)
+
+    # unpaded length
+    bool_matrix = torch.isclose(padded_panel, pad_propagated, atol=1.e-2)
+    seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
+
+    return seq_len
+
+
 # ------- custom losses --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
@@ -27,7 +45,7 @@ class PanelLoopLoss():
         """
         self.pad_tenzor = eval_pad_vector(data_stats)
             
-    def __call__(self, predicted_panels, original_panels=None, data_stats={}):
+    def __call__(self, predicted_panels, original_panels=None):
         """Evaluate loop loss on provided predicted_panels batch.
             * 'original_panels' are used to evaluate the correct number of edges of each panel in case padding is applied.
                 If 'original_panels' is not given, it is assumed that there is no padding
@@ -37,37 +55,24 @@ class PanelLoopLoss():
         # flatten input into list of panels
         if len(predicted_panels.shape) > 3:
             predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
-        
+        if original_panels is not None and len(original_panels.shape) > 3:
+            original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
         
         # prepare for padding comparison
         with_unpadding = original_panels is not None and original_panels.nelement() > 0  # existing non-empty tensor
-        if with_unpadding:
-            # flatten if not already 
-            if len(original_panels.shape) > 3:
-                original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
-            if data_stats:  # update pad vector
-                self.pad_tenzor = eval_pad_vector(data_stats)
-            if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
-                self.pad_tenzor = torch.zeros(original_panels.shape[-1])
-            pad_tenzor_propagated = self.pad_tenzor.repeat(original_panels.shape[1], 1)
-            pad_tenzor_propagated = pad_tenzor_propagated.to(device=predicted_panels.device)
-        else:
-            if self.pad_tenzor is None:  # comaring everything below with zero vector
-                self.pad_tenzor = torch.zeros(original_panels.shape[-1])
+        if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
+            self.pad_tenzor = torch.zeros(original_panels.shape[-1])
         self.pad_tenzor = self.pad_tenzor.to(device=predicted_panels.device) 
+        # not padded -- no pad_tenzor (None)
+        # Computing once per loop+loss call to avoid re-evaluating for every panel
+        pad_tenzor_propagated = self.pad_tenzor.repeat(
+            original_panels.shape[1], 1).to(device=predicted_panels.device) if with_unpadding else None
             
         # evaluate loss
         panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
         panel_coords_sum = panel_coords_sum.to(device=predicted_panels.device)
         for el_id in range(predicted_panels.shape[0]):
-            if with_unpadding:
-                # panel original length
-                panel = original_panels[el_id]
-                # unpaded length
-                bool_matrix = torch.isclose(panel, pad_tenzor_propagated, atol=1.e-2)
-                seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
-            else:
-                seq_len = len(predicted_panels[el_id])
+            seq_len = panel_len_from_padded(original_panels[el_id], pad_propagated=pad_tenzor_propagated)
 
             # get per-coordinate sum of edges endpoints of each panel
             # should be close to sum of the equvalent number of pading values (since all of coords are shifted due to normalization\standardization)
@@ -202,6 +207,17 @@ class PatternStitchLoss():
                 total_neg_loss.append(max(neg_loss, 0))
         # average neg loss per tag
         return sum(total_neg_loss) / len(total_neg_loss)
+
+
+class PanelShapeOriginAgnosticLoss():
+    """
+        Regression on Panel Shape that allows any vertex to serve as an edge loop origin in panels 
+    """
+    def __init__():
+        pass
+
+    def __call__(self, predicted_panels, original_panels=None, data_stats={}):
+        pass
 
 
 # ------- custom quality metrics --------
