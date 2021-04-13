@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.functional as F
 from data import Garment3DPatternFullDataset as PatternDataset
 
 
@@ -16,19 +17,19 @@ def eval_pad_vector(data_stats={}):
         return None
 
 
-def panel_len_from_padded(padded_panel, pad_vector=None, pad_propagated=None):
+def panel_len_from_padded(padded_panel, pad_vector=None, empty_template=None):
     """
         Return length of the unpadded part of given panel (hence, number of edges)
     """
-    if pad_vector is None and pad_propagated is None:
+    if pad_vector is None and empty_template is None:
         return len(padded_panel)
 
-    if pad_propagated is None:
-        pad_propagated = pad_vector.repeat(padded_panel.shape[0], 1)
-        pad_propagated = pad_tenzor_propagated.to(device=padded_panel.device)
+    if empty_template is None:
+        empty_template = pad_vector.repeat(padded_panel.shape[0], 1)
+        empty_template = pad_tenzor_propagated.to(device=padded_panel.device)
 
     # unpaded length
-    bool_matrix = torch.isclose(padded_panel, pad_propagated, atol=1.e-2)
+    bool_matrix = torch.isclose(padded_panel, empty_template, atol=1.e-2)
     seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
 
     return seq_len
@@ -38,14 +39,17 @@ def panel_len_from_padded(padded_panel, pad_vector=None, pad_propagated=None):
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
         ensuring edges within panel loop & return to origin"""
-    def __init__(self, data_stats={}):
+    def __init__(self, max_edges_in_panel, data_stats={}):
         """Info for evaluating padding vector if data statistical info is applied to it.
             * if standardization/normalization transform is applied to padding, 'data_stats' should be provided
                 'data_stats' format: {'shift': <torch.tenzor>, 'scale': <torch.tensor>} 
         """
-        self.pad_tenzor = eval_pad_vector(data_stats)
+        self.data_stats = data_stats
+        self.max_panel_len = max_edges_in_panel
+        self.pad_vector = eval_pad_vector(data_stats)
+        self.empty_panel_template = self.pad_vector.repeat(self.max_panel_len, 1)
             
-    def __call__(self, predicted_panels, original_panels=None):
+    def __call__(self, predicted_panels, gt_panels=None):
         """Evaluate loop loss on provided predicted_panels batch.
             * 'original_panels' are used to evaluate the correct number of edges of each panel in case padding is applied.
                 If 'original_panels' is not given, it is assumed that there is no padding
@@ -55,29 +59,23 @@ class PanelLoopLoss():
         # flatten input into list of panels
         if len(predicted_panels.shape) > 3:
             predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
-        if original_panels is not None and len(original_panels.shape) > 3:
-            original_panels = original_panels.view(-1, original_panels.shape[-2], original_panels.shape[-1])
-        
-        # prepare for padding comparison
-        with_unpadding = original_panels is not None and original_panels.nelement() > 0  # existing non-empty tensor
-        if self.pad_tenzor is None:  # still not defined -> assume zero vector for padding
-            self.pad_tenzor = torch.zeros(original_panels.shape[-1])
-        self.pad_tenzor = self.pad_tenzor.to(device=predicted_panels.device) 
-        # not padded -- no pad_tenzor (None)
-        # Computing once per loop+loss call to avoid re-evaluating for every panel
-        pad_tenzor_propagated = self.pad_tenzor.repeat(
-            original_panels.shape[1], 1).to(device=predicted_panels.device) if with_unpadding else None
+        if gt_panels is not None and len(gt_panels.shape) > 3:
+            gt_panels = gt_panels.view(-1, gt_panels.shape[-2], gt_panels.shape[-1])
+
+        # correct devices
+        self.empty_panel_template = self.empty_panel_template.to(predicted_panels.device)
+        self.pad_vector = self.pad_vector.to(predicted_panels.device)
             
         # evaluate loss
         panel_coords_sum = torch.zeros((predicted_panels.shape[0], 2))
         panel_coords_sum = panel_coords_sum.to(device=predicted_panels.device)
         for el_id in range(predicted_panels.shape[0]):
-            seq_len = panel_len_from_padded(original_panels[el_id], pad_propagated=pad_tenzor_propagated)
+            seq_len = panel_len_from_padded(gt_panels[el_id], empty_template=self.empty_panel_template)
 
             # get per-coordinate sum of edges endpoints of each panel
             # should be close to sum of the equvalent number of pading values (since all of coords are shifted due to normalization\standardization)
             # (in case of panels, padding for edge coords should be zero, but I'm using a more generic solution here JIC)
-            panel_coords_sum[el_id] = (predicted_panels[el_id][:seq_len, :2] - self.pad_tenzor[:2]).sum(axis=0)
+            panel_coords_sum[el_id] = (predicted_panels[el_id][:seq_len, :2] - self.pad_vector[:2]).sum(axis=0)
 
         panel_square_sums = panel_coords_sum ** 2  # per sum square
 
@@ -209,16 +207,43 @@ class PatternStitchLoss():
         return sum(total_neg_loss) / len(total_neg_loss)
 
 
-class PanelShapeOriginAgnosticLoss():
+class PanelShapeOriginAgnosticLoss(PanelLoopLoss):
     """
         Regression on Panel Shape that allows any vertex to serve as an edge loop origin in panels 
+        Follow similar structure to the loop loss
     """
-    def __init__():
-        pass
+    def __init__(self, data_stats={}):
+        """Info for evaluating padding vector if data statistical info is applied to it.
+            * if standardization/normalization transform is applied to padding, 'data_stats' should be provided
+                'data_stats' format: {'shift': <torch.tenzor>, 'scale': <torch.tensor>} 
+        """
+        super().__init__(data_stats)
 
-    def __call__(self, predicted_panels, original_panels=None, data_stats={}):
-        pass
+    def __call__(self, predicted_panels, gt_panels=None):
+        """
+            Modified regression loss on panels: 
+                * Allow panels to start from any origin vertex
+        """
+        # flatten input into list of panels
+        if len(predicted_panels.shape) > 3:
+            predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
+        if gt_panels is not None and len(gt_panels.shape) > 3:
+            gt_panels = gt_panels.view(-1, gt_panels.shape[-2], gt_panels.shape[-1])
+        
+        chosen_panels = gt_panels
+        # choose the closest version of original panel for each predicted panel
+        for el_id in range(predicted_panels.shape[0]):
+            seq_len = panel_len_from_padded(gt_panels[el_id], empty_template=self.empty_panel_template)
 
+            # get per-coordinate sum of edges endpoints of each panel
+            # should be close to sum of the equvalent number of pading values (since all of coords are shifted due to normalization\standardization)
+            # (in case of panels, padding for edge coords should be zero, but I'm using a more generic solution here JIC)
+            panel_coords_sum = (predicted_panels[el_id][:seq_len, :2] - self.pad_tenzor[:2]).sum(axis=0)
+
+
+        # batch mean of squared norms of per-panel final points:
+        return F.mse_loss(predicted_panels, chosen_panels)
+        
 
 # ------- custom quality metrics --------
 class PatternStitchPrecisionRecall():

@@ -65,7 +65,7 @@ class GarmentPanelsAE(BaseModule):
             'shift': data_config['standardize']['gt_shift']['outlines'], 
             'scale': data_config['standardize']['gt_scale']['outlines']
         }
-        self.loop_loss = metrics.PanelLoopLoss(data_stats=gt_outline_stats)
+        self.loop_loss = metrics.PanelLoopLoss(self.max_panel_len, data_stats=gt_outline_stats)
 
         # --- Metrics --
         # setup non-loss pattern quality evaluation metrics
@@ -278,6 +278,7 @@ class GarmentFullPattern3D(BaseModule):
 
         # extra losses objects
         self.loop_loss = metrics.PanelLoopLoss(
+            self.max_panel_len,
             data_stats={
                 'shift': data_config['standardize']['gt_shift']['outlines'], 
                 'scale': data_config['standardize']['gt_scale']['outlines']})
