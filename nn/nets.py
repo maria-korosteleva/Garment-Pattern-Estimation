@@ -65,6 +65,7 @@ class GarmentPanelsAE(BaseModule):
             'shift': data_config['standardize']['gt_shift']['outlines'], 
             'scale': data_config['standardize']['gt_scale']['outlines']
         }
+        self.shape_loss = metrics.PanelShapeOriginAgnosticLoss(self.max_panel_len, data_stats=gt_outline_stats)
         self.loop_loss = metrics.PanelLoopLoss(self.max_panel_len, data_stats=gt_outline_stats)
 
         # --- Metrics --
@@ -145,7 +146,7 @@ class GarmentPanelsAE(BaseModule):
         preds = self(features)['outlines']
 
         # ---- Base reconstruction loss -----
-        reconstruction_loss = self.regression_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
+        reconstruction_loss = self.shape_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
 
         # ---- Loop loss -----
         loop_loss = self.loop_loss(preds, features)
