@@ -34,6 +34,26 @@ def panel_len_from_padded(padded_panel, pad_vector=None, empty_template=None):
     return seq_len
 
 
+# ----- for gt shifting -------
+def per_panel_shift(panel_features, per_panel_leading_edges, panel_num_edges):
+    """
+        Shift given panel features accorging to the new edge loop orientations given
+    """
+    pattern_size = panel_features.shape[1]
+    with torch.no_grad():
+        for pattern_idx in range(len(panel_features)):
+            for panel_idx in range(pattern_size):
+                edge_id = per_panel_leading_edges[pattern_idx * pattern_size + panel_idx] 
+                num_edges = gt_num_edges[pattern_idx * pattern_size + panel_idx]       
+                if edge_id:  # not zero -- shift needed
+                    panel_feature = panel_features[pattern_idx][panel_idx]
+                    # requested edge goes into the first place
+                    # padded area is left in place
+                    panel_features[pattern_idx][panel_idx] = torch.cat(
+                        (panel_features[edge_id:num_edges], panel_features[: edge_id], panel_features[num_edges:]))
+    return panel_features
+
+
 # ------- custom losses --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
@@ -93,17 +113,36 @@ class PatternStitchLoss():
         
         self.neg_loss = self.HardNet_neg_loss if use_hardnet else self.extended_triplet_neg_loss
 
-    def __call__(self, stitch_tags, gt_stitches, gt_stitches_nums):
+    def __call__(self, stitch_tags, gt_stitches, gt_stitches_nums, per_panel_leading_edges=None, gt_panel_num_edges=None):
         """
         * stitch_tags contain tags for every panel in every pattern in the batch
         * gt_stitches contains the list of edge pairs that are stitches together.
-            * with every edge indicated as (panel_id, edge_id) 
+            * with every edge indicated as (pattern_edge_id) assuming panels order is known, and panels are padded to the same size
+        * per_panel_leading_edges -- specifies where is the start of the edge loop for GT outlines 
+                that is well-matched to the predicted outlines. 
+                If not given, current edge order (in stitch tags) is assumed to match the one used in ground truth panels
         """
         gt_stitches = gt_stitches.long()
         batch_size = stitch_tags.shape[0]
+        max_num_panels = stitch_tags.shape[1]
+        max_panel_len = stitch_tags.shape[-2]
         num_stitches = gt_stitches_nums.sum()  # Ground truth number of stitches!
 
+        if per_panel_leading_edges is not None:  # re-arrange GT edge ids 
+            if gt_panel_num_edges is None:
+                raise ValueError(
+                    '{}::Error::need information on GT num of edges in every panel when *per_panel_leading_edges* is provided'.format(
+                        self.__class__.__name__
+                    )
+                )
+            print(gt_stitches.shape)
+            gt_stitches = self.gt_stitches_shift(
+                gt_stitches, gt_stitches_nums, per_panel_leading_edges, gt_panel_num_edges, max_num_panels, max_panel_len)
+            print(gt_stitches.shape)
+
         flat_stitch_tags = stitch_tags.view(batch_size, -1, stitch_tags.shape[-1])  # remove panel dimention
+
+        print('Final gt stitches ', gt_stitches)
 
         # https://stackoverflow.com/questions/55628014/indexing-a-3d-tensor-using-a-2d-tensor
         # these will have dull values due to padding in gt_stitches
@@ -205,6 +244,83 @@ class PatternStitchLoss():
         # average neg loss per tag
         return sum(total_neg_loss) / len(total_neg_loss)
 
+    @staticmethod
+    def gt_stitches_shift(
+            gt_stitches, gt_stitches_nums, per_panel_leading_edges, 
+            gt_num_edges,
+            max_num_panels, max_panel_len):
+        """
+            Re-number the edges in ground truth according to the perdiction-gt edges mapping indicated in per_panel_leading_edges
+        """
+        with torch.no_grad():  # GT updates don't require gradient compute
+            # add pattern dimention
+            # TODO less nested loops!!!!
+            print(len(per_panel_leading_edges))
+            for pattern_id in range(len(gt_stitches)):
+                
+                print(pattern_id, gt_stitches[pattern_id])
+                
+                print([per_panel_leading_edges[pattern_id * max_num_panels + i] for i in range(max_num_panels)])
+                # re-assign GT edge ids according to shift
+                for side in (0, 1):
+                    for i in range(gt_stitches_nums[pattern_id]):
+                        edge_id = gt_stitches[pattern_id][side][i]
+                        panel_id = edge_id // max_panel_len
+                        global_panel_id = pattern_id * max_num_panels + panel_id
+                        new_ledge = per_panel_leading_edges[global_panel_id]
+                        panel_num_edges = gt_num_edges[global_panel_id]
+
+                        inner_panel_id = edge_id - (panel_id * max_panel_len)
+                        
+                        # TODO it should be num_edges instead of max_panel_len -- right??
+                        new_in_panel_id = inner_panel_id - new_ledge if inner_panel_id >= new_ledge else (
+                            panel_num_edges - (new_ledge - inner_panel_id))
+
+                        print(max_panel_len, inner_panel_id, new_ledge, new_in_panel_id)
+
+                        gt_stitches[pattern_id][side][i] = panel_id * max_panel_len + new_in_panel_id
+                
+                print(gt_stitches[pattern_id])
+        return gt_stitches
+
+
+class PatternFreeEdgesLoss():
+    """
+        Evaluate the edge classification into free and non-free (connected to some other edge by a stitch)
+    """
+    def __init__(self):
+        self.logit_loss = nn.BCEWithLogitsLoss()
+
+    def __call__(self, pred_class, gt_free_class, per_panel_leading_edges=None, gt_panel_num_edges=None):
+        """
+            Evaluates the BCE loss on predicted logits
+            * per_panel_leading_edges -- if provided, gt mask is re-agganged to follow the matched order of edges provided in this parameter 
+        """
+
+        if per_panel_leading_edges is not None:
+            if gt_panel_num_edges is None:
+                raise ValueError(
+                    '{}::Error::need information on GT num of edges in every panel when *per_panel_leading_edges* is provided'.format(
+                        self.__class__.__name__
+                    )
+                )
+            # re-arrange GT labels to match the edge order
+            with torch.no_grad():
+
+                gt_free_class = gt_free_class.view(-1, gt_free_class.shape[-1])
+
+                for panel_idx in range(len(gt_free_class)):
+                    num_edges = gt_panel_num_edges[panel_idx]
+                    edge_id = per_panel_leading_edges[panel_idx]
+                    if edge_id:  # not zero -- shift needed
+                        gt_panel = gt_free_class[panel_idx]
+                        gt_free_class[panel_idx] = torch.cat((gt_panel[edge_id:num_edges], gt_panel[: edge_id], gt_panel[num_edges:]))
+
+                gt_free_class = gt_free_class.view(pred_class.shape)
+
+
+        return self.logit_loss(pred_class, gt_free_class), gt_free_class
+
 
 class PanelShapeOriginAgnosticLoss(PanelLoopLoss):
     """
@@ -234,31 +350,36 @@ class PanelShapeOriginAgnosticLoss(PanelLoopLoss):
         self.pad_vector = self.pad_vector.to(predicted_panels.device)
         
         chosen_panels = []
+        leading_edges = []
+        gt_panel_num_edges = []
         # choose the closest version of original panel for each predicted panel
         with torch.no_grad():
             for el_id in range(predicted_panels.shape[0]):
                 num_edges = panel_len_from_padded(gt_panels[el_id], empty_template=self.empty_panel_template)
+                gt_panel_num_edges.append(num_edges)
 
                 # all rotations of GT
                 # TODO Faster version? -- I think I already did smth like this somewhere
                 shifted_gt_panel = gt_panels[el_id]
                 min_dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
                 chosen_panel = shifted_gt_panel
+                leading_edge = 0
                 for i in range(1, num_edges):
                     shifted_gt_panel = self._rotate_edges(shifted_gt_panel, num_edges)
                     dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
                     if dist < min_dist:
                         min_dist = dist
                         chosen_panel = shifted_gt_panel
-                        print(min_dist, i)
+                        leading_edge = i
 
-            # update choice
-            chosen_panels.append(chosen_panel)
+                # update choice
+                chosen_panels.append(chosen_panel)
+                leading_edges.append(leading_edge)
 
         chosen_panels = torch.stack(chosen_panels).to(predicted_panels.device)
 
         # batch mean of squared norms of per-panel final points:
-        return nn.functional.mse_loss(predicted_panels, chosen_panels)
+        return nn.functional.mse_loss(predicted_panels, chosen_panels), leading_edges, gt_panel_num_edges
         
     def _rotate_edges(self, panel, num_edges):
         """
@@ -281,7 +402,9 @@ class PatternStitchPrecisionRecall():
             for key in self.data_stats:
                 self.data_stats[key] = torch.Tensor(self.data_stats[key])
 
-    def __call__(self, stitch_tags, free_edge_class, gt_stitches, gt_stitches_nums, pattern_names=None):
+    def __call__(
+            self, stitch_tags, free_edge_class, gt_stitches, gt_stitches_nums, 
+            per_panel_leading_edges=None, gt_panel_num_edges=None, pattern_names=None):
         """
          Evaluate on the batch of stitch tags
         """
@@ -289,6 +412,18 @@ class PatternStitchPrecisionRecall():
         if self.data_stats is not None:
             device = stitch_tags.device
             stitch_tags = stitch_tags * self.data_stats['scale'].to(device) + self.data_stats['shift'].to(device)
+        
+        if per_panel_leading_edges is not None:  # re-arrange GT edge ids according to the match
+            if gt_panel_num_edges is None:
+                raise ValueError(
+                    '{}::Error::need information on GT num of edges in every panel when *per_panel_leading_edges* is provided'.format(
+                        self.__class__.__name__
+                    )
+                )
+            max_num_panels = stitch_tags.shape[1]
+            max_panel_len = stitch_tags.shape[-2]
+            gt_stitches = PatternStitchLoss.gt_stitches_shift(
+                gt_stitches, gt_stitches_nums, per_panel_leading_edges, gt_panel_num_edges, max_num_panels, max_panel_len)
 
         tot_precision = 0.
         tot_recall = 0.
@@ -365,6 +500,7 @@ class NumbersInPanelsAccuracies():
             predicted_num_panels = 0
             correct_num_edges = 0.
             for panel_id in range(max_num_panels):
+                # TODO switch to commond function
                 predicted_bool_matrix = torch.isclose(
                     predicted_outlines[pattern_idx][panel_id], 
                     self.empty_panel_template, atol=0.07)  # this value is adjusted to have similar effect to what is used in core.py
@@ -425,9 +561,11 @@ class PanelVertsL2():
         self.max_panel_len = max_edges_in_panel
         self.empty_panel_template = torch.zeros((max_edges_in_panel, len(self.data_stats['shift'])))
     
-    def __call__(self, predicted_outlines, gt_outlines):
+    def __call__(self, predicted_outlines, gt_outlines, per_panel_leading_edges=None):
         """
-         Evaluate on the batch of panel outlines predictoins 
+            Evaluate on the batch of panel outlines predictoins 
+            * per_panel_leading_edges -- specifies where is the start of the edge loop for GT outlines 
+                that is well-matched to the predicted outlines. If not given, the default GT orientation is used
         """
         # flatten input into list of panels
         predicted_outlines = predicted_outlines.view(-1, predicted_outlines.shape[-2], predicted_outlines.shape[-1])
@@ -451,20 +589,18 @@ class PanelVertsL2():
             gt_panel = gt_outlines[panel_idx]
 
             # unpad using correct gt info -- for simplicity of comparison
-            # TODO this repeats in many metrics -- might need a shared function
-            gt_bool_matrix = torch.isclose(gt_panel, self.empty_panel_template, atol=0.07)  # tol doesn't matter much, as we work on ground truth
-            # empty panel detected -- stop further eval
-            if torch.all(gt_bool_matrix):
-                break
-            # per-row matrix
-            num_edges = (~torch.all(gt_bool_matrix, axis=1)).sum()  # only non-padded rows
-        
+            num_edges = panel_len_from_padded(gt_panel, empty_template=self.empty_panel_template)
             if num_edges < 3:
                 # 0, 1, 2 edges are not enough to form a panel -> assuming this is an empty panel
                 break
 
             prediced_panel = prediced_panel[:num_edges, :]  
             gt_panel = gt_panel[:num_edges, :]
+
+            if per_panel_leading_edges is not None:
+                edge_id = per_panel_leading_edges[panel_idx]
+                if edge_id:  # not zero -- shift needed
+                    gt_panel = torch.cat((gt_panel[edge_id:], gt_panel[: edge_id]))
 
             # average squred error per vertex (not per coordinate!!) hence internal sum
             panel_errors.append(
