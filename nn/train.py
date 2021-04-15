@@ -121,8 +121,6 @@ def get_data_config(in_config, old_stats=False):
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
-    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = [
         # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
