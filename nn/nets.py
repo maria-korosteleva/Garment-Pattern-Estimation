@@ -270,7 +270,7 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3, 
             'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 0,  # 40, 
+            'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
             'stitch_hardnet_version': False 
         })
