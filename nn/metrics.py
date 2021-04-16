@@ -14,8 +14,8 @@ def eval_metrics(model, data_wrapper, section='test'):
     model.to(device)
     model.eval()
 
-    if hasattr(model, 'with_quality_eval'):
-        model.with_quality_eval = True  # force quality evaluation for models that support it
+    if hasattr(model.loss, 'with_quality_eval'):
+        model.loss.with_quality_eval = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
@@ -644,6 +644,8 @@ class ComposedPatternLoss():
         }
         self.config.update(in_config)  # override with requested settings
 
+        self.with_quality_eval = True  # quality evaluation switch -- may allow to speed up the loss evaluation if False
+
         # Convenience properties
         self.l_components = self.config['loss_components']
         self.q_components = self.config['quality_components'] 
@@ -720,7 +722,6 @@ class ComposedPatternLoss():
         gt_num_edges = self._panel_lengths(ground_truth['outlines'], self.gt_outline_stats)
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
-            # TODO check devices
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
         else:  # keep original
             gt_rotated = ground_truth
@@ -741,14 +742,15 @@ class ComposedPatternLoss():
 
 
         # ---- Quality metrics  ----
-        with torch.no_grad():
-            quality_breakdown = self._main_quality_metrics(preds, ground_truth, gt_num_edges, names)
-            loss_dict.update(quality_breakdown)
-
-            # stitches quality
-            if epoch >= self.config['epoch_with_stitches']:
-                quality_breakdown = self._stitch_quality_metrics(preds, ground_truth, gt_num_edges)
+        if self.with_quality_eval:
+            with torch.no_grad():
+                quality_breakdown = self._main_quality_metrics(preds, ground_truth, gt_num_edges, names)
                 loss_dict.update(quality_breakdown)
+
+                # stitches quality
+                if epoch >= self.config['epoch_with_stitches']:
+                    quality_breakdown = self._stitch_quality_metrics(preds, ground_truth, gt_num_edges)
+                    loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
