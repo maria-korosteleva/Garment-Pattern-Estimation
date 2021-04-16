@@ -79,7 +79,10 @@ def get_values_from_args():
         'global_pool': args.ec_global_aggr, 
         'skip_connections': bool(args.ec_skip),
         'graph_pooling': bool(args.ec_gpool),
-        'pool_ratio': args.ec_gpool_ratio  # only used when the graph pooling is enabled
+        'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
+
+        # Extra loss parameters
+        'panel_origin_invariant_loss': True
     }
 
     return data_config, nn_config, args.net_seed
@@ -107,8 +110,8 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 500}  # upper limit of how much data to grab from each type
+        split = {'valid_per_type': 50, 'test_per_type': 50, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
+        data_config = {'max_datapoints_per_type': 200}  # upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -132,8 +135,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='orderless-pants-JS', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='config', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples

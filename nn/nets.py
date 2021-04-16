@@ -48,7 +48,8 @@ class GarmentPanelsAE(BaseModule):
             'loop_loss_weight': 0.1, 
             'dropout': 0,
             'lstm_init': 'kaiming_normal_', 
-            'decoder': 'LSTMDecoderModule'
+            'decoder': 'LSTMDecoderModule',
+            'panel_origin_invariant_loss': True
         })
         # update with input settings
         self.config.update(config) 
@@ -149,7 +150,10 @@ class GarmentPanelsAE(BaseModule):
         # --- Initial evaluations ---
         gt_num_edges = metrics.panel_lengths(gt_outlines, self.gt_outline_stats)
         # for origin-agnistic loss evaluation
-        gt_rotated_outlines, panel_leading_edges = OriginAgnostic.edge_order_match(preds, gt_outlines, gt_num_edges)
+        if self.config['panel_origin_invariant_loss']:
+            gt_rotated_outlines, panel_leading_edges = OriginAgnostic.edge_order_match(preds, gt_outlines, gt_num_edges)
+        else:
+            gt_rotated_outlines, panel_leading_edge = gt_outlines, None
 
         # ---- Base reconstruction loss -----
         # features are the ground truth in this case -> reconstruction loss
@@ -272,7 +276,8 @@ class GarmentFullPattern3D(BaseModule):
             'stitch_tags_margin': 0.3,
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
-            'stitch_hardnet_version': False 
+            'stitch_hardnet_version': False,
+            'panel_origin_invariant_loss': True
         })
         # update with input settings
         self.config.update(config) 
@@ -416,8 +421,12 @@ class GarmentFullPattern3D(BaseModule):
         # ------ Panel origin matching --------
         gt_outlines = ground_truth['outlines'].to(device)
         gt_num_edges = metrics.panel_lengths(gt_outlines, self.gt_outline_stats)
-        # for origin-agnistic loss evaluation
-        gt_rotated_outlines, panel_leading_edges = OriginAgnostic.edge_order_match(preds['outlines'], gt_outlines, gt_num_edges)
+        if self.config['panel_origin_invariant_loss']:
+            # for origin-agnistic loss evaluation
+            gt_rotated_outlines, panel_leading_edges = OriginAgnostic.edge_order_match(
+                preds['outlines'], gt_outlines, gt_num_edges)
+        else: 
+            gt_rotated_outlines, panel_leading_edges = gt_outlines, None
 
         # ---- Loss for panel shapes ------
         pattern_loss = self.shape_loss(preds['outlines'], gt_rotated_outlines)   
@@ -451,15 +460,19 @@ class GarmentFullPattern3D(BaseModule):
 
         # ---- if we are far enough in the training, evaluate stitch loss too ---
         if epoch >= self.config['epoch_with_stitches']:
-            # For origin-agnostic loss evaluation
-            gt_rotated_stitches = OriginAgnostic.gt_stitches_shift(
-                ground_truth['stitches'], ground_truth['num_stitches'], 
-                panel_leading_edges, gt_num_edges,
-                self.max_pattern_size, self.max_panel_len
-            )
-            gt_free_class_rotated = OriginAgnostic.per_panel_shift(
-                ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device), 
-                panel_leading_edges, gt_num_edges)
+            if self.config['panel_origin_invariant_loss']:
+                # For origin-agnostic loss evaluation
+                gt_rotated_stitches = OriginAgnostic.gt_stitches_shift(
+                    ground_truth['stitches'], ground_truth['num_stitches'], 
+                    panel_leading_edges, gt_num_edges,
+                    self.max_pattern_size, self.max_panel_len
+                )
+                gt_free_class_rotated = OriginAgnostic.per_panel_shift(
+                    ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device), 
+                    panel_leading_edges, gt_num_edges)
+            else:
+                gt_rotated_stitches = ground_truth['stitches']
+                gt_free_class_rotated = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
 
             # loss on stitch tags
             stitch_loss, stitch_loss_breakdown = self.stitch_loss(
