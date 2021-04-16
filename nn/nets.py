@@ -333,7 +333,7 @@ class GarmentFullPattern3D(BaseModule):
         return {
             'outlines': outlines, 
             'rotations': rotations, 'translations': translations, 
-            'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+            'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
 
     def forward(self, positions_batch):
         # Extract info from geometry 
@@ -428,7 +428,7 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
         return {
             'outlines': panel_predictions, 
             'rotations': rotations, 'translations': translations, 
-            'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+            'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
 
 
 

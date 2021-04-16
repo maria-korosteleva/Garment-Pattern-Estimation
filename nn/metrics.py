@@ -716,32 +716,17 @@ class ComposedPatternLoss():
         loss_dict = {}
         full_loss = 0.
 
-        # TODO will it be ok to pass modified information inside the GT dictionaries??
-        gt_outlines = ground_truth['outlines'].to(self.device)
-        gt_num_edges = self._panel_lengths(gt_outlines, self.gt_outline_stats)
-
-        # ------ Panel origin matching --------
+        # ------ GT pre-processing --------
+        gt_num_edges = self._panel_lengths(ground_truth['outlines'], self.gt_outline_stats)
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
-            gt_rotated_outlines, panel_leading_edges = OriginAgnostic.edge_order_match(
-                preds['outlines'], gt_outlines, gt_num_edges)
-            if epoch >= self.config['epoch_with_stitches']:
-                gt_rotated_stitches = OriginAgnostic.gt_stitches_shift(
-                    ground_truth['stitches'], ground_truth['num_stitches'], 
-                    panel_leading_edges, gt_num_edges,
-                    self.max_pattern_size, self.max_panel_len
-                )
-                gt_free_class_rotated = OriginAgnostic.per_panel_shift(
-                    ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device), 
-                    panel_leading_edges, gt_num_edges)
-        else:
-            gt_rotated_stitches = ground_truth['stitches']
-            gt_free_class_rotated = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device)
-            gt_rotated_outlines, panel_leading_edges = gt_outlines, None
+            # TODO check devices
+            gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
+        else:  # keep original
+            gt_rotated = ground_truth
 
         # ---- Losses ------
-        main_losses, main_dict = self._main_losses(
-            preds, ground_truth, gt_rotated_outlines, panel_leading_edges, gt_num_edges)
+        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
         full_loss += main_losses
         loss_dict.update(main_dict)
 
@@ -750,33 +735,26 @@ class ComposedPatternLoss():
                 'stitch' in self.l_components
                 or 'stitch_supervised' in self.l_components
                 or 'free_class' in self.l_components):
-
-            losses, stitch_loss_dict = self._stitch_losses(
-                preds, ground_truth, gt_rotated_stitches, gt_free_class_rotated, 
-                panel_leading_edges, gt_num_edges)
+            losses, stitch_loss_dict = self._stitch_losses(preds, gt_rotated, gt_num_edges)
             full_loss += losses
             loss_dict.update(stitch_loss_dict)
 
 
         # ---- Quality metrics  ----
         with torch.no_grad():
-            quality_breakdown = self._main_quality_metrics(
-                preds, ground_truth, gt_rotated_outlines, panel_leading_edges, gt_num_edges, names)
+            quality_breakdown = self._main_quality_metrics(preds, ground_truth, gt_num_edges, names)
             loss_dict.update(quality_breakdown)
 
             # stitches quality
             if epoch >= self.config['epoch_with_stitches']:
-                quality_breakdown = self._stitch_quality_metrics(
-                    preds, ground_truth, 
-                    gt_rotated_stitches, gt_free_class_rotated,
-                    panel_leading_edges, gt_num_edges)
+                quality_breakdown = self._stitch_quality_metrics(preds, ground_truth, gt_num_edges)
                 loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
 
     # ------- evaluation breakdown -------
-    def _main_losses(self, preds, ground_truth, gt_rotated_outlines, panel_leading_edges, gt_num_edges):
+    def _main_losses(self, preds, ground_truth, gt_num_edges):
         """
             Main loss components. Evaluated in the same way regardless of the training stage
         """
@@ -784,7 +762,7 @@ class ComposedPatternLoss():
         loss_dict = {}
 
         if 'shape' in self.l_components:
-            pattern_loss = self.regression_loss(preds['outlines'], gt_rotated_outlines)
+            pattern_loss = self.regression_loss(preds['outlines'], ground_truth['outlines'].to(self.device))
             full_loss += pattern_loss
             loss_dict.update(pattern_loss=pattern_loss)
             
@@ -807,10 +785,7 @@ class ComposedPatternLoss():
 
         return full_loss, loss_dict
 
-    def _stitch_losses(
-            self, preds, ground_truth, 
-            gt_rotated_stitches, gt_free_class_rotated, 
-            panel_leading_edges, gt_num_edges):
+    def _stitch_losses(self, preds, ground_truth, gt_num_edges):
         """
             Evaluate losses related to stitch info. Maybe calles or not depending on the training stage
         """
@@ -820,41 +795,34 @@ class ComposedPatternLoss():
         if 'stitch' in self.l_components: 
             # Pushing stitch tags of the stitched edges together, and apart from all the other stitch tags
             stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                preds['stitch_tags'], gt_rotated_stitches, ground_truth['num_stitches'])
+                preds['stitch_tags'], ground_truth['stitches'], ground_truth['num_stitches'])
             loss_dict.update(stitch_loss_breakdown)
             full_loss += stitch_loss
         
         if 'stitch_supervised' in self.l_components:
-            # if stitch tag label is provided and requested to be used
-            if self.config['panel_origin_invariant_loss']:
-                # shift gt_stitch tags
-                gt_tags_rotated = metrics.per_panel_shift(
-                    ground_truth['stitch_tags'].to(device), panel_leading_edges, gt_num_edges)
-            else:
-                gt_tags_rotated = ground_truth['stitch_tags'].to(device)
-
             stitch_sup_loss = self.stitch_loss_supervised(
-                preds['stitch_tags'], gt_tags_rotated)      
+                preds['stitch_tags'], ground_truth['stitch_tags'].to(self.device))      
             loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
             full_loss += self.config['stitch_supervised_weight'] * stitch_sup_loss
 
         if 'free_class' in self.l_components:
             # free\stitches edges classification
-            free_edges_loss = self.free_edge_class_loss(preds['free_edge_mask'], gt_free_class_rotated)
+            free_edges_loss = self.free_edge_class_loss(
+                preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device))
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss
 
         return full_loss, loss_dict
 
-    def _main_quality_metrics(
-            self, preds, ground_truth, gt_rotated_outlines, panel_leading_edges, gt_num_edges, names):
+    def _main_quality_metrics(self, preds, ground_truth, gt_num_edges, names):
         """
             Evaluate quality components -- these are evaluated in the same way regardless of the training stage
         """
         loss_dict = {}
 
         if 'shape' in self.q_components:
-            shape_l2 = self.pattern_shape_quality(preds['outlines'], gt_rotated_outlines, gt_num_edges)
+            shape_l2 = self.pattern_shape_quality(
+                preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
             loss_dict.update(panel_shape_l2=shape_l2)
 
         if 'discrete' in self.q_components:
@@ -863,19 +831,18 @@ class ComposedPatternLoss():
             loss_dict.update(num_panels_accuracy=num_panels_acc, num_edges_accuracy=num_edges_acc,)
             
         if 'rotation' in self.q_components:
-            rotation_l2 = self.rotation_quality(preds['rotations'], ground_truth['rotations'].to(self.device))
+            rotation_l2 = self.rotation_quality(
+                preds['rotations'], ground_truth['rotations'].to(self.device))
             loss_dict.update(rotation_l2=rotation_l2)
 
         if 'translation' in self.q_components:
-            translation_l2 = self.translation_quality(preds['translations'], ground_truth['translations'].to(self.device))
+            translation_l2 = self.translation_quality(
+                preds['translations'], ground_truth['translations'].to(self.device))
             loss_dict.update(translation_l2=translation_l2)
     
         return loss_dict
 
-    def _stitch_quality_metrics(
-            self, preds, ground_truth, 
-            gt_rotated_stitches, gt_free_class_rotated,
-            panel_leading_edges, gt_num_edges):
+    def _stitch_quality_metrics(self, preds, ground_truth, gt_num_edges):
         """
             Quality components related to stitches prediction. May be called separately from main components 
             arrording to the training stage
@@ -883,21 +850,57 @@ class ComposedPatternLoss():
         loss_dict = {}
         if 'stitches' in self.q_components:
             stitch_prec, stitch_recall = self.stitch_quality(
-                preds['stitch_tags'], preds['free_edge_mask'], 
-                gt_rotated_stitches.type(torch.IntTensor), 
+                preds['stitch_tags'], preds['free_edges_mask'], 
+                ground_truth['stitches'].type(torch.IntTensor), 
                 ground_truth['num_stitches'],
                 pattern_names=names)
             loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
         
         if 'free_class' in self.q_components:
-            free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))
-            acc = (free_class == gt_free_class_rotated).sum().float() / gt_free_class_rotated.numel()
+            free_class = torch.round(torch.sigmoid(preds['free_edges_mask']))
+            gt_mask = ground_truth['free_edges_mask'].to(preds['free_edges_mask'].device)
+            acc = (free_class == gt_mask).sum().float() / gt_mask.numel()
 
             loss_dict.update(free_edge_acc=acc)
 
         return loss_dict
 
-    # ------- Utils for working with padded data ----------
+    # ------ Ground truth panel shift  ---------
+    def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):
+        """
+            Create a new GT object where panels are rotated to best match the predicted panels
+        """
+        with torch.no_grad():
+            gt_updated = {}
+            # for origin-agnistic loss evaluation
+            gt_updated['outlines'], panel_leading_edges = OriginAgnostic.edge_order_match(
+                preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
+
+            if epoch >= self.config['epoch_with_stitches'] and (
+                    'stitch' in self.l_components
+                    or 'stitch_supervised' in self.l_components
+                    or 'free_class' in self.l_components):  # if there is any stitch-related evaluation
+                gt_updated['stitches'] = OriginAgnostic.gt_stitches_shift(
+                    ground_truth['stitches'], ground_truth['num_stitches'], 
+                    panel_leading_edges, gt_num_edges,
+                    self.max_pattern_size, self.max_panel_len
+                )
+                gt_updated['free_edges_mask'] = OriginAgnostic.per_panel_shift(
+                    ground_truth['free_edges_mask'].to(self.device), 
+                    panel_leading_edges, gt_num_edges)
+                
+                if 'stitch_supervised' in self.l_components:
+                    gt_updated['stitch_tags'] = metrics.per_panel_shift(
+                        ground_truth['stitch_tags'].to(self.device), panel_leading_edges, gt_num_edges)
+            
+            # keep the references to the rest of the gt data as is
+            for key in ground_truth:
+                if key not in gt_updated:
+                    gt_updated[key] = ground_truth[key]
+
+        return gt_updated
+
+    # ------- Working with padded data ----------
     # TODO revisit if it needs to be static at all
     @staticmethod
     def _panel_len_from_padded(padded_panel, pad_vector=None, empty_template=None):

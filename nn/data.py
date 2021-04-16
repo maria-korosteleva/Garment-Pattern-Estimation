@@ -1089,7 +1089,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # stitch tags to stitch list
         stitches = self.tags_to_stitches(
             torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edge_mask']
+            prediction['free_edges_mask']
         )
 
         return self._pattern_from_tenzor(
@@ -1173,7 +1173,7 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
         # stitch tags to stitch list
         stitches = Garment3DPatternFullDataset.tags_to_stitches(
             torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edge_mask']
+            prediction['free_edges_mask']
         )
 
         pattern = VisPattern(view_ids=False)
