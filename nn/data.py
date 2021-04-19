@@ -701,8 +701,6 @@ class GarmentBaseDataset(BaseDataset):
             (adapted to be used with muplitple datasets)
             Returns list of paths to files with prediction visualizations"""
 
-        # TODO update usages of this function
-        # TODO update reloads of this function
         save_to = Path(save_to)
         prediction_imgs = []
         for prediction, name, folder in zip(predictions, datanames, data_folders):
