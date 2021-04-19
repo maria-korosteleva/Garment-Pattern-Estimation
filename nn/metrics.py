@@ -343,7 +343,6 @@ class NumbersInPanelsAccuracies():
             predicted_num_panels = 0
             correct_num_edges = 0.
             for panel_id in range(max_num_panels):
-                # TODO switch to common function
                 predicted_bool_matrix = torch.isclose(
                     predicted_outlines[pattern_idx][panel_id], 
                     self.empty_panel_template, atol=0.07)  # this value is adjusted to have similar effect to what is used in core.py
