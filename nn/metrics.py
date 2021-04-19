@@ -70,122 +70,6 @@ def eval_pad_vector(data_stats={}):
         return None
 
 
-# ----- for gt shifting -------
-class OriginAgnostic():
-    """
-        Collection of methods of GT  transform for origin-agnostic evaluation
-        NOTE: This is actually a bad design pattern, according to the community
-            https://stackoverflow.com/questions/10388127/static-classes-in-python
-        I'm using a class with only static methods as sort of grouping without a need to create
-        a separate module (and deal with importing issues)
-    """
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def edge_order_match(predicted_panels, gt_panels, gt_num_edges):
-        """
-            Try different first edges of GT panels to find the one best matching with prediction
-        """
-        batch_size = predicted_panels.shape[0]
-        if len(predicted_panels.shape) > 3:
-            predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
-        if gt_panels is not None and len(gt_panels.shape) > 3:
-            gt_panels = gt_panels.view(-1, gt_panels.shape[-2], gt_panels.shape[-1])
-        
-        chosen_panels = []
-        leading_edges = []
-        # choose the closest version of original panel for each predicted panel
-        with torch.no_grad():
-            for el_id in range(predicted_panels.shape[0]):
-                num_edges = gt_num_edges[el_id]
-
-                # Find loop origin with min distance to predicted panel
-                # TODO Faster version? -- I think I already did smth like this somewhere
-                shifted_gt_panel = gt_panels[el_id]
-                min_dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
-                chosen_panel = shifted_gt_panel
-                leading_edge = 0
-                for i in range(1, num_edges):  # will skip comparison if num_edges is 0 -- empty panels
-                    shifted_gt_panel = OriginAgnostic._rotate_edges(shifted_gt_panel, num_edges)
-                    dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
-                    if dist < min_dist:
-                        min_dist = dist
-                        chosen_panel = shifted_gt_panel
-                        leading_edge = i
-
-                # update choice
-                chosen_panels.append(chosen_panel)
-                leading_edges.append(leading_edge)
-
-        chosen_panels = torch.stack(chosen_panels).to(predicted_panels.device)
-
-        # reshape into pattern batch
-        return chosen_panels.view(batch_size, -1, gt_panels.shape[-2], gt_panels.shape[-1]), leading_edges
-
-    @staticmethod
-    def per_panel_shift(panel_features, per_panel_leading_edges, panel_num_edges):
-        """
-            Shift given panel features accorging to the new edge loop orientations given
-        """
-        pattern_size = panel_features.shape[1]
-        with torch.no_grad():
-            for pattern_idx in range(len(panel_features)):
-                for panel_idx in range(pattern_size):
-                    edge_id = per_panel_leading_edges[pattern_idx * pattern_size + panel_idx] 
-                    num_edges = panel_num_edges[pattern_idx * pattern_size + panel_idx]       
-                    if num_edges < 3:  # just skip empty panels
-                        continue
-                    if edge_id:  # not zero -- shift needed. For empty panels its always zero
-                        current_panel = panel_features[pattern_idx][panel_idx]
-                        # requested edge goes into the first place
-                        # padded area is left in place
-                        panel_features[pattern_idx][panel_idx] = torch.cat(
-                            (current_panel[edge_id:num_edges], current_panel[: edge_id], current_panel[num_edges:]))
-        return panel_features
-
-    @staticmethod
-    def gt_stitches_shift(
-            gt_stitches, gt_stitches_nums, 
-            per_panel_leading_edges, 
-            gt_num_edges,
-            max_num_panels, max_panel_len):
-        """
-            Re-number the edges in ground truth according to the perdiction-gt edges mapping indicated in per_panel_leading_edges
-        """
-        with torch.no_grad():  # GT updates don't require gradient compute
-            # add pattern dimention
-            # TODO less nested loops!!!!
-            for pattern_id in range(len(gt_stitches)):
-                # re-assign GT edge ids according to shift
-                for side in (0, 1):
-                    for i in range(gt_stitches_nums[pattern_id]):
-                        edge_id = gt_stitches[pattern_id][side][i]
-                        panel_id = edge_id // max_panel_len
-                        global_panel_id = pattern_id * max_num_panels + panel_id  # panel id in the batch
-                        new_ledge = per_panel_leading_edges[global_panel_id]
-                        panel_num_edges = gt_num_edges[global_panel_id]  # never references to empty (padding) panel->always positive number
-
-                        inner_panel_id = edge_id - (panel_id * max_panel_len)  # edge id within panel
-                        
-                        # shift edge within panel
-                        new_in_panel_id = inner_panel_id - new_ledge if inner_panel_id >= new_ledge else (
-                            panel_num_edges - (new_ledge - inner_panel_id))
-                        # update with pattern-level edge id
-                        gt_stitches[pattern_id][side][i] = panel_id * max_panel_len + new_in_panel_id
-                
-        return gt_stitches
-
-    @staticmethod
-    def _rotate_edges(panel, num_edges):
-        """
-            Rotate the start of the loop to the next edge
-        """
-        panel = torch.cat((panel[1:num_edges], panel[0:1, :], panel[num_edges:]))
-
-        return panel
-
-
 # ------- custom losses --------
 class PanelLoopLoss():
     """Evaluate loss for the panel edge sequence representation property: 
@@ -875,24 +759,24 @@ class ComposedPatternLoss():
         with torch.no_grad():
             gt_updated = {}
             # for origin-agnistic loss evaluation
-            gt_updated['outlines'], panel_leading_edges = OriginAgnostic.edge_order_match(
+            gt_updated['outlines'], panel_leading_edges = self._edge_order_match(
                 preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
 
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
                     or 'stitch_supervised' in self.l_components
                     or 'free_class' in self.l_components):  # if there is any stitch-related evaluation
-                gt_updated['stitches'] = OriginAgnostic.gt_stitches_shift(
+                gt_updated['stitches'] = self._gt_stitches_shift(
                     ground_truth['stitches'], ground_truth['num_stitches'], 
                     panel_leading_edges, gt_num_edges,
                     self.max_pattern_size, self.max_panel_len
                 )
-                gt_updated['free_edges_mask'] = OriginAgnostic.per_panel_shift(
+                gt_updated['free_edges_mask'] = self._per_panel_shift(
                     ground_truth['free_edges_mask'].to(self.device), 
                     panel_leading_edges, gt_num_edges)
                 
                 if 'stitch_supervised' in self.l_components:
-                    gt_updated['stitch_tags'] = metrics.per_panel_shift(
+                    gt_updated['stitch_tags'] = self._per_panel_shift(
                         ground_truth['stitch_tags'].to(self.device), panel_leading_edges, gt_num_edges)
             
             # keep the references to the rest of the gt data as is
@@ -902,8 +786,110 @@ class ComposedPatternLoss():
 
         return gt_updated
 
+    @staticmethod
+    def _edge_order_match(predicted_panels, gt_panels, gt_num_edges):
+        """
+            Try different first edges of GT panels to find the one best matching with prediction
+        """
+        batch_size = predicted_panels.shape[0]
+        if len(predicted_panels.shape) > 3:
+            predicted_panels = predicted_panels.view(-1, predicted_panels.shape[-2], predicted_panels.shape[-1])
+        if gt_panels is not None and len(gt_panels.shape) > 3:
+            gt_panels = gt_panels.view(-1, gt_panels.shape[-2], gt_panels.shape[-1])
+        
+        chosen_panels = []
+        leading_edges = []
+        # choose the closest version of original panel for each predicted panel
+        with torch.no_grad():
+            for el_id in range(predicted_panels.shape[0]):
+                num_edges = gt_num_edges[el_id]
+
+                # Find loop origin with min distance to predicted panel
+                # TODO Faster version? -- I think I already did smth like this somewhere
+                shifted_gt_panel = gt_panels[el_id]
+                min_dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
+                chosen_panel = shifted_gt_panel
+                leading_edge = 0
+                for i in range(1, num_edges):  # will skip comparison if num_edges is 0 -- empty panels
+                    shifted_gt_panel = self._rotate_edges(shifted_gt_panel, num_edges)
+                    dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
+                    if dist < min_dist:
+                        min_dist = dist
+                        chosen_panel = shifted_gt_panel
+                        leading_edge = i
+
+                # update choice
+                chosen_panels.append(chosen_panel)
+                leading_edges.append(leading_edge)
+
+        chosen_panels = torch.stack(chosen_panels).to(predicted_panels.device)
+
+        # reshape into pattern batch
+        return chosen_panels.view(batch_size, -1, gt_panels.shape[-2], gt_panels.shape[-1]), leading_edges
+
+    @staticmethod
+    def _per_panel_shift(panel_features, per_panel_leading_edges, panel_num_edges):
+        """
+            Shift given panel features accorging to the new edge loop orientations given
+        """
+        pattern_size = panel_features.shape[1]
+        with torch.no_grad():
+            for pattern_idx in range(len(panel_features)):
+                for panel_idx in range(pattern_size):
+                    edge_id = per_panel_leading_edges[pattern_idx * pattern_size + panel_idx] 
+                    num_edges = panel_num_edges[pattern_idx * pattern_size + panel_idx]       
+                    if num_edges < 3:  # just skip empty panels
+                        continue
+                    if edge_id:  # not zero -- shift needed. For empty panels its always zero
+                        current_panel = panel_features[pattern_idx][panel_idx]
+                        # requested edge goes into the first place
+                        # padded area is left in place
+                        panel_features[pattern_idx][panel_idx] = torch.cat(
+                            (current_panel[edge_id:num_edges], current_panel[: edge_id], current_panel[num_edges:]))
+        return panel_features
+
+    @staticmethod
+    def _gt_stitches_shift(
+            gt_stitches, gt_stitches_nums, 
+            per_panel_leading_edges, 
+            gt_num_edges,
+            max_num_panels, max_panel_len):
+        """
+            Re-number the edges in ground truth according to the perdiction-gt edges mapping indicated in per_panel_leading_edges
+        """
+        with torch.no_grad():  # GT updates don't require gradient compute
+            # add pattern dimention
+            # TODO less nested loops!!!!
+            for pattern_id in range(len(gt_stitches)):
+                # re-assign GT edge ids according to shift
+                for side in (0, 1):
+                    for i in range(gt_stitches_nums[pattern_id]):
+                        edge_id = gt_stitches[pattern_id][side][i]
+                        panel_id = edge_id // max_panel_len
+                        global_panel_id = pattern_id * max_num_panels + panel_id  # panel id in the batch
+                        new_ledge = per_panel_leading_edges[global_panel_id]
+                        panel_num_edges = gt_num_edges[global_panel_id]  # never references to empty (padding) panel->always positive number
+
+                        inner_panel_id = edge_id - (panel_id * max_panel_len)  # edge id within panel
+                        
+                        # shift edge within panel
+                        new_in_panel_id = inner_panel_id - new_ledge if inner_panel_id >= new_ledge else (
+                            panel_num_edges - (new_ledge - inner_panel_id))
+                        # update with pattern-level edge id
+                        gt_stitches[pattern_id][side][i] = panel_id * max_panel_len + new_in_panel_id
+                
+        return gt_stitches
+
+    @staticmethod
+    def _rotate_edges(panel, num_edges):
+        """
+            Rotate the start of the loop to the next edge
+        """
+        panel = torch.cat((panel[1:num_edges], panel[0:1, :], panel[num_edges:]))
+
+        return panel
+
     # ------- Working with padded data ----------
-    # TODO revisit if it needs to be static at all
     @staticmethod
     def _panel_len_from_padded(padded_panel, pad_vector=None, empty_template=None):
         """
