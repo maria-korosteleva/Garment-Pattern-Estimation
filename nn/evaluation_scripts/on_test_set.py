@@ -5,9 +5,9 @@ import torch
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect
-currentdir = os.path.dirname(os.path.realpath(__file__) )
+currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir) 
+sys.path.insert(0, parentdir) 
 
 # My modules
 import customconfig
@@ -43,7 +43,7 @@ print('Batch: {}, Split: {}'.format(batch_size, split))
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config())
+model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 

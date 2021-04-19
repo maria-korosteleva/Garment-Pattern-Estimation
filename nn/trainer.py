@@ -77,7 +77,6 @@ class Trainer():
         """Fit provided model to reviosly configured dataset"""
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
-        self.setup['model'] = model.__class__.__name__
 
         self.device = self.setup['device']
     

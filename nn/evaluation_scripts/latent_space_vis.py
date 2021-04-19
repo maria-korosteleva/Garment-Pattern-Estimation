@@ -46,7 +46,7 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     test_loader = datawrapper.get_loader(subset)
 
     # ----- Model -------
-    model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
+    model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
     model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
     return test_loader, model, dataset

@@ -66,8 +66,6 @@ def get_values_from_args():
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
-        'stitch_tags_margin': args.st_tag_margin,
-        'stitch_hardnet_version': args.st_tag_hardnet,
 
         # EdgeConv params
         'conv_depth': args.conv_depth, 
@@ -80,12 +78,19 @@ def get_values_from_args():
         'skip_connections': bool(args.ec_skip),
         'graph_pooling': bool(args.ec_gpool),
         'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
-
-        # Extra loss parameters
-        'panel_origin_invariant_loss': True
     }
 
-    return data_config, nn_config, args.net_seed
+    loss_config = {
+        # Extra loss parameters
+        'panel_origin_invariant_loss': False,
+        'stitch_tags_margin': args.st_tag_margin,
+        'stitch_hardnet_version': args.st_tag_hardnet,
+        'loop_loss_weight': 1.,
+        'stitch_tags_margin': 0.3,
+        'epoch_with_stitches': 40, 
+    }
+
+    return data_config, nn_config, loss_config, args.net_seed
 
 
 def get_data_config(in_config, old_stats=False):
@@ -130,30 +135,30 @@ if __name__ == "__main__":
         # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
         'data_950_jumpsuit_sleeveless'
     ]
-    in_data_config, in_nn_config, net_seed = get_values_from_args()
+    in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='AE-loss-class-stitches', 
+        run_name='AE-loss-config', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
-    dataset = data.Garment2DPatternDataset(
-        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    # dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-    #                                           data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.Garment2DPatternDataset(
+    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
+                                               data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPanelsAE(dataset.config, in_nn_config)
-    # model = nets.GarmentPatternAE(dataset.config, in_nn_config)
-    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config)
+    # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
     model.loss.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration

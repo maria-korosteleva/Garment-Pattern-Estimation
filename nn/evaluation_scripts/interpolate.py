@@ -10,12 +10,14 @@ import torch
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect
-currentdir = os.path.dirname(os.path.realpath(__file__) )
+currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir) 
+sys.path.insert(0, parentdir) 
 
 # My modules
-import customconfig, nets, data
+import customconfig
+import nets
+import data
 from experiment import WandbRunWrappper
 from pattern.wrappers import VisPattern
 from data import GarmentBaseDataset
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     _, _, data_config = experiment.data_info()  # need to get data stats
 
     # ----- Model architecture -----
-    model = nets.GarmentFullPattern3D(data_config, experiment.NN_config())
+    model = nets.GarmentFullPattern3D(data_config, experiment.NN_config(), experiment.NN_config()['loss'])
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
     model = model.to(device=device)
     model.eval()

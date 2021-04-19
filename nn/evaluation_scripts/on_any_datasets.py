@@ -53,7 +53,7 @@ dataset = data.Garment3DPatternFullDataset(
 datawrapper = data.DatasetWrapper(dataset, batch_size=batch_size)  # NOTE no split given -- evaluating on the full loaded dataset!!
 
 # ----- Model architecture -----
-model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config())
+model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 

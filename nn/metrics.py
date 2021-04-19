@@ -811,7 +811,7 @@ class ComposedPatternLoss():
                 chosen_panel = shifted_gt_panel
                 leading_edge = 0
                 for i in range(1, num_edges):  # will skip comparison if num_edges is 0 -- empty panels
-                    shifted_gt_panel = self._rotate_edges(shifted_gt_panel, num_edges)
+                    shifted_gt_panel = ComposedPatternLoss._rotate_edges(shifted_gt_panel, num_edges)
                     dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
                     if dist < min_dist:
                         min_dist = dist

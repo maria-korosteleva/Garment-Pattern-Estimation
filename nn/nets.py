@@ -8,6 +8,7 @@ import net_blocks as blocks
 
 
 # ------ Basic Interface --------
+# TODO no need for this class except for the model name!!
 class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
@@ -18,12 +19,11 @@ class BaseModule(nn.Module):
         }
         self.regression_loss = nn.MSELoss()
     
-    def loss(self, features, ground_truth, **kwargs):
+    def loss(self, preds, ground_truth, **kwargs):
         """Default loss for my neural networks. Takes pne batch of data. 
             Children can use additional arguments as needed
         """
-        preds = self(features)
-        ground_truth = ground_truth.to(features.device)  # make sure device is correct
+        ground_truth = ground_truth.to(preds.device)  # make sure device is correct
         loss = self.regression_loss(preds, ground_truth)
         return loss, {'regression loss': loss}, False  # second term is for compound losses, third -- to indicate dynamic update of loss structure
 
@@ -35,40 +35,39 @@ class GarmentPanelsAE(BaseModule):
         * Follows similar structure of GarmentFullPattern3D
         
     """
-    def __init__(self, data_config, config={}):
+    def __init__(self, data_config, config={}, in_loss_config={}):
         super().__init__()
-
-        # defaults for this net
-        self.config.update({
-            'panel_encoding_size': 20, 
-            'panel_n_layers': 3, 
-            'pattern_encoding_size': 40, 
-            'pattern_n_layers': 3, 
-            'loop_loss_weight': 0.1, 
-            'dropout': 0,
-            'lstm_init': 'kaiming_normal_', 
-            'decoder': 'LSTMDecoderModule',
-            'panel_origin_invariant_loss': True
-        })
-        # update with input settings
-        self.config.update(config) 
 
         # data props
         self.panel_elem_len = data_config['element_size']
         self.max_panel_len = data_config['max_panel_len']
         self.max_pattern_size = data_config['max_pattern_len']
 
+        # ---- Net configuration ----
+        self.config.update({
+            'panel_encoding_size': 20, 
+            'panel_n_layers': 3, 
+            'pattern_encoding_size': 40, 
+            'pattern_n_layers': 3,
+            'dropout': 0,
+            'lstm_init': 'kaiming_normal_', 
+            'decoder': 'LSTMDecoderModule'
+        })
+        # update with input settings
+        self.config.update(config) 
+
         # --- Losses ---
-        self.loss = metrics.ComposedPatternLoss(
-            data_config, 
-            {
-                'loss_components': ['shape', 'loop'],
-                'quality_components': ['shape', 'discrete'],
-                'panel_origin_invariant_loss': self.config['panel_origin_invariant_loss'],
-                'loop_loss_weight': self.config['loop_loss_weight']
-            }
-        )
-        self.config['loss'] = self.loss.config
+        self.config['loss'] = {
+            'loss_components': ['shape', 'loop'],
+            'quality_components': ['shape', 'discrete'],
+            'panel_origin_invariant_loss': True,
+            'loop_loss_weight': 0.1
+        }
+        self.config['loss'].update(in_loss_config)  # apply input settings 
+
+        # create loss!
+        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.config['loss'] = self.loss.config  # sync
 
         # ------ Modules ----
         decoder_module = getattr(blocks, self.config['decoder'])
@@ -138,8 +137,8 @@ class GarmentPatternAE(GarmentPanelsAE):
         Hierarchical Sewing pattern AE -- defines garment-level pattern 
         * loss evaluation is the same for both AE models
     """
-    def __init__(self, data_config, config={}):
-        super().__init__(data_config, config)
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
         # loss objects & config already defined
 
         # adding patten-level encoders\decoders
@@ -212,10 +211,17 @@ class GarmentFullPattern3D(BaseModule):
             * pattern decoder from GarmentPatternAE
             * MLP modules to predict panel 3D placement & stitches
     """
-    def __init__(self, data_config, config={}):
+    def __init__(self, data_config, config={}, in_loss_config={}):
         super().__init__()
 
-        # defaults for this net
+        # output props
+        self.panel_elem_len = data_config['element_size']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
+        self.rotation_size = data_config['rotation_size']
+        self.translation_size = data_config['translation_size']
+
+        # ---- Net configuration ----
         self.config.update({
             'panel_encoding_size': 70, 
             'panel_n_layers': 4, 
@@ -226,39 +232,29 @@ class GarmentFullPattern3D(BaseModule):
             'feature_extractor': 'EdgeConvFeatures',
             'panel_decoder': 'LSTMDecoderModule', 
             'pattern_decoder': 'LSTMDecoderModule', 
-            'stitch_tag_dim': 3, 
-            'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40, 
-            'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
-            'stitch_hardnet_version': False,
-            'panel_origin_invariant_loss': True
+            'stitch_tag_dim': 3
         })
         # update with input settings
         self.config.update(config) 
 
-        # output props
-        self.panel_elem_len = data_config['element_size']
-        self.max_panel_len = data_config['max_panel_len']
-        self.max_pattern_size = data_config['max_pattern_len']
-        self.rotation_size = data_config['rotation_size']
-        self.translation_size = data_config['translation_size']
+        
 
         # ---- losses configuration ----
-        self.loss = metrics.ComposedPatternLoss(
-            data_config, 
-            {
-                'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],
-                'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
-                'panel_origin_invariant_loss': self.config['panel_origin_invariant_loss'],
-                'loop_loss_weight': 1.,
-                'stitch_tags_margin': 0.3,
-                'epoch_with_stitches': 0,  # 40, 
-                'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
-                'stitch_hardnet_version': False,
-                'panel_origin_invariant_loss': True
-            }
-        )
-        self.config['loss'] = self.loss.config
+        self.config['loss'] = {
+            'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],
+            'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
+            'panel_origin_invariant_loss': True,
+            'loop_loss_weight': 1.,
+            'stitch_tags_margin': 0.3,
+            'epoch_with_stitches': 40, 
+            'stitch_supervised_weight': 0.1,   # only used when explicit stitch loss is used
+            'stitch_hardnet_version': False,
+            'panel_origin_invariant_loss': True
+        }
+        self.config['loss'].update(in_loss_config)
+        # loss object
+        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.config['loss'] = self.loss.config  # sync just in case
 
         # ---- Feature extractor definition -------
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -351,8 +347,8 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
             * MLP modules to predict panel 3D placement & stitches
         * Attempt to disentangle panel latent space
     """
-    def __init__(self, data_config, config={}):
-        super().__init__(data_config, config)
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
 
         # ----- Update panel decoders to promote space disentanglement -------
         self.placement_size = self.rotation_size + self.translation_size
