@@ -1,6 +1,7 @@
 from pathlib import Path
 import argparse
 import numpy as np
+import torch.nn as nn
 
 # My modules
 import customconfig
@@ -132,8 +133,8 @@ if __name__ == "__main__":
     dataset_list = [
         # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
-        # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
-        'merged_jumpsuit_sleeveless_950_210412-15-18-06'
+        'data_uni_1000_pants_straight_sides_210105-10-49-02'
+        # 'merged_jumpsuit_sleeveless_950_210412-15-18-06'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
@@ -161,11 +162,11 @@ if __name__ == "__main__":
     model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nets.CustomDataParallel(model, device_ids=['cuda:0', 'cuda:1'])
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:4'])
 
-    # model.loss.with_quality_eval = True  # False to save compute time
-    if hasattr(model, 'config'):
-        trainer.update_config(NN=model.config)  # save NN configuration
+    model.module.loss.with_quality_eval = True  # False to save compute time
+    if hasattr(model.module, 'config'):
+        trainer.update_config(NN=model.module.config)  # save NN configuration
 
     trainer.fit(model)  # Magic happens here
 
