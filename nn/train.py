@@ -163,7 +163,7 @@ if __name__ == "__main__":
     # Multi-GPU!!!
     model = nets.CustomDataParallel(model, device_ids=['cuda:0', 'cuda:1'])
 
-    model.loss.with_quality_eval = True  # False to save compute time
+    # model.loss.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
 
