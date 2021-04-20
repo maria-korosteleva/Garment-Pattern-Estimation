@@ -69,9 +69,9 @@ def get_encodings(model, loader, dataset, save_to=None):
     with torch.no_grad():
         for batch in loader:
             features = batch['features'].to(device)
-            garment_encodings = model.forward_encode(features)
+            garment_encodings = model.module.forward_encode(features)
 
-            panel_encodings = model.forward_pattern_decode(garment_encodings)
+            panel_encodings = model.module.forward_pattern_decode(garment_encodings)
 
             all_garment_encodings.append(garment_encodings)
             all_panel_encodings.append(panel_encodings)
@@ -79,7 +79,7 @@ def get_encodings(model, loader, dataset, save_to=None):
             classes_garments += batch['data_folder']
             for pattern_id in range(len(batch['data_folder'])):
                 # copy the folder of pattern to every panel in it's patten
-                classes_panels += [batch['data_folder'][pattern_id] for _ in range(model.max_pattern_size)]
+                classes_panels += [batch['data_folder'][pattern_id] for _ in range(model.module.max_pattern_size)]
 
     all_garment_encodings = torch.cat(all_garment_encodings).cpu().numpy()
     all_panel_encodings = torch.cat(all_panel_encodings).cpu().numpy()
