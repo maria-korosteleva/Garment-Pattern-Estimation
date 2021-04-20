@@ -7,6 +7,15 @@ import metrics
 import net_blocks as blocks
 
 
+# ----- Parallel wrapper -----
+class CustomDataParallel(nn.DataParallel):
+    """
+        A wrapper to data parallel in order to access the model sttributes
+    """
+    def __getattr__(self, name):
+        return getattr(self.module, name)
+
+
 # ------ Basic Interface --------
 # TODO no need for this class except for the model name!!
 class BaseModule(nn.Module):
