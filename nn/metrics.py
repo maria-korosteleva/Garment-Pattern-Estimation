@@ -14,8 +14,8 @@ def eval_metrics(model, data_wrapper, section='test'):
     model.to(device)
     model.eval()
 
-    if hasattr(model.loss, 'with_quality_eval'):
-        model.loss.with_quality_eval = True  # force quality evaluation for losses that support it
+    if hasattr(model.module.loss, 'with_quality_eval'):
+        model.module.loss.with_quality_eval = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
@@ -41,7 +41,7 @@ def _eval_metrics_per_loader(model, loader, device):
             gt = features
 
         # loss evaluation
-        full_loss, loss_dict, _ = model.loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
+        full_loss, loss_dict, _ = model.module.loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
 
         # summing up
         current_metrics['full_loss'] += full_loss
