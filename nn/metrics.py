@@ -627,12 +627,12 @@ class ComposedPatternLoss():
         # ---- Quality metrics  ----
         if self.with_quality_eval:
             with torch.no_grad():
-                quality_breakdown = self._main_quality_metrics(preds, ground_truth, gt_num_edges, names)
+                quality_breakdown = self._main_quality_metrics(preds, gt_rotated, gt_num_edges, names)
                 loss_dict.update(quality_breakdown)
 
                 # stitches quality
                 if epoch >= self.config['epoch_with_stitches']:
-                    quality_breakdown = self._stitch_quality_metrics(preds, ground_truth, gt_num_edges)
+                    quality_breakdown = self._stitch_quality_metrics(preds, gt_rotated, gt_num_edges)
                     loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
