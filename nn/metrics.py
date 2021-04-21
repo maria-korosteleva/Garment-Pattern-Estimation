@@ -581,7 +581,7 @@ class ComposedPatternLoss():
                 'shift': data_stats['gt_shift']['translations'], 
                 'scale': data_stats['gt_scale']['translations']}
             )
-        if 'stitches' in self.q_components:
+        if 'stitch' in self.q_components:
             self.stitch_quality = PatternStitchPrecisionRecall(
                 data_stats={
                     'shift': data_stats['gt_shift']['stitch_tags'], 
