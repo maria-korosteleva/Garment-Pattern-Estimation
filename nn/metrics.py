@@ -733,7 +733,7 @@ class ComposedPatternLoss():
             arrording to the training stage
         """
         loss_dict = {}
-        if 'stitches' in self.q_components:
+        if 'stitch' in self.q_components:
             stitch_prec, stitch_recall = self.stitch_quality(
                 preds['stitch_tags'], preds['free_edges_mask'], 
                 ground_truth['stitches'].type(torch.IntTensor), 
