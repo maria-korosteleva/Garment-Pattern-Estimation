@@ -632,7 +632,7 @@ class ComposedPatternLoss():
 
                 # stitches quality
                 if epoch >= self.config['epoch_with_stitches']:
-                    quality_breakdown = self._stitch_quality_metrics(preds, gt_rotated, gt_num_edges)
+                    quality_breakdown = self._stitch_quality_metrics(preds, gt_rotated, gt_num_edges, names)
                     loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
@@ -727,7 +727,7 @@ class ComposedPatternLoss():
     
         return loss_dict
 
-    def _stitch_quality_metrics(self, preds, ground_truth, gt_num_edges):
+    def _stitch_quality_metrics(self, preds, ground_truth, gt_num_edges, names):
         """
             Quality components related to stitches prediction. May be called separately from main components 
             arrording to the training stage
