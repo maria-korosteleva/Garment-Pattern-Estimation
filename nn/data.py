@@ -673,9 +673,9 @@ class GarmentBaseDataset(BaseDataset):
 
                 datapoint = self.datapoints_names[start_id]
                 folder_elements = [file.name for file in (self.root_path / datapoint).glob('*')]
-                pattern_flat, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
+                pattern_flat, _, _, stitches, _ = self._read_pattern(datapoint, folder_elements, with_stitches=True)  # just the edge info needed
                 num_panels.append(pattern_flat.shape[0])
-                num_edges_in_panel.append(pattern_flat.shape[1])
+                num_edges_in_panel.append(pattern_flat.shape[1])  # after padding
                 num_stitches.append(stitches.shape[1])
 
             self.config.update(
@@ -1058,7 +1058,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
       
     def _get_ground_truth(self, datapoint_name, folder_elements):
         """Get the pattern representation with 3D placement"""
-        pattern, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
+        pattern, num_edges, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
             datapoint_name, folder_elements, 
             pad_panels_to_len=self.config['max_panel_len'],
             pad_panel_num=self.config['max_pattern_len'],
@@ -1067,7 +1067,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         mask = self.free_edges_mask(pattern, stitches, num_stitches)
 
         return {
-            'outlines': pattern, 'rotations': rots, 'translations': tranls, 
+            'outlines': pattern, 'num_edges': num_edges,
+            'rotations': rots, 'translations': tranls, 
             'num_panels': num_panels, 'num_stitches': num_stitches,
             'stitches': stitches, 'free_edges_mask': mask, 'stitch_tags': stitch_tags}
 
