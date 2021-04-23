@@ -47,6 +47,7 @@ panel_spec_template = {
 }
 
 
+# ------- Custom Errors --------
 class EmptyPanelError(Exception):
     pass
 
@@ -63,6 +64,7 @@ class InvalidPatternDefError(Exception):
         super().__init__(self.message)
 
 
+# ------------ Patterns --------
 class BasicPattern(object):
     """Loading & serializing of a pattern specification in custom JSON format.
         Input:
@@ -205,7 +207,7 @@ class BasicPattern(object):
         panel_order = self.panel_order()
 
         # Calculate max edge count among panels -- if not provided
-        panel_lens = [len(panel['edges']) for name, panel in self.pattern['panels'].items()]
+        panel_lens = [len(self.pattern['panels'][name]['edges']) for name in panel_order]
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         # Main info per panel
@@ -246,7 +248,7 @@ class BasicPattern(object):
                     tags_per_edge[panel_id][edge_id] = stitch_tags[idx]
 
         # format result as requested
-        result = [np.stack(panel_seqs)]
+        result = [np.stack(panel_seqs), np.array(panel_lens)]
         result.append(len(self.pattern['panels']))  # actual number of panels 
         if with_placement:
             result.append(np.stack(panel_rotations))
