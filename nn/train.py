@@ -177,7 +177,7 @@ if __name__ == "__main__":
     model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0'])  # , 'cuda:4'])
+    model = nn.DataParallel(model, device_ids=['cuda:1', 'cuda:4'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
