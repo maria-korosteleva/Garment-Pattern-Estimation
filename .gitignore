@@ -10,6 +10,9 @@ artifacts
 .vscode
 __pycache__
 
+# PyCharm
+.idea
+
 # Compiled files
 *.pyc
 
