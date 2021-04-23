@@ -602,7 +602,7 @@ class ComposedPatternLoss():
         full_loss = 0.
 
         # ------ GT pre-processing --------
-        gt_num_edges = self._panel_lengths(ground_truth['outlines'], self.gt_outline_stats)
+        gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
