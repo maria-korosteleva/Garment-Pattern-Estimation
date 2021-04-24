@@ -223,6 +223,7 @@ class BasicPattern(object):
                 panel_seqs.append(np.zeros_like(panel_seqs[0]))
                 panel_translations.append(np.zeros_like(panel_translations[0]))
                 panel_rotations.append(np.zeros_like(panel_rotations[0]))
+                panel_lens.append(0)
 
         # Stitches info. Order of stitches doesn't matter
         stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
