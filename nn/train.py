@@ -148,7 +148,7 @@ if __name__ == "__main__":
         'merged_jacket_1550_210420-16-54-04',
         'merged_dress_sleeveless_1350_210422-11-26-50',
         'merged_wb_dress_sleeveless_1350_210423-13-14-22',
-        'merged_jacket_hood_1350_210423-17-34-51'
+        'merged_jacket_hood_1700_210425-21-23-1'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1', 'cuda:4'])
+    model = nn.DataParallel(model, device_ids=['cuda:0'])  #, 'cuda:1', 'cuda:4'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
