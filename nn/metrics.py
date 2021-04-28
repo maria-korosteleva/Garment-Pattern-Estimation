@@ -4,6 +4,10 @@
 
 import torch
 import torch.nn as nn
+
+from ortools.graph import pywrapgraph  # solving assignemnt problem
+
+# My modules
 from data import Garment3DPatternFullDataset as PatternDataset
 
 
@@ -525,7 +529,8 @@ class ComposedPatternLoss():
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
             'stitch_hardnet_version': False,
-            'panel_origin_invariant_loss': True
+            'panel_origin_invariant_loss': True,
+            'panel_order_inariant_loss': True
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -608,6 +613,12 @@ class ComposedPatternLoss():
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
+        else:  # keep original
+            gt_rotated = ground_truth
+        
+        # TODO Combining with edge origin will come later
+        if self.config['panel_order_inariant_loss']:
+            gt_rotated = self._gt_order_match(preds, gt_rotated, epoch)
         else:  # keep original
             gt_rotated = ground_truth
 
@@ -751,6 +762,75 @@ class ComposedPatternLoss():
             loss_dict.update(free_edge_acc=acc)
 
         return loss_dict
+
+    # ------ Ground truth panel order match -----
+    def _gt_order_match(self, preds, ground_truth, epoch):
+        """
+            Find the permutation of panel in GT that is best matched with the prediction (by geometry)
+            and return the GT object with all properties updated according to this permutation 
+        """
+        with torch.no_grad():
+            gt_updated = {}
+
+            # Match the order
+            gt_updated['outlines'], gt_permutation = self._panel_order_match(
+                preds['outlines'], ground_truth['outlines'].to(self.device), ground_truth['num_panels'])
+
+            # TODO Update stitches & other stuff too
+            
+            # keep the references to the rest of the gt data as is
+            for key in ground_truth:
+                if key not in gt_updated:
+                    gt_updated[key] = ground_truth[key]
+
+        return gt_updated
+
+    @staticmethod
+    def _panel_order_match(predicted_patterns, gt_patterns, num_panels):
+        """
+            Find the best-matching permutation of gt panels to the predicted panels (in panel order)
+        """
+        with torch.no_grad():
+            chosen_patterns = []
+            per_pettern_permutation = []
+            # per-pattern processing
+            for pattern_idx in range(predicted_patterns.shape[0]):
+                gt_len = num_panels[pattern_idx]
+
+                # distances between panels
+                dist_matrix = torch.cdist(
+                    predicted_patterns[pattern_idx][:gt_len].view(gt_len, -1), 
+                    gt_patterns[pattern_idx][:gt_len].view(gt_len, -1))
+
+                # find optimal match
+                # custom greedy algorithm to avoid extra dependencies & perform computation on GPU
+                # TODO change to proper assignment solver
+                match = [-1] * gt_len
+
+                for _ in range(gt_len):  # this many pair to arrange
+                    to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
+                    row = to_match_idx // dist_matrix.shape[0]
+                    col = to_match_idx % dist_matrix.shape[0]
+                    match[row] = col
+
+                    # exlude distances with matched edges from further consideration
+                    dist_matrix[row, :] = float('inf')
+                    dist_matrix[:, col] = float('inf')
+                
+                print(match)
+                rearranged_pattern = torch.stack([gt_patterns[pattern_idx][i] for i in match]).to(predicted_patterns.device)
+                
+                print(rearranged_pattern.shape)
+
+                if gt_len < gt_patterns.shape[1]:
+                    rearranged_pattern = torch.cat([rearranged_pattern, gt_patterns[pattern_idx][gt_len: ]])
+
+                print(rearranged_pattern.shape)
+                
+                chosen_patterns.append(rearranged_pattern)
+                per_pettern_permutation.append(match)
+        
+        return torch.stack(chosen_patterns).to(predicted_patterns.device), per_pettern_permutation
 
     # ------ Ground truth panel shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):
