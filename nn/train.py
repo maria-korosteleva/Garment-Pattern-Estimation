@@ -83,6 +83,7 @@ def get_values_from_args():
     loss_config = {
         # Extra loss parameters
         'panel_origin_invariant_loss': False,
+        'panel_order_inariant_loss': True,
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     dataset_list = [
         # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
-        # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
+        'data_uni_1000_pants_straight_sides_210105-10-49-02',
         'data_950_jumpsuit_sleeveless'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='AE-loss-config', 
+        run_name='Full-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
