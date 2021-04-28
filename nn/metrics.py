@@ -14,21 +14,23 @@ def eval_metrics(model, data_wrapper, section='test'):
     model.to(device)
     model.eval()
 
-    if hasattr(model.loss, 'with_quality_eval'):
-        model.loss.with_quality_eval = True  # force quality evaluation for losses that support it
+    loss = model.module.loss if hasattr(model, 'module') else model.loss  # distinguish case of multi-gpu training
+
+    if hasattr(loss, 'with_quality_eval'):
+        loss.with_quality_eval = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
         if isinstance(loader, dict):
             metrics_dict = {}
             for data_folder, loader in loader.items():
-                metrics_dict[data_folder] = _eval_metrics_per_loader(model, loader, device)
+                metrics_dict[data_folder] = _eval_metrics_per_loader(model, loss, loader, device)
             return metrics_dict
         else:
-            return _eval_metrics_per_loader(model, loader, device)
+            return _eval_metrics_per_loader(model, loss, loader, device)
 
 
-def _eval_metrics_per_loader(model, loader, device):
+def _eval_metrics_per_loader(model, loss, loader, device):
     """
     Evaluate model on given loader. 
     
@@ -41,7 +43,7 @@ def _eval_metrics_per_loader(model, loader, device):
             gt = features
 
         # loss evaluation
-        full_loss, loss_dict, _ = model.loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
+        full_loss, loss_dict, _ = loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
 
         # summing up
         current_metrics['full_loss'] += full_loss
