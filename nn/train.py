@@ -84,6 +84,7 @@ def get_values_from_args():
     loss_config = {
         # Extra loss parameters
         'panel_origin_invariant_loss': True,
+        'panel_order_inariant_loss': True,
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
@@ -163,10 +164,10 @@ if __name__ == "__main__":
     split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
-    # dataset = data.Garment2DPatternDataset(
-    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-                                               data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment2DPatternDataset(
+        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
+    #                                           data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 

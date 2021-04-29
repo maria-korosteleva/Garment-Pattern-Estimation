@@ -4,6 +4,10 @@
 
 import torch
 import torch.nn as nn
+
+from munkres import Munkres  # solving assignemnt problem
+
+# My modules
 from data import Garment3DPatternFullDataset as PatternDataset
 
 
@@ -14,21 +18,23 @@ def eval_metrics(model, data_wrapper, section='test'):
     model.to(device)
     model.eval()
 
-    if hasattr(model.module.loss, 'with_quality_eval'):
-        model.module.loss.with_quality_eval = True  # force quality evaluation for losses that support it
+    loss = model.module.loss if hasattr(model, 'module') else model.loss  # distinguish case of multi-gpu training
+
+    if hasattr(loss, 'with_quality_eval'):
+        loss.with_quality_eval = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
         if isinstance(loader, dict):
             metrics_dict = {}
             for data_folder, loader in loader.items():
-                metrics_dict[data_folder] = _eval_metrics_per_loader(model, loader, device)
+                metrics_dict[data_folder] = _eval_metrics_per_loader(model, loss, loader, device)
             return metrics_dict
         else:
-            return _eval_metrics_per_loader(model, loader, device)
+            return _eval_metrics_per_loader(model, loss, loader, device)
 
 
-def _eval_metrics_per_loader(model, loader, device):
+def _eval_metrics_per_loader(model, loss, loader, device):
     """
     Evaluate model on given loader. 
     
@@ -41,7 +47,7 @@ def _eval_metrics_per_loader(model, loader, device):
             gt = features
 
         # loss evaluation
-        full_loss, loss_dict, _ = model.module.loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
+        full_loss, loss_dict, _ = loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
 
         # summing up
         current_metrics['full_loss'] += full_loss
@@ -523,7 +529,8 @@ class ComposedPatternLoss():
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
             'stitch_hardnet_version': False,
-            'panel_origin_invariant_loss': True
+            'panel_origin_invariant_loss': True,
+            'panel_order_inariant_loss': True
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -606,6 +613,12 @@ class ComposedPatternLoss():
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
+        else:  # keep original
+            gt_rotated = ground_truth
+        
+        # TODO Combining with edge origin will come later
+        if self.config['panel_order_inariant_loss']:
+            gt_rotated = self._gt_order_match(preds, gt_rotated, epoch)
         else:  # keep original
             gt_rotated = ground_truth
 
@@ -749,6 +762,137 @@ class ComposedPatternLoss():
             loss_dict.update(free_edge_acc=acc)
 
         return loss_dict
+
+    # ------ Ground truth panel order match -----
+    def _gt_order_match(self, preds, ground_truth, epoch):
+        """
+            Find the permutation of panel in GT that is best matched with the prediction (by geometry)
+            and return the GT object with all properties updated according to this permutation 
+        """
+        with torch.no_grad():
+            gt_updated = {}
+
+            # Match the order
+            gt_updated['outlines'], gt_permutation = self._panel_order_match(
+                preds['outlines'], ground_truth['outlines'].to(self.device), ground_truth['num_panels'])
+
+            # Update other info according to the permutation
+            gt_updated['num_edges'] = self._feature_permute(
+                ground_truth['num_edges'], gt_permutation, ground_truth['num_panels']
+            )
+
+            if 'rotation' in self.l_components:
+                gt_updated['rotations'] = self._feature_permute(
+                    ground_truth['rotations'], gt_permutation, ground_truth['num_panels']
+                )
+            if 'translation' in self.l_components:
+                gt_updated['translations'] = self._feature_permute(
+                    ground_truth['translations'], gt_permutation, ground_truth['num_panels']
+                )
+            
+            if epoch >= self.config['epoch_with_stitches'] and (
+                    'stitch' in self.l_components
+                    or 'stitch_supervised' in self.l_components
+                    or 'free_class' in self.l_components):  # if there is any stitch-related evaluation
+
+                gt_updated['stitches'] = self._stitch_after_permute( 
+                    ground_truth['stitches'], ground_truth['num_stitches'], 
+                    gt_permutation, self.max_panel_len
+                )
+                gt_updated['free_edges_mask'] = self._feature_permute(
+                    ground_truth['free_edges_mask'].to(self.device), gt_permutation, ground_truth['num_panels'])
+                
+                if 'stitch_supervised' in self.l_components:
+                    gt_updated['stitch_tags'] = self._feature_permute(
+                        ground_truth['stitch_tags'].to(self.device), gt_permutation, ground_truth['num_panels'])
+
+            # keep the references to the rest of the gt data as is
+            for key in ground_truth:
+                if key not in gt_updated:
+                    gt_updated[key] = ground_truth[key]
+
+        return gt_updated
+
+    @staticmethod
+    def _panel_order_match(predicted_patterns, gt_patterns, num_panels):
+        """
+            Find the best-matching permutation of gt panels to the predicted panels (in panel order)
+        """
+        with torch.no_grad():
+            assignment_solver = Munkres()  # one solver for all problems
+
+            chosen_patterns = []
+            per_pettern_permutation = []
+            # per-pattern processing
+            for pattern_idx in range(predicted_patterns.shape[0]):
+                gt_len = num_panels[pattern_idx]
+
+                # distances between panels
+                dist_matrix = torch.cdist(
+                    predicted_patterns[pattern_idx][:gt_len].view(gt_len, -1), 
+                    gt_patterns[pattern_idx][:gt_len].view(gt_len, -1))
+
+                # find optimal assginment, see https://pypi.org/project/munkres/1.0.9/
+                indexes = assignment_solver.compute(dist_matrix)
+                if len(indexes) != gt_len:
+                    raise RuntimeError("ComposedPatternLoss::Error:: Failed to match panel order" )
+
+                # Gather the GT in requested order
+                match = [-1] * gt_len
+                for left, right in indexes:
+                    match[left] = right
+
+                rearranged_pattern = torch.stack([gt_patterns[pattern_idx][i] for i in match]).to(predicted_patterns.device)
+
+                if gt_len < gt_patterns.shape[1]:
+                    rearranged_pattern = torch.cat([rearranged_pattern, gt_patterns[pattern_idx][gt_len: ]])
+
+                chosen_patterns.append(rearranged_pattern)
+                per_pettern_permutation.append(match)
+        
+        return torch.stack(chosen_patterns).to(predicted_patterns.device), per_pettern_permutation
+
+    @staticmethod
+    def _feature_permute(pattern_features, permutation, num_panels):
+        """
+            Permute all given features (in the batch) according to given panel order permutation
+        """
+        with torch.no_grad():
+            all_updated = []
+            for pattern_idx in range(len(pattern_features)):
+                updated_feature = torch.stack([pattern_features[pattern_idx][i] for i in permutation[pattern_idx]])
+                # return padding too
+                if num_panels[pattern_idx] < pattern_features.shape[1]:  # less them max number of panels
+                    updated_feature = torch.cat([
+                        updated_feature, 
+                        pattern_features[pattern_idx][num_panels[pattern_idx]:]
+                    ])
+                all_updated.append(updated_feature)
+        
+        return torch.stack(all_updated).to(pattern_features.device)
+
+    @staticmethod
+    def _stitch_after_permute(stitches, stitches_num, permutation, max_panel_len):
+        """
+            Update edges ids in stitch info after panel order permutation
+        """
+        with torch.no_grad():  # GT updates don't require gradient compute
+            # add pattern dimention
+            for pattern_id in range(len(stitches)):
+                # re-assign GT edge ids according to shift
+                for side in (0, 1):
+                    for i in range(stitches_num[pattern_id]):
+                        edge_id = stitches[pattern_id][side][i]
+                        panel_id = edge_id // max_panel_len
+                        in_panel_edge_id = edge_id - (panel_id * max_panel_len)
+
+                        # where is this panel placed
+                        new_panel_id = permutation[pattern_id].index(panel_id)  
+
+                        # update with pattern-level edge id
+                        stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
+                
+        return stitches
 
     # ------ Ground truth panel shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):

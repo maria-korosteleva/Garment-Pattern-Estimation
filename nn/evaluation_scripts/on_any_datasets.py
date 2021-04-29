@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import torch
+import torch.nn as nn
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect
@@ -21,9 +22,9 @@ from experiment import WandbRunWrappper
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='all-new-300-server', 
-    run_id='22n3425w')  # finished experiment
+    project_name='Test-Garments-Reconstruction', 
+    run_name='All-data-run', 
+    run_id='25y1sdmi')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -53,8 +54,10 @@ dataset = data.Garment3DPatternFullDataset(
 datawrapper = data.DatasetWrapper(dataset, batch_size=batch_size)  # NOTE no split given -- evaluating on the full loaded dataset!!
 
 # ----- Model architecture -----
-model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 
+if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
+    model = nn.DataParallel(model, device_ids=['cuda:0'])
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------

@@ -129,9 +129,10 @@ def tsne_plot(all_encodings, classes, num_components=2, save_to='./', name_tag='
     # ----- Visualize ------
     # update class labeling
     # This is hardcoded stuff because it's mostly needed for final presentation
-    # TODO avoid hardcoding dataset names (or template names) -- picking up from dataset properties?
+    # TODO avoid hardcoding dataset names (or template names) -- picking up colors from dataset properties?
     mapping = {
-        'tee_sleeveless': 'Shirts and dresses',
+        # train
+        'tee_sleeveless': 'Sleeveless Shirts and dresses',
         'tee': 'Shirts and dresses',
         'jacket': 'Jacket',
         'jacket_hood': 'Open Hoody',
@@ -141,25 +142,35 @@ def tsne_plot(all_encodings, classes, num_components=2, save_to='./', name_tag='
         'skirt_4_panels': '4-panel Skirts',
         'skirt_2_panels': '2-panel Skirts',
         'skirt_8_panels': '8-panel Skirts',
-        'dress_sleeveless': 'Sleeveless Dresses ',
+        'dress_sleeveless': 'Sleeveless Dresses',
         'wb_dress_sleeveless': 'Sleeveless Waistband dresses'
+
+        # test
     }
     classes = np.array([mapping.get(label, 'Unknown') for label in classes])
 
     # define colors
     colors = {
+        # train
         'Shirts and dresses': (0.747, 0.236, 0.048),  # (190, 60, 12)
+        'Sleevelss Shirts and dresses': (0.747, 0.236, 0.048),  # (190, 60, 12)
         'Jacket': (0.4793117642402649, 0.10461537539958954, 0.0),
         'Open Hoody': (0.746999979019165, 0.28518322110176086, 0.11503798514604568), 
         '8-panel Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
         '4-panel Skirts': (0.048, 0.0290, 0.747),  # (12, 74, 190)
         '2-panel Skirts': (0.24227915704250336, 0.6172128915786743, 1.0),  
         'Pants': (0.025, 0.354, 0.152),  # (6, 90. 39)
-        'Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)
         'Sleeveless Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)  TODO DOuble check colors
-        'Waistband dresses': (0.2, 0.007, 0.192),  
-        'Dresses': (0.527, 0.0, 0.0),  # (134,0,0)
+        'Sleeveless Waistband dresses': (0.2, 0.007, 0.192),  
+        'Sleeveless Dresses': (0.527, 0.0, 0.0),  # (134,0,0)
         'Waistband pants': (0.250900000333786, 0.3528999984264374, 0.13330000638961792), 
+
+        # test
+        'Dresses': (0.527, 0.0, 0.0),  # (134,0,0)
+        'Jumpsuit': (0.6104, 0.3023, 0.0872),  # (105,52,15)
+
+        # other
+        'Waistband dresses': (0.2, 0.007, 0.192), 
         'Unknown': (0.15, 0.15, 0.15)
     }
 
