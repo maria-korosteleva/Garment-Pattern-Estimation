@@ -116,8 +116,8 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 50, 'test_per_type': 50, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 200}  # upper limit of how much data to grab from each type
+        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
+        data_config = {'max_datapoints_per_type': 1000}  # upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -141,25 +141,25 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='Full-orderless', 
+        project_name='Garments-Reconstruction', 
+        run_name='AE-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
-    # dataset = data.Garment2DPatternDataset(
-    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-                                               data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment2DPatternDataset(
+        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
+    #                                           data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
     model.loss.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
