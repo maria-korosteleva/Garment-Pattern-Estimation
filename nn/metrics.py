@@ -609,7 +609,7 @@ class ComposedPatternLoss():
         full_loss = 0.
 
         # ------ GT pre-processing --------
-        gt_num_edges = self._panel_lengths(ground_truth['outlines'], self.gt_outline_stats)
+        gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
         if self.config['panel_origin_invariant_loss']:
             # for origin-agnistic loss evaluation
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
@@ -1031,50 +1031,6 @@ class ComposedPatternLoss():
         panel = torch.cat((panel[1:num_edges], panel[0:1, :], panel[num_edges:]))
 
         return panel
-
-    # ------- Working with padded data ----------
-    @staticmethod
-    def _panel_len_from_padded(padded_panel, pad_vector=None, empty_template=None):
-        """
-            Return length of the unpadded part of given panel (hence, number of edges)
-        """
-        if pad_vector is None and empty_template is None:
-            return len(padded_panel)
-
-        if empty_template is None:
-            empty_template = pad_vector.repeat(padded_panel.shape[0], 1)
-
-        empty_template = empty_template.to(device=padded_panel.device)
-
-
-        # unpaded length
-        bool_matrix = torch.isclose(padded_panel, empty_template, atol=1.e-2)
-        seq_len = (~torch.all(bool_matrix, axis=1)).sum()  # only non-padded rows
-
-        return seq_len
-
-    @staticmethod
-    def _panel_lengths(gt_panels, data_stats={}):
-        """
-            Evaluate lengths of all panels in batch from padded representation
-        """
-        max_panel_len = gt_panels.shape[-2]
-        pad_vector = eval_pad_vector(data_stats)
-        if pad_vector is None:
-            pad_vector = torch.zeros(gt_panels.shape[-1]).to(gt_panels.device)
-        empty_panel_template = pad_vector.repeat(max_panel_len, 1)
-
-        gt_panels = gt_panels.view(-1, gt_panels.shape[-2], gt_panels.shape[-1])
-
-        gt_panel_num_edges = []
-        # choose the closest version of original panel for each predicted panel
-        with torch.no_grad():
-            for el_id in range(gt_panels.shape[0]):
-                num_edges = ComposedPatternLoss._panel_len_from_padded(gt_panels[el_id], empty_template=empty_panel_template)
-                gt_panel_num_edges.append(num_edges)
-        
-        return gt_panel_num_edges
-
 
 
 if __name__ == "__main__":
