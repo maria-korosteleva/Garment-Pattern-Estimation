@@ -619,6 +619,7 @@ class ComposedPatternLoss():
         # TODO Combining with edge origin will come later
         if self.config['panel_order_inariant_loss']:
             gt_rotated = self._gt_order_match(preds, gt_rotated, epoch)
+            gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # after update
         else:  # keep original
             gt_rotated = ground_truth
 
