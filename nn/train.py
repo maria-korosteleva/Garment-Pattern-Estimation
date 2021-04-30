@@ -84,6 +84,7 @@ def get_values_from_args():
         # Extra loss parameters
         'panel_origin_invariant_loss': True,
         'panel_order_inariant_loss': True,
+        'order_by': 'placement',
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
@@ -131,7 +132,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+        'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
         # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
         'merged_jumpsuit_sleeveless_950_210412-15-18-06'
@@ -142,24 +143,24 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='AE-order-origin-less', 
+        run_name='order-by-translation', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
-    dataset = data.Garment2DPatternDataset(
-        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    # dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-    #                                           data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.Garment2DPatternDataset(
+    #     Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
+                                               data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
     model.loss.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration

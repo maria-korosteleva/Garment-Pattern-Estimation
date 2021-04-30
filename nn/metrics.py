@@ -530,7 +530,8 @@ class ComposedPatternLoss():
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
             'stitch_hardnet_version': False,
             'panel_origin_invariant_loss': True,
-            'panel_order_inariant_loss': True
+            'panel_order_inariant_loss': True,
+            'order_by': 'placement'
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -608,19 +609,20 @@ class ComposedPatternLoss():
         loss_dict = {}
         full_loss = 0.
 
-        # ------ GT pre-processing --------
-        
-        # TODO Combining with edge origin will come later
-        if self.config['panel_order_inariant_loss']:
-            gt_rotated = self._gt_order_match(preds, ground_truth, epoch)  # matches the origin too
-            gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # after update
+        for key in ground_truth:
+            ground_truth[key] = ground_truth[key].to(self.device)
 
-        elif self.config['panel_origin_invariant_loss']:  # without order invariance
+        # ------ GT pre-processing --------
+        if self.config['panel_order_inariant_loss']:  # match panel order
+            gt_rotated = self._gt_order_match(preds, ground_truth, epoch) 
+            gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # after update
+        else:  # keep original
+            gt_rotated = ground_truth
+
+        if self.config['panel_origin_invariant_loss']:  # panel origin choice
             # for origin-agnistic loss evaluation
             gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
             gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
-        else:  # keep original
-            gt_rotated = ground_truth
 
         # ---- Losses ------
         main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
@@ -660,7 +662,7 @@ class ComposedPatternLoss():
         loss_dict = {}
 
         if 'shape' in self.l_components:
-            pattern_loss = self.regression_loss(preds['outlines'], ground_truth['outlines'].to(self.device))
+            pattern_loss = self.regression_loss(preds['outlines'], ground_truth['outlines'])
             full_loss += pattern_loss
             loss_dict.update(pattern_loss=pattern_loss)
             
@@ -671,13 +673,13 @@ class ComposedPatternLoss():
             
         if 'rotation' in self.l_components:
             # independent from panel loop origin by design
-            rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(self.device))
+            rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'])
             full_loss += rot_loss
             loss_dict.update(rotation_loss=rot_loss)
         
         if 'translation' in self.l_components:
             # independent from panel loop origin by design
-            translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(self.device))
+            translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'])
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
 
@@ -699,14 +701,14 @@ class ComposedPatternLoss():
         
         if 'stitch_supervised' in self.l_components:
             stitch_sup_loss = self.stitch_loss_supervised(
-                preds['stitch_tags'], ground_truth['stitch_tags'].to(self.device))      
+                preds['stitch_tags'], ground_truth['stitch_tags'])      
             loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
             full_loss += self.config['stitch_supervised_weight'] * stitch_sup_loss
 
         if 'free_class' in self.l_components:
             # free\stitches edges classification
             free_edges_loss = self.free_edge_class_loss(
-                preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device))
+                preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor))
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss
 
@@ -720,7 +722,7 @@ class ComposedPatternLoss():
 
         if 'shape' in self.q_components:
             shape_l2 = self.pattern_shape_quality(
-                preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
+                preds['outlines'], ground_truth['outlines'], gt_num_edges)
             loss_dict.update(panel_shape_l2=shape_l2)
 
         if 'discrete' in self.q_components:
@@ -730,12 +732,12 @@ class ComposedPatternLoss():
             
         if 'rotation' in self.q_components:
             rotation_l2 = self.rotation_quality(
-                preds['rotations'], ground_truth['rotations'].to(self.device))
+                preds['rotations'], ground_truth['rotations'])
             loss_dict.update(rotation_l2=rotation_l2)
 
         if 'translation' in self.q_components:
             translation_l2 = self.translation_quality(
-                preds['translations'], ground_truth['translations'].to(self.device))
+                preds['translations'], ground_truth['translations'])
             loss_dict.update(translation_l2=translation_l2)
     
         return loss_dict
@@ -773,24 +775,34 @@ class ComposedPatternLoss():
             gt_updated = {}
 
             # Match the order
-            gt_updated['outlines'], gt_permutation, leading_edges = self._panel_order_match(
-                preds['outlines'], ground_truth['outlines'].to(self.device), ground_truth['num_panels'], ground_truth['num_edges'])
+            if self.config['order_by'] == 'placement':
+                if 'translations' not in preds or 'rotations' not in preds:
+                    raise ValueError('ComposedPatternLoss::Error::Ordering by placement requested but placement is not predicted')
 
-            # Update other info according to the permutation
+                pred_placement = torch.cat([preds['translations'], preds['rotations']], dim=-1)
+                gt_placement = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
+
+                gt_permutation = self._panel_order_match(pred_placement, gt_placement, ground_truth['num_panels'])
+            else:
+                raise NotImplemented('ComposedPatternLoss::Error::Ordering by requested feature <{}> is not implemented'.format(
+                    self.config['order_by']
+                ))
+
+            # Update gt info according to the permutation
+            gt_updated['outlines'] = self._feature_permute(
+                ground_truth['outlines'], gt_permutation, ground_truth['num_panels'])
+
             gt_updated['num_edges'] = self._feature_permute(
-                ground_truth['num_edges'], gt_permutation, ground_truth['num_panels']
-            )
+                ground_truth['num_edges'], gt_permutation, ground_truth['num_panels'])
 
             # TODO update the info according to chosen leading edges
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(
-                    ground_truth['rotations'], gt_permutation, ground_truth['num_panels']
-                )
+                    ground_truth['rotations'], gt_permutation, ground_truth['num_panels'])
             if 'translation' in self.l_components:
                 gt_updated['translations'] = self._feature_permute(
-                    ground_truth['translations'], gt_permutation, ground_truth['num_panels']
-                )
+                    ground_truth['translations'], gt_permutation, ground_truth['num_panels'])
             
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
@@ -802,11 +814,11 @@ class ComposedPatternLoss():
                     gt_permutation, self.max_panel_len
                 )
                 gt_updated['free_edges_mask'] = self._feature_permute(
-                    ground_truth['free_edges_mask'].to(self.device), gt_permutation, ground_truth['num_panels'])
+                    ground_truth['free_edges_mask'], gt_permutation, ground_truth['num_panels'])
                 
                 if 'stitch_supervised' in self.l_components:
                     gt_updated['stitch_tags'] = self._feature_permute(
-                        ground_truth['stitch_tags'].to(self.device), gt_permutation, ground_truth['num_panels'])
+                        ground_truth['stitch_tags'], gt_permutation, ground_truth['num_panels'])
 
             # keep the references to the rest of the gt data as is
             for key in ground_truth:
@@ -815,7 +827,39 @@ class ComposedPatternLoss():
 
         return gt_updated
 
-    def _panel_order_match(self, predicted_patterns, gt_patterns, num_panels, gt_num_edges):
+    def _panel_order_match(self, pred_features, gt_features, num_panels):
+        """
+            Find the best-matching permutation of gt panels to the predicted panels (in panel order)
+            based on the provided panel features
+        """
+        with torch.no_grad():
+            assignment_solver = Munkres()  # one solver for all problems
+
+            per_pettern_permutation = []
+            # per-pattern processing
+            for pattern_idx in range(pred_features.shape[0]):
+                gt_len = num_panels[pattern_idx]
+
+                # distances between panels
+                dist_matrix = torch.cdist(
+                    pred_features[pattern_idx][:gt_len].view(gt_len, -1), 
+                    gt_features[pattern_idx][:gt_len].view(gt_len, -1))
+
+                # find optimal order assignment, see https://pypi.org/project/munkres/1.0.9/
+                indexes = assignment_solver.compute(dist_matrix)
+                if len(indexes) != gt_len:
+                    raise RuntimeError("ComposedPatternLoss::Error:: Failed to match panel order" )
+
+                # Gather the GT in requested order
+                match = [-1] * gt_len
+                for left, right in indexes:
+                    match[left] = right
+
+                per_pettern_permutation.append(match)
+        
+        return per_pettern_permutation
+
+    def _panel_order_match_shape(self, predicted_patterns, gt_patterns, num_panels, gt_num_edges):
         """
             Find the best-matching permutation of gt panels to the predicted panels (in panel order)
         """
@@ -935,7 +979,7 @@ class ComposedPatternLoss():
             gt_updated = {}
             # for origin-agnistic loss evaluation
             gt_updated['outlines'], panel_leading_edges = self._batch_edge_order_match(
-                preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
+                preds['outlines'], ground_truth['outlines'], gt_num_edges)
 
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
@@ -947,12 +991,12 @@ class ComposedPatternLoss():
                     self.max_pattern_size, self.max_panel_len
                 )
                 gt_updated['free_edges_mask'] = self._per_panel_shift(
-                    ground_truth['free_edges_mask'].to(self.device), 
+                    ground_truth['free_edges_mask'], 
                     panel_leading_edges, gt_num_edges)
                 
                 if 'stitch_supervised' in self.l_components:
                     gt_updated['stitch_tags'] = self._per_panel_shift(
-                        ground_truth['stitch_tags'].to(self.device), panel_leading_edges, gt_num_edges)
+                        ground_truth['stitch_tags'], panel_leading_edges, gt_num_edges)
             
             # keep the references to the rest of the gt data as is
             for key in ground_truth:
