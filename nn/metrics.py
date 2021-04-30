@@ -609,8 +609,9 @@ class ComposedPatternLoss():
         loss_dict = {}
         full_loss = 0.
 
+        # match devices with prediction
         for key in ground_truth:
-            ground_truth[key] = ground_truth[key].to(self.device)
+            ground_truth[key] = ground_truth[key].to(self.device)  
 
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
