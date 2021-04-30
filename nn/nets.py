@@ -8,6 +8,7 @@ import net_blocks as blocks
 
 
 # ------ Basic Interface --------
+# TODO no need for this class except for the model name!!
 class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
@@ -18,12 +19,11 @@ class BaseModule(nn.Module):
         }
         self.regression_loss = nn.MSELoss()
     
-    def loss(self, features, ground_truth, **kwargs):
+    def loss(self, preds, ground_truth, **kwargs):
         """Default loss for my neural networks. Takes pne batch of data. 
             Children can use additional arguments as needed
         """
-        preds = self(features)
-        ground_truth = ground_truth.to(features.device)  # make sure device is correct
+        ground_truth = ground_truth.to(preds.device)  # make sure device is correct
         loss = self.regression_loss(preds, ground_truth)
         return loss, {'regression loss': loss}, False  # second term is for compound losses, third -- to indicate dynamic update of loss structure
 
@@ -35,16 +35,20 @@ class GarmentPanelsAE(BaseModule):
         * Follows similar structure of GarmentFullPattern3D
         
     """
-    def __init__(self, data_config, config={}):
+    def __init__(self, data_config, config={}, in_loss_config={}):
         super().__init__()
 
-        # defaults for this net
+        # data props
+        self.panel_elem_len = data_config['element_size']
+        self.max_panel_len = data_config['max_panel_len']
+        self.max_pattern_size = data_config['max_pattern_len']
+
+        # ---- Net configuration ----
         self.config.update({
             'panel_encoding_size': 20, 
             'panel_n_layers': 3, 
             'pattern_encoding_size': 40, 
-            'pattern_n_layers': 3, 
-            'loop_loss_weight': 0.1, 
+            'pattern_n_layers': 3,
             'dropout': 0,
             'lstm_init': 'kaiming_normal_', 
             'decoder': 'LSTMDecoderModule'
@@ -52,29 +56,18 @@ class GarmentPanelsAE(BaseModule):
         # update with input settings
         self.config.update(config) 
 
-        # additional info
-        self.config['loss'] = 'MSE Reconstruction with loop'
-
-        # data props
-        self.panel_elem_len = data_config['element_size']
-        self.max_panel_len = data_config['max_panel_len']
-        self.max_pattern_size = data_config['max_pattern_len']
-
         # --- Losses ---
-        gt_outline_stats = {
-            'shift': data_config['standardize']['gt_shift']['outlines'], 
-            'scale': data_config['standardize']['gt_scale']['outlines']
+        self.config['loss'] = {
+            'loss_components': ['shape', 'loop'],
+            'quality_components': ['shape', 'discrete'],
+            'panel_origin_invariant_loss': True,
+            'loop_loss_weight': 0.1
         }
-        self.shape_loss = metrics.PanelShapeOriginAgnosticLoss(self.max_panel_len, data_stats=gt_outline_stats)
-        self.loop_loss = metrics.PanelLoopLoss(self.max_panel_len, data_stats=gt_outline_stats)
+        self.config['loss'].update(in_loss_config)  # apply input settings 
 
-        # --- Metrics --
-        # setup non-loss pattern quality evaluation metrics
-        self.with_quality_eval = True  # on by default
-        self.pattern_nums_quality = metrics.NumbersInPanelsAccuracies(
-            self.max_panel_len, data_stats=gt_outline_stats)
-        self.pattern_shape_quality = metrics.PanelVertsL2(
-            self.max_panel_len, data_stats=gt_outline_stats)
+        # create loss!
+        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.config['loss'] = self.loss.config  # sync
 
         # ------ Modules ----
         decoder_module = getattr(blocks, self.config['decoder'])
@@ -138,42 +131,14 @@ class GarmentPanelsAE(BaseModule):
         
         return {'outlines': prediction}
 
-    def loss(self, features, ground_truth, names=None, **kwargs):
-        """Override base class loss calculation to use reconstruction loss"""
-        self.device = features.device
-        gt_outlines = ground_truth['outlines'].to(self.device)  # AE =))
-        features = gt_outlines
-        preds = self(features)['outlines']
-
-        # ---- Base reconstruction loss -----
-        reconstruction_loss = self.shape_loss(preds, features)   # features are the ground truth in this case -> reconstruction loss
-
-        # ---- Loop loss -----
-        loop_loss = self.loop_loss(preds, features)
-
-        # return format
-        loss_dict = dict(pattern_loss=reconstruction_loss, loop_loss=loop_loss)
-
-        if self.with_quality_eval:
-            with torch.no_grad():
-                num_panels_acc, num_edges_acc = self.pattern_nums_quality(
-                    preds, gt_outlines, ground_truth['num_panels'], pattern_names=names)
-                shape_l2 = self.pattern_shape_quality(preds, gt_outlines)
-                loss_dict.update(
-                    num_panels_accuracy=num_panels_acc, 
-                    num_edges_accuracy=num_edges_acc,
-                    panel_shape_l2=shape_l2)
-
-        return reconstruction_loss + self.config['loop_loss_weight'] * loop_loss, loss_dict, False
-
 
 class GarmentPatternAE(GarmentPanelsAE):
     """
         Hierarchical Sewing pattern AE -- defines garment-level pattern 
         * loss evaluation is the same for both AE models
     """
-    def __init__(self, data_config, config={}):
-        super().__init__(data_config, config)
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
         # loss objects & config already defined
 
         # adding patten-level encoders\decoders
@@ -246,29 +211,8 @@ class GarmentFullPattern3D(BaseModule):
             * pattern decoder from GarmentPatternAE
             * MLP modules to predict panel 3D placement & stitches
     """
-    def __init__(self, data_config, config={}):
+    def __init__(self, data_config, config={}, in_loss_config={}):
         super().__init__()
-
-        # defaults for this net
-        self.config.update({
-            'panel_encoding_size': 70, 
-            'panel_n_layers': 4, 
-            'pattern_encoding_size': 130, 
-            'pattern_n_layers': 3, 
-            'dropout': 0,
-            'loss': 'MSE with loop',
-            'lstm_init': 'kaiming_normal_', 
-            'feature_extractor': 'EdgeConvFeatures',
-            'panel_decoder': 'LSTMDecoderModule', 
-            'pattern_decoder': 'LSTMDecoderModule', 
-            'stitch_tag_dim': 3, 
-            'stitch_tags_margin': 0.3,
-            'epoch_with_stitches': 40, 
-            'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enables in dataset
-            'stitch_hardnet_version': False 
-        })
-        # update with input settings
-        self.config.update(config) 
 
         # output props
         self.panel_elem_len = data_config['element_size']
@@ -277,45 +221,40 @@ class GarmentFullPattern3D(BaseModule):
         self.rotation_size = data_config['rotation_size']
         self.translation_size = data_config['translation_size']
 
-        # extra losses objects
-        self.loop_loss = metrics.PanelLoopLoss(
-            self.max_panel_len,
-            data_stats={
-                'shift': data_config['standardize']['gt_shift']['outlines'], 
-                'scale': data_config['standardize']['gt_scale']['outlines']})
+        # ---- Net configuration ----
+        self.config.update({
+            'panel_encoding_size': 70, 
+            'panel_n_layers': 4, 
+            'pattern_encoding_size': 130, 
+            'pattern_n_layers': 3, 
+            'dropout': 0,
+            'lstm_init': 'kaiming_normal_', 
+            'feature_extractor': 'EdgeConvFeatures',
+            'panel_decoder': 'LSTMDecoderModule', 
+            'pattern_decoder': 'LSTMDecoderModule', 
+            'stitch_tag_dim': 3
+        })
+        # update with input settings
+        self.config.update(config) 
 
-        self.stitch_loss = metrics.PatternStitchLoss(self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
-        if data_config['explicit_stitch_tags']:
-            self.stitch_loss_supervised = nn.MSELoss()
-            # tags provided by data are controlled from data -- force the values to be the same
-            self.config['stitch_tag_dim'] = data_config['stitch_tag_size']
-        else:
-            self.stitch_loss_supervised = None
-            
-        self.free_edge_class_loss = nn.BCEWithLogitsLoss()
         
-        # setup non-loss pattern quality evaluation metrics
-        self.with_quality_eval = True  # on by default
-        self.pattern_nums_quality = metrics.NumbersInPanelsAccuracies(self.max_panel_len, data_stats={
-            'shift': data_config['standardize']['gt_shift']['outlines'], 
-            'scale': data_config['standardize']['gt_scale']['outlines']})
-        self.pattern_shape_quality = metrics.PanelVertsL2(self.max_panel_len, data_stats={
-            'shift': data_config['standardize']['gt_shift']['outlines'], 
-            'scale': data_config['standardize']['gt_scale']['outlines']})
-        self.rotation_quality = metrics.UniversalL2(data_stats={
-            'shift': data_config['standardize']['gt_shift']['rotations'], 
-            'scale': data_config['standardize']['gt_scale']['rotations']}
-        )
-        self.translation_quality = metrics.UniversalL2(data_stats={
-            'shift': data_config['standardize']['gt_shift']['translations'], 
-            'scale': data_config['standardize']['gt_scale']['translations']}
-        )
-        self.stitch_quality = metrics.PatternStitchPrecisionRecall(
-            data_stats={
-                'shift': data_config['standardize']['gt_shift']['stitch_tags'], 
-                'scale': data_config['standardize']['gt_scale']['stitch_tags']
-            } if data_config['explicit_stitch_tags'] else None
-        )
+
+        # ---- losses configuration ----
+        self.config['loss'] = {
+            'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],
+            'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
+            'panel_origin_invariant_loss': True,
+            'loop_loss_weight': 1.,
+            'stitch_tags_margin': 0.3,
+            'epoch_with_stitches': 40, 
+            'stitch_supervised_weight': 0.1,   # only used when explicit stitch loss is used
+            'stitch_hardnet_version': False,
+            'panel_origin_invariant_loss': True
+        }
+        self.config['loss'].update(in_loss_config)
+        # loss object
+        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.config['loss'] = self.loss.config  # sync just in case
 
         # ---- Feature extractor definition -------
         feature_extractor_module = getattr(blocks, self.config['feature_extractor'])
@@ -386,7 +325,10 @@ class GarmentFullPattern3D(BaseModule):
         rotations = flat_rotations.contiguous().view(batch_size, self.max_pattern_size, -1)
         translations = flat_translations.contiguous().view(batch_size, self.max_pattern_size, -1)
 
-        return {'outlines': outlines, 'rotations': rotations, 'translations': translations, 'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+        return {
+            'outlines': outlines, 
+            'rotations': rotations, 'translations': translations, 
+            'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
 
     def forward(self, positions_batch):
         # Extract info from geometry 
@@ -394,83 +336,6 @@ class GarmentFullPattern3D(BaseModule):
 
         # Decode 
         return self.forward_decode(pattern_encodings)
-
-    def loss(self, features, ground_truth, names=None, epoch=1000):
-        """Evalute loss when predicting patterns.
-           * default epoch is some large value to trigger stitch evaluation
-           * Fucntion returns True in third parameter at the moment of the loss stucture update
-        """
-        preds = self(features)
-        device = features.device
-
-        loss_dict = {}
-
-        # Loss for panel shapes
-        gt_outlines = ground_truth['outlines'].to(device)
-        pattern_loss = self.regression_loss(preds['outlines'], gt_outlines)   
-        # Loop loss per panel
-        loop_loss = self.loop_loss(preds['outlines'], gt_outlines)
-
-        # panel placement
-        rot_loss = self.regression_loss(preds['rotations'], ground_truth['rotations'].to(device))
-        translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'].to(device))
-
-        # total loss
-        full_loss = pattern_loss + loop_loss + (rot_loss + translation_loss)
-
-        loss_dict.update(
-            pattern_loss=pattern_loss, loop_loss=loop_loss, 
-            rotation_loss=rot_loss, translation_loss=translation_loss)
-
-        if self.with_quality_eval:
-            with torch.no_grad():
-                num_panels_acc, num_edges_acc = self.pattern_nums_quality(
-                    preds['outlines'], gt_outlines, ground_truth['num_panels'], pattern_names=names)
-                shape_l2 = self.pattern_shape_quality(preds['outlines'], gt_outlines)
-                rotation_l2 = self.rotation_quality(preds['rotations'], ground_truth['rotations'].to(device))
-                translation_l2 = self.translation_quality(preds['translations'], ground_truth['translations'].to(device))
-                loss_dict.update(
-                    num_panels_accuracy=num_panels_acc, 
-                    num_edges_accuracy=num_edges_acc,
-                    panel_shape_l2=shape_l2, 
-                    rotation_l2=rotation_l2, translation_l2=translation_l2)
-
-        # if we are far enough in the training, evaluate stitch loss too
-        if epoch >= self.config['epoch_with_stitches']:
-            # loss on stitch tags
-            stitch_loss, stitch_loss_breakdown = self.stitch_loss(
-                preds['stitch_tags'], ground_truth['stitches'], ground_truth['num_stitches']) 
-            loss_dict.update(stitch_loss_breakdown)
-            full_loss += stitch_loss
-            
-            if self.stitch_loss_supervised is not None:
-                stitch_sup_loss = self.stitch_loss_supervised(preds['stitch_tags'], ground_truth['stitch_tags'].to(device))
-                loss_dict.update(stitch_supervised_loss=stitch_sup_loss)
-                full_loss += self.config['stitch_supervised_weight'] * stitch_sup_loss
-
-            # free\stitches edges classification
-            gt_free_class = ground_truth['free_edges_mask'].type(torch.FloatTensor).to(device)
-            free_edges_loss = self.free_edge_class_loss(preds['free_edge_mask'], gt_free_class)
-            loss_dict.update(free_edges_loss=free_edges_loss)
-            full_loss += free_edges_loss
-
-            # qualitative evaluation
-            if self.with_quality_eval:
-                with torch.no_grad():
-                    stitch_prec, stitch_recall = self.stitch_quality(
-                        preds['stitch_tags'], preds['free_edge_mask'], 
-                        ground_truth['stitches'].type(torch.IntTensor), 
-                        ground_truth['num_stitches'],
-                        pattern_names=names)
-
-                    # free edges accuracy
-                    free_class = torch.round(torch.sigmoid(preds['free_edge_mask']))
-                    acc = (free_class == gt_free_class).sum().float() / gt_free_class.numel()
-
-                loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall, free_edge_acc=acc)
-
-
-        return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
 
 
 class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
@@ -482,8 +347,8 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
             * MLP modules to predict panel 3D placement & stitches
         * Attempt to disentangle panel latent space
     """
-    def __init__(self, data_config, config={}):
-        super().__init__(data_config, config)
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
 
         # ----- Update panel decoders to promote space disentanglement -------
         self.placement_size = self.rotation_size + self.translation_size
@@ -558,7 +423,7 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
         return {
             'outlines': panel_predictions, 
             'rotations': rotations, 'translations': translations, 
-            'stitch_tags': stitch_tags, 'free_edge_mask': free_edge_class}
+            'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
 
 
 

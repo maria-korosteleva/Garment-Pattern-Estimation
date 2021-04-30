@@ -77,7 +77,6 @@ class Trainer():
         """Fit provided model to reviosly configured dataset"""
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
-        self.setup['model'] = model.__class__.__name__
 
         self.device = self.setup['device']
     
@@ -113,7 +112,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict, loss_structure_update = model.loss(features, gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.loss(model(features), gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -128,7 +127,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [model.loss(batch['features'].to(self.device), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
+                losses = [model.loss(model(batch['features'].to(self.device)), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
                 valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
 
             # Checkpoints: & compare with previous best

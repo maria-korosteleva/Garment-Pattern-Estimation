@@ -66,8 +66,6 @@ def get_values_from_args():
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
-        'stitch_tags_margin': args.st_tag_margin,
-        'stitch_hardnet_version': args.st_tag_hardnet,
 
         # EdgeConv params
         'conv_depth': args.conv_depth, 
@@ -79,10 +77,21 @@ def get_values_from_args():
         'global_pool': args.ec_global_aggr, 
         'skip_connections': bool(args.ec_skip),
         'graph_pooling': bool(args.ec_gpool),
-        'pool_ratio': args.ec_gpool_ratio  # only used when the graph pooling is enabled
+        'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
     }
 
-    return data_config, nn_config, args.net_seed
+    loss_config = {
+        # Extra loss parameters
+        'panel_origin_invariant_loss': False,
+        'panel_order_inariant_loss': True,
+        'stitch_tags_margin': args.st_tag_margin,
+        'stitch_hardnet_version': args.st_tag_hardnet,
+        'loop_loss_weight': 1.,
+        'stitch_tags_margin': 0.3,
+        'epoch_with_stitches': 40, 
+    }
+
+    return data_config, nn_config, loss_config, args.net_seed
 
 
 def get_data_config(in_config, old_stats=False):
@@ -92,14 +101,14 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='multi-all-origin-fix', run_id='w9dgekok'
+            project_name='Test-Garments-Reconstruction', 
+            run_name='loss-class', run_id='jlinnyjl'
             # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
         data_config = {
-            # 'standardize': data_config['standardize'],
+            'standardize': data_config['standardize'],
             'max_pattern_len': data_config['max_pattern_len'],
             'max_panel_len': data_config['max_panel_len'],
             'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
@@ -107,7 +116,7 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 200, 'test_per_type': 200, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
+        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {'max_datapoints_per_type': 1000}  # upper limit of how much data to grab from each type
 
     # update with freshly configured values
@@ -121,20 +130,19 @@ def get_data_config(in_config, old_stats=False):
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
-    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
     dataset_list = [
         # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
-        'data_uni_1000_pants_straight_sides_210105-10-49-02'
+        'data_uni_1000_pants_straight_sides_210105-10-49-02',
+        'data_950_jumpsuit_sleeveless'
     ]
-    in_data_config, in_nn_config, net_seed = get_values_from_args()
+    in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='PanelAE-pants', 
+        run_name='AE-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -144,15 +152,15 @@ if __name__ == "__main__":
     dataset = data.Garment2DPatternDataset(
         Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     # dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-    #                                            data_config, gt_caching=True, feature_caching=True)
+    #                                           data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPanelsAE(dataset.config, in_nn_config)
-    # model = nets.GarmentPatternAE(dataset.config, in_nn_config)
-    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config)
-    model.with_quality_eval = True  # False to save compute time
+    # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
+    model.loss.with_quality_eval = True  # False to save compute time
     if hasattr(model, 'config'):
         trainer.update_config(NN=model.config)  # save NN configuration
 
