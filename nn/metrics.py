@@ -708,7 +708,7 @@ class ComposedPatternLoss():
         if 'free_class' in self.l_components:
             # free\stitches edges classification
             free_edges_loss = self.free_edge_class_loss(
-                preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor))
+                preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device))
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss
 
@@ -751,7 +751,7 @@ class ComposedPatternLoss():
         if 'stitch' in self.q_components:
             stitch_prec, stitch_recall = self.stitch_quality(
                 preds['stitch_tags'], preds['free_edges_mask'], 
-                ground_truth['stitches'].type(torch.IntTensor), 
+                ground_truth['stitches'].type(torch.IntTensor).to(self.device), 
                 ground_truth['num_stitches'],
                 pattern_names=names)
             loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
