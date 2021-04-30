@@ -103,7 +103,7 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Test-Garments-Reconstruction', 
+            project_name='Garments-Reconstruction', 
             run_name='Tee-JS-orderless-placement-origin-match', run_id='2q9aguq9'
             # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
         )
