@@ -609,17 +609,16 @@ class ComposedPatternLoss():
         full_loss = 0.
 
         # ------ GT pre-processing --------
-        gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
-        if self.config['panel_origin_invariant_loss']:
-            # for origin-agnistic loss evaluation
-            gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
-        else:  # keep original
-            gt_rotated = ground_truth
         
         # TODO Combining with edge origin will come later
         if self.config['panel_order_inariant_loss']:
-            gt_rotated = self._gt_order_match(preds, gt_rotated, epoch)
+            gt_rotated = self._gt_order_match(preds, ground_truth, epoch)  # matches the origin too
             gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # after update
+
+        elif self.config['panel_origin_invariant_loss']:  # without order invariance
+            # for origin-agnistic loss evaluation
+            gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
+            gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
         else:  # keep original
             gt_rotated = ground_truth
 
@@ -774,13 +773,15 @@ class ComposedPatternLoss():
             gt_updated = {}
 
             # Match the order
-            gt_updated['outlines'], gt_permutation = self._panel_order_match(
-                preds['outlines'], ground_truth['outlines'].to(self.device), ground_truth['num_panels'])
+            gt_updated['outlines'], gt_permutation, leading_edges = self._panel_order_match(
+                preds['outlines'], ground_truth['outlines'].to(self.device), ground_truth['num_panels'], ground_truth['num_edges'])
 
             # Update other info according to the permutation
             gt_updated['num_edges'] = self._feature_permute(
                 ground_truth['num_edges'], gt_permutation, ground_truth['num_panels']
             )
+
+            # TODO update the info according to chosen leading edges
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(
@@ -814,8 +815,7 @@ class ComposedPatternLoss():
 
         return gt_updated
 
-    @staticmethod
-    def _panel_order_match(predicted_patterns, gt_patterns, num_panels):
+    def _panel_order_match(self, predicted_patterns, gt_patterns, num_panels, gt_num_edges):
         """
             Find the best-matching permutation of gt panels to the predicted panels (in panel order)
         """
@@ -824,16 +824,39 @@ class ComposedPatternLoss():
 
             chosen_patterns = []
             per_pettern_permutation = []
+            all_panel_leading_edges = []
             # per-pattern processing
             for pattern_idx in range(predicted_patterns.shape[0]):
                 gt_len = num_panels[pattern_idx]
 
                 # distances between panels
-                dist_matrix = torch.cdist(
-                    predicted_patterns[pattern_idx][:gt_len].view(gt_len, -1), 
-                    gt_patterns[pattern_idx][:gt_len].view(gt_len, -1))
+                if self.config['panel_origin_invariant_loss']:
 
-                # find optimal assginment, see https://pypi.org/project/munkres/1.0.9/
+                    print('Order + Origin')
+
+                    # distance between panels is based on the best rotation of GT panel
+                    dist_matrix = torch.empty((gt_len, gt_len)).to(predicted_patterns.device)
+                    panel_leading_edges_pairs = torch.empty_like(dist_matrix).to(predicted_patterns.device)
+                    chosen_panels = []  # list but cornains chosen order for all panels
+                    # calculate the optimal distance for the every pair panel-panel
+                    for pred_panel_id in range(gt_len):
+                        for gt_panel_id in range(gt_len):
+                            # optimal match
+                            gt_chosen, leading_edge, dist = self._panel_egde_match(
+                                predicted_patterns[pattern_idx][pred_panel_id], 
+                                gt_patterns[pattern_idx][gt_panel_id], 
+                                gt_num_edges[pattern_idx][gt_panel_id])
+                            
+                            dist_matrix[pred_panel_id][gt_panel_id] = dist
+                            chosen_panels.append(gt_chosen)
+                            panel_leading_edges_pairs[pred_panel_id][gt_panel_id] = leading_edge
+
+                else:
+                    dist_matrix = torch.cdist(
+                        predicted_patterns[pattern_idx][:gt_len].view(gt_len, -1), 
+                        gt_patterns[pattern_idx][:gt_len].view(gt_len, -1))
+
+                # find optimal order assignment, see https://pypi.org/project/munkres/1.0.9/
                 indexes = assignment_solver.compute(dist_matrix)
                 if len(indexes) != gt_len:
                     raise RuntimeError("ComposedPatternLoss::Error:: Failed to match panel order" )
@@ -843,7 +866,15 @@ class ComposedPatternLoss():
                 for left, right in indexes:
                     match[left] = right
 
-                rearranged_pattern = torch.stack([gt_patterns[pattern_idx][i] for i in match]).to(predicted_patterns.device)
+                if self.config['panel_origin_invariant_loss']:
+                    # Pass on the chosen leading edges with account for padded panels
+                    all_panel_leading_edges += [panel_leading_edges_pairs[i][match[i]] for i in range(gt_len)] + [0] * (gt_patterns.shape[1] - gt_len)
+
+                    # updated GT based on origin matching choice
+                    # flat indexing as we use the list as storage for matched panels
+                    rearranged_pattern = torch.stack([chosen_panels[i * gt_len + match[i]] for i in range(gt_len)]).to(predicted_patterns.device)
+                else:
+                    rearranged_pattern = torch.stack([gt_patterns[pattern_idx][i] for i in match]).to(predicted_patterns.device)
 
                 if gt_len < gt_patterns.shape[1]:
                     rearranged_pattern = torch.cat([rearranged_pattern, gt_patterns[pattern_idx][gt_len: ]])
@@ -851,7 +882,7 @@ class ComposedPatternLoss():
                 chosen_patterns.append(rearranged_pattern)
                 per_pettern_permutation.append(match)
         
-        return torch.stack(chosen_patterns).to(predicted_patterns.device), per_pettern_permutation
+        return torch.stack(chosen_patterns).to(predicted_patterns.device), per_pettern_permutation, all_panel_leading_edges if len(all_panel_leading_edges) else None
 
     @staticmethod
     def _feature_permute(pattern_features, permutation, num_panels):
@@ -903,7 +934,7 @@ class ComposedPatternLoss():
         with torch.no_grad():
             gt_updated = {}
             # for origin-agnistic loss evaluation
-            gt_updated['outlines'], panel_leading_edges = self._edge_order_match(
+            gt_updated['outlines'], panel_leading_edges = self._batch_edge_order_match(
                 preds['outlines'], ground_truth['outlines'].to(self.device), gt_num_edges)
 
             if epoch >= self.config['epoch_with_stitches'] and (
@@ -931,7 +962,7 @@ class ComposedPatternLoss():
         return gt_updated
 
     @staticmethod
-    def _edge_order_match(predicted_panels, gt_panels, gt_num_edges):
+    def _batch_edge_order_match(predicted_panels, gt_panels, gt_num_edges):
         """
             Try different first edges of GT panels to find the one best matching with prediction
         """
@@ -949,18 +980,8 @@ class ComposedPatternLoss():
                 num_edges = gt_num_edges[el_id]
 
                 # Find loop origin with min distance to predicted panel
-                # TODO Faster version? -- I think I already did smth like this somewhere
-                shifted_gt_panel = gt_panels[el_id]
-                min_dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
-                chosen_panel = shifted_gt_panel
-                leading_edge = 0
-                for i in range(1, num_edges):  # will skip comparison if num_edges is 0 -- empty panels
-                    shifted_gt_panel = ComposedPatternLoss._rotate_edges(shifted_gt_panel, num_edges)
-                    dist = ((predicted_panels[el_id] - shifted_gt_panel) ** 2).sum()
-                    if dist < min_dist:
-                        min_dist = dist
-                        chosen_panel = shifted_gt_panel
-                        leading_edge = i
+                chosen_panel, leading_edge, _ = ComposedPatternLoss._panel_egde_match(
+                    predicted_panels[el_id], gt_panels[el_id], num_edges)
 
                 # update choice
                 chosen_panels.append(chosen_panel)
@@ -970,6 +991,27 @@ class ComposedPatternLoss():
 
         # reshape into pattern batch
         return chosen_panels.view(batch_size, -1, gt_panels.shape[-2], gt_panels.shape[-1]), leading_edges
+
+    @staticmethod
+    def _panel_egde_match(pred_panel, gt_panel, num_edges):
+        """
+            Find the optimal origin for gt panel that matches with the pred_panel best
+        """
+        # TODO Faster version? -- I think I already did smth like with stitch tags
+
+        shifted_gt_panel = gt_panel
+        min_dist = ((pred_panel - shifted_gt_panel) ** 2).sum()
+        chosen_panel = shifted_gt_panel
+        leading_edge = 0
+        for i in range(1, num_edges):  # will skip comparison if num_edges is 0 -- empty panels
+            shifted_gt_panel = ComposedPatternLoss._rotate_edges(shifted_gt_panel, num_edges)
+            dist = ((pred_panel - shifted_gt_panel) ** 2).sum()
+            if dist < min_dist:
+                min_dist = dist
+                chosen_panel = shifted_gt_panel
+                leading_edge = i
+        
+        return chosen_panel, leading_edge, min_dist
 
     @staticmethod
     def _per_panel_shift(panel_features, per_panel_leading_edges, panel_num_edges):

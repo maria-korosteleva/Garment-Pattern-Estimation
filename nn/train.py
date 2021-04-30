@@ -82,7 +82,7 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': False,
+        'panel_origin_invariant_loss': True,
         'panel_order_inariant_loss': True,
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
@@ -117,7 +117,7 @@ def get_data_config(in_config, old_stats=False):
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 1000}  # upper limit of how much data to grab from each type
+        data_config = {'max_datapoints_per_type': 400}  # upper limit of how much data to grab from each type
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -133,16 +133,16 @@ if __name__ == "__main__":
     dataset_list = [
         # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
-        'data_uni_1000_pants_straight_sides_210105-10-49-02',
-        'data_950_jumpsuit_sleeveless'
+        # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
+        'merged_jumpsuit_sleeveless_950_210412-15-18-06'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='AE-orderless', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='AE-order-origin-less', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
