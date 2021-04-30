@@ -615,14 +615,13 @@ class ComposedPatternLoss():
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
             gt_rotated = self._gt_order_match(preds, ground_truth, epoch) 
-            gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # after update
         else:  # keep original
             gt_rotated = ground_truth
+        
+        gt_num_edges = gt_rotated['num_edges'].int().view(-1)  # flatten
 
-        if self.config['panel_origin_invariant_loss']:  # panel origin choice
-            # for origin-agnistic loss evaluation
-            gt_num_edges = ground_truth['num_edges'].int().view(-1)  # flatten
-            gt_rotated = self._rotate_gt(preds, ground_truth, gt_num_edges, epoch)
+        if self.config['panel_origin_invariant_loss']:  # for origin-agnistic loss evaluation
+            gt_rotated = self._rotate_gt(preds, gt_rotated, gt_num_edges, epoch)
 
         # ---- Losses ------
         main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
