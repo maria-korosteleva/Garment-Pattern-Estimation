@@ -85,13 +85,13 @@ def get_values_from_args():
     loss_config = {
         # Extra loss parameters
         'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': False,
-        'order_by': 'placement',   # placement, stitches
+        'panel_order_inariant_loss': True,
+        'order_by': 'stitches',   # placement, stitches
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 100,  # 40, 
+        'epoch_with_stitches': 40,  # 40, 
     }
 
     return data_config, nn_config, loss_config, args.net_seed
@@ -158,12 +158,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='attention-3d-ordered', 
+        project_name='Garments-Reconstruction', 
+        run_name='Tee-JS-attention-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)
+    split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
