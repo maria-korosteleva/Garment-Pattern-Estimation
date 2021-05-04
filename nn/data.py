@@ -210,19 +210,31 @@ class DatasetWrapper(object):
             device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
             model.to(device)
             model.eval()
+
+            # turn on att weights saving during prediction!
+            if hasattr(model, 'module'):
+                model.module.save_att_weights = True
+            else:
+                model.save_att_weights = True   # model that don't have this poperty will just ignore it
+
             with torch.no_grad():
                 loader = self.get_loader(section)
                 if loader:
-                    if single_batch:
-                        batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
-                        features = batch['features'].to(device)
+                    for batch in loader:
+                        features_device = batch['features'].to(device)
+                        preds = model(features_device)
                         self.dataset.save_prediction_batch(
-                            model(features), batch['name'], batch['data_folder'], section_dir)
-                    else:
-                        for batch in loader:
-                            features = batch['features'].to(device)
-                            self.dataset.save_prediction_batch(
-                                model(features), batch['name'], batch['data_folder'], section_dir)
+                            preds, batch['name'], batch['data_folder'], section_dir, batch['features'].numpy())
+                        
+                        if single_batch:  # stop after first iteration
+                            break
+            
+            # Turn of to avoid wasting time\memory diring other operations
+            if hasattr(model, 'module'):
+                model.module.save_att_weights = False
+            else:
+                model.save_att_weights = False   # model that don't have this poperty will just ignore it
+
         return prediction_path
 
 
@@ -926,7 +938,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None):
         """ 
             Saving predictions on batched from the current dataset
             Saves predicted params of the datapoint to the requested data folder.
@@ -944,7 +956,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
             pattern = self._pred_to_pattern(prediction, name)
 
-            # save
+            # save prediction
             folder_nick = self.data_folders_nicknames[folder]
             final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
@@ -954,6 +966,24 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
+
+            # save point samples if given 
+            if features is not None:
+                shift = self.config['standardize']['f_shift']
+                scale = self.config['standardize']['f_scale']
+                point_cloud = features[idx] * scale + shift
+
+                np.savetxt(
+                    save_to / folder_nick / name / (name + '_point_cloud.txt'), 
+                    point_cloud
+                )
+            # save per-point weights if given
+            if 'att_weights' in prediction:
+                np.savetxt(
+                    save_to / folder_nick / name / (name + '_att_weights.txt'), 
+                    prediction['att_weights'].cpu().numpy()
+                )
+                    
         return prediction_imgs
 
     @staticmethod
