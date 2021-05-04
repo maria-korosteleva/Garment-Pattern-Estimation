@@ -775,14 +775,44 @@ class ComposedPatternLoss():
             gt_updated = {}
 
             # Match the order
-            if self.config['order_by'] == 'placement':
-                if 'translations' not in preds or 'rotations' not in preds:
+            if self.config['order_by'] == 'placement' or self.config['order_by'] == 'stitch_tags':
+                if ('translations' not in preds 
+                        or 'rotations' not in preds):
                     raise ValueError('ComposedPatternLoss::Error::Ordering by placement requested but placement is not predicted')
 
                 pred_placement = torch.cat([preds['translations'], preds['rotations']], dim=-1)
                 gt_placement = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
                 gt_permutation = self._panel_order_match(pred_placement, gt_placement, ground_truth['num_panels'])
+
+            elif self.config['order_by'] == 'stitches':
+                if ('free_edges_mask' not in preds
+                        or 'translations' not in preds 
+                        or 'rotations' not in preds):
+                    raise ValueError('ComposedPatternLoss::Error::Ordering by stitches requested but free edges mask or placement are not predicted')
+                
+                pred_feature = torch.cat([preds['translations'], preds['rotations']], dim=-1)
+                gt_feature = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
+
+                if epoch >= self.config['epoch_with_stitches']: 
+                    # add free mask as feature
+                    # flatten per-edge info into single vector
+                    # push preficted mask score to 0-to-1 range
+                    pred_mask = torch.round(torch.sigmoid(preds['free_edges_mask'])).view(
+                        preds['free_edges_mask'].shape[0], preds['free_edges_mask'].shape[1], -1)
+
+                    gt_mask = ground_truth['free_edges_mask'].view(
+                        ground_truth['free_edges_mask'].shape[0], ground_truth['free_edges_mask'].shape[1], -1)
+
+                    pred_feature = torch.cat([pred_feature, pred_mask], dim=-1)
+                    gt_feature = torch.cat([gt_feature, gt_mask], dim=-1)
+
+                else:
+                    print('ComposedPatternLoss::Warning::skipped order match by stitch tags as stitch loss is not enabled')
+
+                
+                gt_permutation = self._panel_order_match(pred_feature, gt_feature, ground_truth['num_panels'])
+
             else:
                 raise NotImplemented('ComposedPatternLoss::Error::Ordering by requested feature <{}> is not implemented'.format(
                     self.config['order_by']

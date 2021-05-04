@@ -83,14 +83,14 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': True,
+        'panel_origin_invariant_loss': False,
         'panel_order_inariant_loss': True,
-        'order_by': 'placement',
+        'order_by': 'stitches',   # placement
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 40, 
+        'epoch_with_stitches': 40,  # 40, 
     }
 
     return data_config, nn_config, loss_config, args.net_seed
