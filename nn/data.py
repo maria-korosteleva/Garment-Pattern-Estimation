@@ -696,29 +696,6 @@ class GarmentBaseDataset(BaseDataset):
                 self.root_path / dataset_folder / 'dataset_properties.json', 
                 experiment.local_path() / (dataset_folder + '_properties.json'))
     
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
-        """Saves prediction on the datapoint to the requested data folder (save_to) grouped by data_folders 
-            (adapted to be used with muplitple datasets)
-            Returns list of paths to files with prediction visualizations"""
-
-        save_to = Path(save_to)
-        prediction_imgs = []
-        for prediction, name, folder in zip(predictions, datanames, data_folders):
-
-            pattern = self._pred_to_pattern(prediction, name)
-            folder_nick = self.data_folders_nicknames[folder]
-
-            # save
-            final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / folder / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
-
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """
@@ -751,10 +728,6 @@ class GarmentBaseDataset(BaseDataset):
                     pass
         
         return datapoints_names
-
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-        return None
 
     # ------------- Datapoints Utils --------------
     def _sample_points(self, datapoint_name, folder_elements):
