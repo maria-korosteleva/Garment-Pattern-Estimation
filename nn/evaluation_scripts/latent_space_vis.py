@@ -71,7 +71,10 @@ def get_encodings(model, loader, dataset, save_to=None):
             features = batch['features'].to(device)
             garment_encodings = model.forward_encode(features)
 
-            panel_encodings = model.forward_pattern_decode(garment_encodings)
+            if hasattr(model, 'forward_panel_enc_from_3d'):
+                panel_encodings = model.forward_panel_enc_from_3d(features)
+            else:
+                panel_encodings = model.forward_pattern_decode(garment_encodings)
 
             all_garment_encodings.append(garment_encodings)
             all_panel_encodings.append(panel_encodings)

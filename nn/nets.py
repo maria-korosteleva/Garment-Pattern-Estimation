@@ -237,8 +237,6 @@ class GarmentFullPattern3D(BaseModule):
         # update with input settings
         self.config.update(config) 
 
-        
-
         # ---- losses configuration ----
         self.config['loss'] = {
             'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],
@@ -287,7 +285,7 @@ class GarmentFullPattern3D(BaseModule):
         """
             Predict garment encodings for input point coulds batch
         """
-        return self.feature_extractor(positions_batch)  # YAAAAY Pattern hidden representation!!
+        return self.feature_extractor(positions_batch)[0]  # YAAAAY Pattern hidden representation!!
 
     def forward_pattern_decode(self, garment_encodings):
         """
@@ -299,16 +297,8 @@ class GarmentFullPattern3D(BaseModule):
 
         return flat_panel_encodings
 
-    def forward_decode(self, garment_encodings):
-        """
-            Unfold provided garment encodings into the sewing pattens
-        """
-        self.device = garment_encodings.device
-        batch_size = garment_encodings.size(0)
-
-        flat_panel_encodings = self.forward_pattern_decode(garment_encodings)
-
-        # Panel outlines & stitch info
+    def forward_panel_decode(self, flat_panel_encodings, batch_size):
+        """ Panel encodings to outlines & stitch info """
         flat_panels = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
         
         # Placement
@@ -329,6 +319,14 @@ class GarmentFullPattern3D(BaseModule):
             'outlines': outlines, 
             'rotations': rotations, 'translations': translations, 
             'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
+
+    def forward_decode(self, garment_encodings):
+        """
+            Unfold provided garment encodings into the sewing pattens
+        """
+        flat_panel_encodings = self.forward_pattern_decode(garment_encodings)
+
+        return self.forward_panel_decode(flat_panel_encodings, garment_encodings.size(0))
 
     def forward(self, positions_batch):
         # Extract info from geometry 
@@ -425,6 +423,128 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
             'rotations': rotations, 'translations': translations, 
             'stitch_tags': stitch_tags, 'free_edges_mask': free_edge_class}
 
+
+class GarmentAttentivePattern3D(GarmentFullPattern3D):
+    """
+        Patterns from 3D data with point-level attention.
+        Forward functions are subdivided for convenience of latent space inspection
+    """
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
+
+        # ---- per-point attention module ---- 
+
+        if 'attention_token_size' not in self.config:
+            self.config['attention_token_size'] = 100  # default
+
+        # taking in per-point features and previous encodings, outputting point weight
+        pattern_decoder_module = getattr(blocks, self.config['pattern_decoder'])
+        self.pattern_attention_decode = pattern_decoder_module(
+            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['attention_token_size'], self.config['pattern_n_layers'], 
+            dropout=self.config['dropout'],
+            custom_init=self.config['lstm_init']
+        )
+
+        attention_input_size = self.config['attention_token_size'] + self.feature_extractor.config['EConv_feature']
+        self.point_attention_mlp = nn.Sequential(
+            blocks.MLP([attention_input_size, attention_input_size, attention_input_size, 1]),
+            nn.Sigmoid()
+        )
+
+        # additional panel encoding post-procedding
+        self.panel_dec_lin = nn.Linear(
+            self.feature_extractor.config['EConv_feature'], self.feature_extractor.config['panel_encoding_size'])
+
+        # pattern decoder is not needed any more
+        del self.pattern_decoder
+
+    def forward_attention_from_3D(self, positions_batch):
+        """
+            Prediction only attention weights per point per input
+            (for visualization convenience)
+        """
+         # ------ Point cloud features -------
+        batch_size = positions_batch.shape[0]
+        # per-point and total encodings
+        init_pattern_encodings, point_features_flat, batch = self.feature_extractor(positions_batch)
+        num_points = point_features_flat.shape[0] // batch_size
+
+        # ---- attention indicators for each (future) panel ----- 
+        attention_tokens = self.pattern_attention_decode(init_pattern_encodings, self.max_pattern_size)
+        attention_tokens_flat = attention_tokens.view([-1, attention_tokens.shape[-1]])
+
+        # ----- Getting per-panel features after attention application ------
+        all_weights = []
+        for panel_id in range(attention_tokens.shape[1]):
+            # per-panel token
+            panel_att_tokens = attention_tokens[:, panel_id, :]
+            panel_att_tokens_flat = panel_att_tokens.view([-1, panel_att_tokens.shape[-1]])
+            # propagate per-point
+            panel_att_tokens_flat = panel_att_tokens_flat.unsqueeze(1).repeat(1, num_points, 1).view([-1, panel_att_tokens.shape[-1]])
+
+            # concat with features and get weights
+            att_weights = self.point_attention_mlp(torch.cat([panel_att_tokens_flat, point_features_flat], dim=-1))
+
+            all_weights.append(att_weights.unsqueeze(1))
+
+        # TODO check the shape is correct
+        panel_encodings = torch.cat(all_weights, dim=1)  # concat in pattern dimention
+
+        return panel_encodings
+
+    def forward_panel_enc_from_3d(self, positions_batch):
+        """
+            Get per-panel encodings from 3D data directly
+            
+        """
+        # ------ Point cloud features -------
+        batch_size = positions_batch.shape[0]
+        # per-point and total encodings
+        init_pattern_encodings, point_features_flat, batch = self.feature_extractor(positions_batch)
+        num_points = point_features_flat.shape[0] // batch_size
+
+        # ---- attention indicators for each (future) panel ----- 
+        attention_tokens = self.pattern_attention_decode(init_pattern_encodings, self.max_pattern_size)
+        attention_tokens_flat = attention_tokens.view([-1, attention_tokens.shape[-1]])
+
+        # ----- Getting per-panel features after attention application ------
+        all_panel_features = []
+        for panel_id in range(attention_tokens.shape[1]):
+            # per-panel token
+            panel_att_tokens = attention_tokens[:, panel_id, :]
+            panel_att_tokens_flat = panel_att_tokens.view([-1, panel_att_tokens.shape[-1]])
+            # propagate per-point
+            panel_att_tokens_flat = panel_att_tokens_flat.unsqueeze(1).repeat(1, num_points, 1).view([-1, panel_att_tokens.shape[-1]])
+
+            # concat with features and get weights
+            att_weights = self.point_attention_mlp(torch.cat([panel_att_tokens_flat, point_features_flat], dim=-1))
+
+            # weight and pool to get panel encoding
+            weighted_features = att_weights * point_features_flat
+
+            # same pool as in intial extractor
+            panel_feature = self.feature_extractor.global_pool(weighted_features, batch, batch_size) 
+            panel_feature = self.panel_dec_lin(panel_feature) # reshape as needed
+            panel_feature = panel_feature.view(batch_size, -1, panel_feature.shape[-1])
+
+            all_panel_features.append(panel_feature)
+
+        panel_encodings = torch.cat(all_panel_features, dim=1)  # concat in pattern dimention
+
+        return panel_encodings
+
+
+    def forward(self, positions_batch):
+        """3D to pattern with attention on per-point features"""
+
+        batch_size = positions_batch.shape[0]
+
+        # attention-based panel encodings
+        panel_encodings = self.forward_panel_enc_from_3d(positions_batch)
+
+        # ---- decode panels from encodings ----
+
+        return self.forward_panel_decode(panel_encodings.view(-1, panel_encodings.shape[-1]), batch_size)
 
 
 if __name__ == "__main__":

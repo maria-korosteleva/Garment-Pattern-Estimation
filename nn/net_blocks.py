@@ -170,7 +170,7 @@ class EdgeConvFeatures(nn.Module):
         # In EdgeConv features from different layers are concatenated per node and then aggregated 
         # but since the pooling is element-wise on feature vectors, we can swap the operations to save memory
         aggr_features = []
-        out = pos_flat
+        out = pos_flat  
         for conv_id in range(0, self.config['conv_depth']):
             out = self.conv_layers[conv_id](out, batch)
             if self.config['graph_pooling']:
@@ -178,12 +178,13 @@ class EdgeConvFeatures(nn.Module):
             if self.config['skip_connections']:
                 aggr_features.append(self.global_pool(out, batch, batch_size))
         
-        feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
+        # 'out' now holds per-point features
+        pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
 
         # post-processing
-        out = self.lin(feature)
+        encoding = self.lin(pooled_feature)
 
-        return out
+        return encoding, out, batch
 
 
 class DynamicASAPool(nn.Module):
