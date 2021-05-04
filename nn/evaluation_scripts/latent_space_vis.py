@@ -46,7 +46,8 @@ def load_model_loader(experiment, datasets_path, subset='test'):
     test_loader = datawrapper.get_loader(subset)
 
     # ----- Model -------
-    model = nets.GarmentFullPattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+    model_class = getattr(nets, experiment.NN_config()['model'])
+    model = model_class(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
     model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
     return test_loader, model, dataset
@@ -71,7 +72,11 @@ def get_encodings(model, loader, dataset, save_to=None):
             features = batch['features'].to(device)
             garment_encodings = model.module.forward_encode(features)
 
-            panel_encodings = model.module.forward_pattern_decode(garment_encodings)
+            if hasattr(model, 'forward_panel_enc_from_3d'):
+                panel_encodings, _ = model.module.forward_panel_enc_from_3d(features)
+                panel_encodings = panel_encodings.view(-1, panel_encodings.shape[-1])  # flatten pattern dim
+            else:
+                panel_encodings = model.module.forward_pattern_decode(garment_encodings)
 
             all_garment_encodings.append(garment_encodings)
             all_panel_encodings.append(panel_encodings)
@@ -224,9 +229,9 @@ if __name__ == '__main__':
     if from_experiment:
         experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='all-new-300-server', 
-            run_id='22n3425w')  # finished experiment
+            project_name='Test-Garments-Reconstruction', 
+            run_name='attention-3d-ordered', 
+            run_id='2sjhdio6')  # finished experiment
 
         if not experiment.is_finished():
             print('Warning::Evaluating unfinished experiment')

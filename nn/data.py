@@ -210,19 +210,31 @@ class DatasetWrapper(object):
             device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
             model.to(device)
             model.eval()
+
+            # turn on att weights saving during prediction!
+            if hasattr(model, 'module'):
+                model.module.save_att_weights = True
+            else:
+                model.save_att_weights = True   # model that don't have this poperty will just ignore it
+
             with torch.no_grad():
                 loader = self.get_loader(section)
                 if loader:
-                    if single_batch:
-                        batch = next(iter(loader))    # might have some issues, see https://github.com/pytorch/pytorch/issues/1917
-                        features = batch['features'].to(device)
+                    for batch in loader:
+                        features_device = batch['features'].to(device)
+                        preds = model(features_device)
                         self.dataset.save_prediction_batch(
-                            model(features), batch['name'], batch['data_folder'], section_dir)
-                    else:
-                        for batch in loader:
-                            features = batch['features'].to(device)
-                            self.dataset.save_prediction_batch(
-                                model(features), batch['name'], batch['data_folder'], section_dir)
+                            preds, batch['name'], batch['data_folder'], section_dir, batch['features'].numpy())
+                        
+                        if single_batch:  # stop after first iteration
+                            break
+            
+            # Turn of to avoid wasting time\memory diring other operations
+            if hasattr(model, 'module'):
+                model.module.save_att_weights = False
+            else:
+                model.save_att_weights = False   # model that don't have this poperty will just ignore it
+
         return prediction_path
 
 
@@ -696,29 +708,6 @@ class GarmentBaseDataset(BaseDataset):
                 self.root_path / dataset_folder / 'dataset_properties.json', 
                 experiment.local_path() / (dataset_folder + '_properties.json'))
     
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
-        """Saves prediction on the datapoint to the requested data folder (save_to) grouped by data_folders 
-            (adapted to be used with muplitple datasets)
-            Returns list of paths to files with prediction visualizations"""
-
-        save_to = Path(save_to)
-        prediction_imgs = []
-        for prediction, name, folder in zip(predictions, datanames, data_folders):
-
-            pattern = self._pred_to_pattern(prediction, name)
-            folder_nick = self.data_folders_nicknames[folder]
-
-            # save
-            final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
-            final_file = pattern.name + '_predicted__pattern.png'
-            prediction_imgs.append(Path(final_dir) / final_file)
-
-            # copy originals for comparison
-            for file in (self.root_path / folder / name).glob('*'):
-                if ('.png' in file.suffix) or ('.json' in file.suffix):
-                    shutil.copy2(str(file), str(final_dir))
-        return prediction_imgs
-
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """
@@ -751,10 +740,6 @@ class GarmentBaseDataset(BaseDataset):
                     pass
         
         return datapoints_names
-
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-        return None
 
     # ------------- Datapoints Utils --------------
     def _sample_points(self, datapoint_name, folder_elements):
@@ -953,7 +938,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None):
         """ 
             Saving predictions on batched from the current dataset
             Saves predicted params of the datapoint to the requested data folder.
@@ -971,7 +956,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
             pattern = self._pred_to_pattern(prediction, name)
 
-            # save
+            # save prediction
             folder_nick = self.data_folders_nicknames[folder]
             final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
             final_file = pattern.name + '_predicted__pattern.png'
@@ -981,6 +966,24 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             for file in (self.root_path / folder / name).glob('*'):
                 if ('.png' in file.suffix) or ('.json' in file.suffix):
                     shutil.copy2(str(file), str(final_dir))
+
+            # save point samples if given 
+            if features is not None:
+                shift = self.config['standardize']['f_shift']
+                scale = self.config['standardize']['f_scale']
+                point_cloud = features[idx] * scale + shift
+
+                np.savetxt(
+                    save_to / folder_nick / name / (name + '_point_cloud.txt'), 
+                    point_cloud
+                )
+            # save per-point weights if given
+            if 'att_weights' in prediction:
+                np.savetxt(
+                    save_to / folder_nick / name / (name + '_att_weights.txt'), 
+                    prediction['att_weights'].cpu().numpy()
+                )
+                    
         return prediction_imgs
 
     @staticmethod

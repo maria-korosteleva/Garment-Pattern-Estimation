@@ -21,9 +21,9 @@ from experiment import WandbRunWrappper
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-orderless', 
-    run_id='2vvv3tdo')  # finished experiment
+    project_name='Test-Garments-Reconstruction', 
+    run_name='attention-3d-ordered', 
+    run_id='2sjhdio6')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -43,7 +43,8 @@ print('Batch: {}, Split: {}'.format(batch_size, split))
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
-model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+# model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+model = nets.GarmentAttentivePattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
     model = nn.DataParallel(model, device_ids=['cuda:0'])
@@ -56,7 +57,7 @@ model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_d
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
-test_metrics = metrics.eval_metrics(model, datawrapper, 'test')
+# test_metrics = metrics.eval_metrics(model, datawrapper, 'test')
 # print('Test metrics: {}'.format(test_metrics))
 # test_breakdown = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
 # print('Test metrics per dataset: {}'.format(test_breakdown))

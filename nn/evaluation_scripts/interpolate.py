@@ -51,7 +51,9 @@ if __name__ == "__main__":
     # exactly 2
     mesh_paths = [
         # Path(system_info['datasets_path']) / 'data_uni_1000_pants_straight_sides_210105-10-49-02' / 'pants_straight_sides_5JAL3POBNX' / 'pants_straight_sides_5JAL3POBNX_sim.obj', 
-        Path(system_info['datasets_path']) / 'merged_jumpsuit_sleeveless_950_210412-15-18-06' / 'jumpsuit_sleeveless_0I5TVZUZ5Z' / 'jumpsuit_sleeveless_0I5TVZUZ5Z_sim.obj', 
+        # Path(system_info['datasets_path']) / 'skirt_2_panels' / 'skirt_2_panels_0R3AWVH7RL' / 'skirt_2_panels_0R3AWVH7RL_sim.obj', 
+        Path(system_info['datasets_path']) / 'dress_sleeveless' / 'dress_sleeveless_0W94BCKP76' / 'dress_sleeveless_0W94BCKP76_sim.obj', 
+        # Path(system_info['datasets_path']) / 'merged_jumpsuit_sleeveless_950_210412-15-18-06' / 'jumpsuit_sleeveless_0I5TVZUZ5Z' / 'jumpsuit_sleeveless_0I5TVZUZ5Z_sim.obj', 
         # Path(system_info['datasets_path']) / 'merged_tee_sleeveless_1150_210420-17-50-25' / 'tee_sleeveless_0C2JTMTSIK' / 'tee_sleeveless_0C2JTMTSIK_sim.obj',
         Path(system_info['datasets_path']) / 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43' / 'tee_0BEJ3JZP2O' / 'tee_0BEJ3JZP2O_sim.obj',
     ]
@@ -61,8 +63,8 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-orderless-placement-origin-match', 
-        run_id='2038dmz8')  # finished experiment
+        run_name='Tee-dress-orderl-placement-origin', 
+        run_id='17ftepng')  # finished experiment
     if not experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
 
