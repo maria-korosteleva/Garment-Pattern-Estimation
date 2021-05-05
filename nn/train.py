@@ -84,7 +84,7 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': False,
+        'panel_origin_invariant_loss': True,
         'panel_order_inariant_loss': True,
         'order_by': 'placement',   # placement, stitches
         'stitch_tags_margin': args.st_tag_margin,
@@ -120,7 +120,12 @@ def get_data_config(in_config, old_stats=False):
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 800}  # upper limit of how much data to grab from each type
+        data_config = {
+            'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
+            'max_pattern_len': 10,  # to fit even the longest ones (jumpsuit)
+            'max_panel_len': 10,  # (jumpsuit front)
+            'max_num_stitches': 20  # jumpsuit (with sleeves)
+        }  
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -159,7 +164,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-attention-orderless', 
+        run_name='Tee-JS-segmentation-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -178,7 +183,8 @@ if __name__ == "__main__":
     # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
     model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1', 'cuda:2'])
