@@ -21,9 +21,9 @@ from experiment import WandbRunWrappper
 system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
-    project_name='Test-Garments-Reconstruction', 
-    run_name='attention-3d-ordered', 
-    run_id='2sjhdio6')  # finished experiment
+    project_name='Garments-Reconstruction', 
+    run_name='Tee-JS-attention-orderless', 
+    run_id='38vmdxq0')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -39,6 +39,8 @@ dataset = data.Garment3DPatternFullDataset(
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
+
+batch_size = 5
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
