@@ -86,7 +86,7 @@ def get_values_from_args():
         # Extra loss parameters
         'panel_origin_invariant_loss': False,
         'panel_order_inariant_loss': True,
-        'order_by': 'stitches',   # placement, stitches
+        'order_by': 'placement',   # placement, stitches
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
