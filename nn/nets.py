@@ -510,7 +510,6 @@ class GarmentAttentivePattern3D(GarmentFullPattern3D):
 
         return panel_encodings, all_att_weights
 
-
     def forward(self, positions_batch):
         """3D to pattern with attention on per-point features"""
 
@@ -526,6 +525,94 @@ class GarmentAttentivePattern3D(GarmentFullPattern3D):
             panels.update(att_weights=att_weights)  # save attention weights if non-empty
 
         return panels
+
+
+class GarmentSegmentPattern3D(GarmentFullPattern3D):
+    """
+        Patterns from 3D data with point-level attention.
+        Forward functions are subdivided for convenience of latent space inspection
+    """
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__(data_config, config, in_loss_config)
+
+        # TODO is it a good way to do dynamic configuration?
+        # set to true to get attention weights with prediction -- for visualization
+        # Keep false in all unnecessary cases to save memory!
+        self.save_att_weights = False 
+
+        # ---- per-point attention module ---- 
+        # that performs sort of segmentation
+        # taking in per-point features and global encoding, outputting point weight per (potential) panel
+        # Segmentaition aims to ensure that each point belongs to min number of panels
+        # Global context gives understanding of the cutting pattern 
+        attention_input_size = self.config['pattern_encoding_size'] + self.feature_extractor.config['EConv_feature']
+        self.point_segment_mlp = nn.Sequential(
+            blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
+            nn.Softmax(dim=1)  # in the feature dimention
+        )
+
+        # additional panel encoding post-procedding
+        self.panel_dec_lin = nn.Linear(
+            self.feature_extractor.config['EConv_feature'], self.feature_extractor.config['panel_encoding_size'])
+
+        # pattern decoder is not needed any more
+        del self.pattern_decoder
+
+    def forward_panel_enc_from_3d(self, positions_batch):
+        """
+            Get per-panel encodings from 3D data directly
+            
+        """
+        # ------ Point cloud features -------
+        batch_size = positions_batch.shape[0]
+        # per-point and total encodings
+        init_pattern_encodings, point_features_flat, batch = self.feature_extractor(positions_batch)
+        num_points = point_features_flat.shape[0] // batch_size
+
+        # ----- Predict per-point panel scores (as attention weights) -----
+        # propagate the per-pattern global encoding for each point
+        global_enc_propagated = init_pattern_encodings.unsqueeze(1).repeat(1, num_points, 1).view(
+            [-1, init_pattern_encodings.shape[-1]])
+
+        points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
+
+        # ----- Getting per-panel features after attention application ------
+        all_panel_features = []
+        for panel_id in range(points_weights.shape[-1]):
+
+            # get weights for particular panel
+            panel_att_weights = points_weights[:, panel_id].unsqueeze(-1)
+
+            # weight and pool to get panel encoding
+            weighted_features = panel_att_weights * point_features_flat
+
+            # same pool as in intial extractor
+            panel_feature = self.feature_extractor.global_pool(weighted_features, batch, batch_size) 
+            panel_feature = self.panel_dec_lin(panel_feature)  # reshape as needed
+            panel_feature = panel_feature.view(batch_size, -1, panel_feature.shape[-1])
+
+            all_panel_features.append(panel_feature)
+
+        panel_encodings = torch.cat(all_panel_features, dim=1)  # concat in pattern dimention
+
+        return panel_encodings, points_weights.view(batch_size, -1, points_weights.shape[-1]) if self.save_att_weights else []
+
+    def forward(self, positions_batch):
+        """3D to pattern with attention on per-point features"""
+
+        batch_size = positions_batch.shape[0]
+
+        # attention-based panel encodings
+        panel_encodings, att_weights = self.forward_panel_enc_from_3d(positions_batch)
+
+        # ---- decode panels from encodings ----
+        panels = self.forward_panel_decode(panel_encodings.view(-1, panel_encodings.shape[-1]), batch_size)
+
+        if len(att_weights) > 0:
+            panels.update(att_weights=att_weights)  # save attention weights if non-empty
+
+        return panels
+
 
 
 if __name__ == "__main__":

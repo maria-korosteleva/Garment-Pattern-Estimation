@@ -9,7 +9,7 @@ import numpy as np
 import maya.cmds as cmds
 
 # setup
-pred_path = 'nn_pred_210504-17-41-12/test/tee'
+pred_path = 'nn_pred_210505-17-27-22/test/tee'
 name = 'tee_0FX6C0VKR3'
 panel_id = 0
 
@@ -17,6 +17,7 @@ panel_id = 0
 base_path = 'C:/Users/Asus/Desktop/Garments_outs'  # local path to all logs
 pred_path = os.path.join(base_path, pred_path)
 
+# load weights
 point_cloud_filepath = os.path.join(pred_path, name, (name + '_point_cloud.txt'))
 weights_filepath = os.path.join(pred_path, name, (name + '_att_weights.txt'))
 
@@ -26,6 +27,18 @@ print(weights_filepath)
 point_cloud = np.loadtxt(point_cloud_filepath)
 att_weights = np.loadtxt(weights_filepath)
 
+# colors
+# Coolors.com
+color_hex = ['85B79D', '6F686D', 'FF715B', 'FFDF64', 'C6D4FF', '608059', '6D2848', 'F31400', 'FA7D00', '9975C1']
+# to rgb codes
+colors = np.empty((len(color_hex), 3))
+for idx in range(len(color_hex)):
+    colors[idx] = np.array([int(color_hex[idx][i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
+
+# Leave usable colors according to the number of weights
+colors = colors[:att_weights.shape[-1]]  
+
+# create and color point bubbles
 objects = []
 for idx in range(len(point_cloud)):
     # create point
@@ -35,17 +48,20 @@ for idx in range(len(point_cloud)):
     coords = point_cloud[idx]
     cmds.move(coords[0], coords[1], coords[2], sphere, absolute=True)
 
-    # color according to one of the weights
-    color = np.array([1., 1., 1.]) * att_weights[idx][panel_id]
-    sh_name = name + '_' + str(idx)
+    # mix colors according to one of the weights
+    # point_weights = np.expand_dims(att_weights[idx], axis=1)
+    point_weights = att_weights[idx][panel_id]
+    # point_color = (colors * point_weights).sum(axis=0)
+    point_color = colors[0] * point_weights
+
+    print(point_color)
     
+    # set color
+    sh_name = name + '_' + str(idx) 
     material = cmds.shadingNode('lambert', name=sh_name, asShader=True)
     sg = cmds.sets(name="%sSG" % sh_name, empty=True, renderable=True, noSurfaceShader=True)
     cmds.connectAttr("%s.outColor" % material, "%s.surfaceShader" % sg)
-
-    cmds.setAttr(material + ".color", color[0], color[1], color[2], type="double3")
-
+    cmds.setAttr(material + ".color", point_color[0], point_color[1], point_color[2], type="double3")
     cmds.sets(sphere, forceElement=sg)
 
-
-cmds.group(objects, name='{}_{}'.format(name, panel_id))
+cmds.group(objects, name=name)
