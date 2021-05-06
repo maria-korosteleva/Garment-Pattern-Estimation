@@ -65,7 +65,7 @@ def get_values_from_args():
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
         'attention_token_size': 20,
-        'unused_panel_threshold': 0.1 * data_config['mesh_samples'],  # ~about N points classified to belong to panel
+        'unused_panel_threshold': 0.05 * data_config['mesh_samples'],  # ~about N points classified to belong to panel
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='Tee-JS-segment-shuffle-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
