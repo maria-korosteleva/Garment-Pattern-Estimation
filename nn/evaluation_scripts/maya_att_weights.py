@@ -9,8 +9,8 @@ import numpy as np
 import maya.cmds as cmds
 
 # setup
-pred_path = 'nn_pred_210505-17-27-22/test/tee'
-name = 'tee_0FX6C0VKR3'
+pred_path = 'Tee-JS-segmentation-orderless_7h6bdudt_pred/test/tee'
+name = 'tee_2NJOT5T25T'
 panel_id = 0
 
 # code
@@ -29,7 +29,7 @@ att_weights = np.loadtxt(weights_filepath)
 
 # colors
 # Coolors.com
-color_hex = ['85B79D', '6F686D', 'FF715B', 'FFDF64', 'C6D4FF', '608059', '6D2848', 'F31400', 'FA7D00', '9975C1']
+color_hex = ['608059', '6D2848', 'F31400', 'FA7D00', '9975C1', '85B79D', '6F686D', 'FF715B', 'FFDF64', 'C6D4FF']
 # to rgb codes
 colors = np.empty((len(color_hex), 3))
 for idx in range(len(color_hex)):

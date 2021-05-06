@@ -540,6 +540,10 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # Keep false in all unnecessary cases to save memory!
         self.save_att_weights = False 
 
+        # defaults
+        if 'unused_panel_threshold' not in self.config:
+            self.config['unused_panel_threshold'] = 0.
+
         # ---- per-point attention module ---- 
         # that performs sort of segmentation
         # taking in per-point features and global encoding, outputting point weight per (potential) panel
@@ -579,7 +583,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # ----- Getting per-panel features after attention application ------
         all_panel_features = []
         for panel_id in range(points_weights.shape[-1]):
-
             # get weights for particular panel
             panel_att_weights = points_weights[:, panel_id].unsqueeze(-1)
 
@@ -593,7 +596,30 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
             all_panel_features.append(panel_feature)
 
-        panel_encodings = torch.cat(all_panel_features, dim=1)  # concat in pattern dimention
+        # re-arrange encodings s.t. ones corresponding to non-chosen classes were at the end
+        points_weights = points_weights.view(batch_size, -1, points_weights.shape[-1])
+        panels_shuffle = []
+
+        for garment_id in range(batch_size):
+            active_panels = []
+            passive_panels = []
+            for panel_id in range(points_weights.shape[-1]):
+                panel_att_weights = points_weights[garment_id, :, panel_id]
+                
+                print(panel_att_weights.sum(), self.config['unused_panel_threshold'])
+
+                if panel_att_weights.sum() < self.config['unused_panel_threshold']:
+                    # Too little points have selected this panel -- so it's likely not present at all
+                    passive_panels.append(panel_id)
+                else:
+                    active_panels.append(panel_id)
+            
+            pattern_shuffle = active_panels + passive_panels  # unused panels go to the end!
+            # re-arrange the encodings accordingly
+            panels_shuffle += [all_panel_features[i][garment_id] for i in pattern_shuffle]
+
+        panel_encodings = torch.cat(panels_shuffle)  
+        panel_encodings = panel_encodings.view(batch_size, -1, panel_encodings.shape[-1])
 
         return panel_encodings, points_weights.view(batch_size, -1, points_weights.shape[-1]) if self.save_att_weights else []
 
