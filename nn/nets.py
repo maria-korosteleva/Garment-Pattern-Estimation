@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sparsemax import Sparsemax
 
 # my modules
 import metrics
@@ -552,7 +553,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         attention_input_size = self.config['pattern_encoding_size'] + self.feature_extractor.config['EConv_feature']
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
-            nn.Softmax(dim=1)  # in the feature dimention
+            Sparsemax(dim=1)  # in the feature dimention
         )
 
         # additional panel encoding post-procedding
