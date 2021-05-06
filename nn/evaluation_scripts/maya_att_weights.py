@@ -52,7 +52,7 @@ for idx in range(len(point_cloud)):
     # point_weights = np.expand_dims(att_weights[idx], axis=1)
     point_weights = att_weights[idx][panel_id]
     # point_color = (colors * point_weights).sum(axis=0)
-    point_color = colors[0] * point_weights
+    point_color = colors[panel_id] * point_weights
 
     print(point_color)
     
