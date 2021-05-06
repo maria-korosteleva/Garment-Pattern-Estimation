@@ -22,8 +22,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-attention-orderless', 
-    run_id='38vmdxq0')  # finished experiment
+    run_name='Tee-JS-segmentation-orderless', 
+    run_id='7h6bdudt')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -45,8 +45,10 @@ batch_size = 5
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
 # ----- Model architecture -----
+model_class = getattr(nets, experiment.NN_config()['model'])
 # model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
-model = nets.GarmentAttentivePattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+# model = nets.GarmentAttentivePattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
+model = model_class(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
     model = nn.DataParallel(model, device_ids=['cuda:0'])
