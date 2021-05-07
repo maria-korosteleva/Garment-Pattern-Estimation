@@ -50,7 +50,7 @@ for idx in range(len(point_cloud)):
 
     # mix colors according to one of the weights
 
-    if 'att_weight_id' in locals() or 'att_weight_id' in globals():
+    if att_weight_id >= 0:
         point_weights = att_weights[idx][att_weight_id]
         point_color = colors[att_weight_id] * point_weights
     else:
