@@ -78,8 +78,8 @@ class Trainer():
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
 
-        self.device = self.setup['device']
-    
+        self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['device']
+        
         self._add_optimizer(model)
         self._add_scheduler(len(self.datawraper.loader_train))
         self.es_tracking = []  # early stopping init
