@@ -9,9 +9,9 @@ import numpy as np
 import maya.cmds as cmds
 
 # setup
-pred_path = 'Tee-JS-segmentation-orderless_7h6bdudt_pred/test/tee'
-name = 'tee_2NJOT5T25T'
-panel_id = 0
+pred_path = 'Tee-JS-segment-shuffle-orderless-125/test/jumpsuit_sleeveless'
+name = 'jumpsuit_sleeveless_U0K41NJ0NJ'
+# att_weight_id = 3
 
 # code
 base_path = 'C:/Users/Asus/Desktop/Garments_outs'  # local path to all logs
@@ -49,10 +49,13 @@ for idx in range(len(point_cloud)):
     cmds.move(coords[0], coords[1], coords[2], sphere, absolute=True)
 
     # mix colors according to one of the weights
-    # point_weights = np.expand_dims(att_weights[idx], axis=1)
-    point_weights = att_weights[idx][panel_id]
-    # point_color = (colors * point_weights).sum(axis=0)
-    point_color = colors[panel_id] * point_weights
+
+    if 'att_weight_id' in locals() or 'att_weight_id' in globals():
+        point_weights = att_weights[idx][att_weight_id]
+        point_color = colors[att_weight_id] * point_weights
+    else:
+        point_weights = np.expand_dims(att_weights[idx], axis=1)
+        point_color = (colors * point_weights).sum(axis=0)
 
     print(point_color)
     
