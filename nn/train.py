@@ -65,7 +65,7 @@ def get_values_from_args():
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
         'attention_token_size': 20,
-        'unused_panel_threshold': 0.01 * data_config['mesh_samples'],  # ~about N points classified to belong to panel
+        'unused_panel_threshold': 0.05 * data_config['mesh_samples'],  # ~about N points classified to belong to panel
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1', 'cuda:3'])
+    model = nn.DataParallel(model)  #, device_ids=['cuda:0', 'cuda:1', 'cuda:3'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
