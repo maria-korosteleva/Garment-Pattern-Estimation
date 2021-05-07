@@ -56,8 +56,6 @@ for idx in range(len(point_cloud)):
     else:
         point_weights = np.expand_dims(att_weights[idx], axis=1)
         point_color = (colors * point_weights).sum(axis=0)
-
-    print(point_color)
     
     # set color
     sh_name = name + '_' + str(idx) 
@@ -65,6 +63,6 @@ for idx in range(len(point_cloud)):
     sg = cmds.sets(name="%sSG" % sh_name, empty=True, renderable=True, noSurfaceShader=True)
     cmds.connectAttr("%s.outColor" % material, "%s.surfaceShader" % sg)
     cmds.setAttr(material + ".color", point_color[0], point_color[1], point_color[2], type="double3")
-    cmds.sets(sphere, forceElement=sg)
+    cmds.sets(sphere[0], forceElement=sg)
 
 cmds.group(objects, name=name)
