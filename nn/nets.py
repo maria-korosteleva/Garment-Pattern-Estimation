@@ -634,7 +634,8 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # attention-based panel encodings
         panel_encodings, att_weights, avg_shuffle = self.forward_panel_enc_from_3d(positions_batch)
 
-        wb.log({'panel_order_shuffles': avg_shuffle}, step=log_step)
+        if log_step is not None:
+            wb.log({'panel_order_shuffles': avg_shuffle}, step=log_step)
 
         # ---- decode panels from encodings ----
         panels = self.forward_panel_decode(panel_encodings.view(-1, panel_encodings.shape[-1]), batch_size)
