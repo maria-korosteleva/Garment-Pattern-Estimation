@@ -65,13 +65,16 @@ class WandbRunWrappper(object):
             Split & batch size info """
         run = self._run_object()
         split_config = run.config['data_split']
+        data_config = run.config['dataset']
         try:
             self.load_file('data_split.json', './wandb')
             split_config['filename'] = './wandb/data_split.json'
+            # NOTE!!!! this is a workaround fix since the proper fix would require updates in class archtecture
+            data_config['max_datapoints_per_type'] = None   # avoid slicing for correct loading of split on any machine
         except ValueError as e:  # if file not found, training will just proceed with generated split
             print(e)
             print('Experiment::Warning::Skipping loading split file..')
-        return split_config, run.config['batch_size'], run.config['dataset']
+        return split_config, run.config['batch_size'], data_config
 
     def last_best_validation_loss(self):
         run = self._run_object()
