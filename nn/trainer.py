@@ -112,14 +112,14 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict, loss_structure_update = model.module.loss(model(features), gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.module.loss(model(features, log_step=log_step), gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 if self.scheduler is not None:
                     self.scheduler.step()
                 if hasattr(model, 'step'):  # custom model hyperparams scheduling
-                    model.step(i, len(train_loader))
+                    model.module.step(i, len(train_loader))
                 
                 # logging
                 log_step += 1
