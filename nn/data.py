@@ -574,9 +574,9 @@ class BaseDataset(Dataset):
                 train_ids.append(idx)
             elif len(test_datanames) > 0 and self.datapoints_names[idx] in test_datanames:
                 test_ids.append(idx)
-            else:  
-                # validation set is not that significant to reproduce exactly, so just put all leftovers there
+            elif len(valid_datanames) > 0 and self.datapoints_names[idx] in valid_datanames:
                 valid_ids.append(idx)
+            # othervise, just skip
 
         if with_breakdown:
             train_breakdown = self.subsets_per_datafolder(train_ids)
