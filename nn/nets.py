@@ -544,7 +544,11 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         # defaults
         if 'unused_panel_threshold' not in self.config:
-            self.config['unused_panel_threshold'] = 0.
+            self.config['unused_panel_threshold'] = [0., 0.]
+
+        # TODO loadable during resume?
+        # initial value
+        self.unused_threshold = self.config['unused_panel_threshold'][0]
 
         # ---- per-point attention module ---- 
         # that performs sort of segmentation
@@ -602,13 +606,15 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         points_weights = points_weights.view(batch_size, -1, points_weights.shape[-1])
         panels_shuffle = []
         num_shuffles = 0.
+        # make sure to use threshold lower boundary in evaluation mode
+        sum_threshold = self.unused_threshold if self.training else self.config['unused_panel_threshold'][1]
         for garment_id in range(batch_size):
             active_panels = []
             passive_panels = []
             for panel_id in range(points_weights.shape[-1]):
                 panel_att_weights = points_weights[garment_id, :, panel_id]
                 
-                if panel_att_weights.sum() < self.config['unused_panel_threshold']:
+                if panel_att_weights.sum() < sum_threshold:
                     # Too little points have selected this panel -- so it's likely not present at all
                     passive_panels.append(panel_id)
                 else:
@@ -635,7 +641,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         panel_encodings, att_weights, avg_shuffle = self.forward_panel_enc_from_3d(positions_batch)
 
         if log_step is not None:
-            wb.log({'panel_order_shuffles': avg_shuffle}, step=log_step)
+            wb.log({'panel_order_shuffles': avg_shuffle, 'shuffle_threshold': self.unused_threshold}, step=log_step)
 
         # ---- decode panels from encodings ----
         panels = self.forward_panel_decode(panel_encodings.view(-1, panel_encodings.shape[-1]), batch_size)
@@ -645,6 +651,15 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         return panels
 
+    def step(self, batch_id, num_batches):
+        """
+            Scheduling scheme for internal parameters.
+            In this case, panel re-ordering thresholds
+        """
+        # updating once per epoch
+        if batch_id == num_batches - 1:
+            # don't go below the low boundary
+            self.unused_threshold = max(self.unused_threshold - 1, self.config['unused_panel_threshold'][1])
 
 
 if __name__ == "__main__":
