@@ -122,7 +122,7 @@ def get_data_config(in_config, old_stats=False):
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
-            'max_datapoints_per_type': 2000,  # upper limit of how much data to grab from each type
+            'max_datapoints_per_type': 2100,  # upper limit of how much data to grab from each type
             # 'max_pattern_len': 10,  # to fit even the longest ones (jumpsuit)
             # 'max_panel_len': 10,  # (jumpsuit front)
             # 'max_num_stitches': 20  # jumpsuit (with sleeves)
