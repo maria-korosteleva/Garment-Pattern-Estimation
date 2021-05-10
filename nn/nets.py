@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sparsemax import Sparsemax
+import wandb as wb
 
 # my modules
 import metrics
@@ -116,7 +117,7 @@ class GarmentPanelsAE(BaseModule):
         """
         return garment_encodings.contiguous().view(-1, self.config['panel_encoding_size'])
 
-    def forward(self, patterns_batch):
+    def forward(self, patterns_batch, **kwargs):
         self.device = patterns_batch.device
         self.batch_size = patterns_batch.size(0)
 
@@ -187,7 +188,7 @@ class GarmentPatternAE(GarmentPanelsAE):
 
         return flat_panel_encodings
 
-    def forward(self, patterns_batch):
+    def forward(self, patterns_batch, **kwargs):
         self.device = patterns_batch.device
         self.batch_size = patterns_batch.size(0)
 
@@ -329,7 +330,7 @@ class GarmentFullPattern3D(BaseModule):
 
         return self.forward_panel_decode(flat_panel_encodings, garment_encodings.size(0))
 
-    def forward(self, positions_batch):
+    def forward(self, positions_batch, **kwargs):
         # Extract info from geometry 
         pattern_encodings = self.forward_encode(positions_batch)
 
@@ -509,15 +510,15 @@ class GarmentAttentivePattern3D(GarmentFullPattern3D):
         if len(all_att_weights) > 0:
             all_att_weights = torch.stack(all_att_weights, dim=-1)
 
-        return panel_encodings, all_att_weights
+        return panel_encodings, all_att_weights, 0
 
-    def forward(self, positions_batch):
+    def forward(self, positions_batch, **kwargs):
         """3D to pattern with attention on per-point features"""
 
         batch_size = positions_batch.shape[0]
 
         # attention-based panel encodings
-        panel_encodings, att_weights = self.forward_panel_enc_from_3d(positions_batch)
+        panel_encodings, att_weights, _ = self.forward_panel_enc_from_3d(positions_batch)
 
         # ---- decode panels from encodings ----
 
@@ -543,7 +544,11 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         # defaults
         if 'unused_panel_threshold' not in self.config:
-            self.config['unused_panel_threshold'] = 0.
+            self.config['unused_panel_threshold'] = [0., 0.]
+
+        # TODO loadable during resume?
+        # initial value
+        self.unused_threshold = self.config['unused_panel_threshold'][0]
 
         # ---- per-point attention module ---- 
         # that performs sort of segmentation
@@ -600,16 +605,16 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # re-arrange encodings s.t. ones corresponding to non-chosen classes were at the end
         points_weights = points_weights.view(batch_size, -1, points_weights.shape[-1])
         panels_shuffle = []
-
+        num_shuffles = 0.
+        # make sure to use threshold lower boundary in evaluation mode
+        sum_threshold = self.unused_threshold if self.training else self.config['unused_panel_threshold'][1]
         for garment_id in range(batch_size):
             active_panels = []
             passive_panels = []
             for panel_id in range(points_weights.shape[-1]):
                 panel_att_weights = points_weights[garment_id, :, panel_id]
                 
-                print(panel_att_weights.sum(), self.config['unused_panel_threshold'])
-
-                if panel_att_weights.sum() < self.config['unused_panel_threshold']:
+                if panel_att_weights.sum() < sum_threshold:
                     # Too little points have selected this panel -- so it's likely not present at all
                     passive_panels.append(panel_id)
                 else:
@@ -618,19 +623,25 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
             pattern_shuffle = active_panels + passive_panels  # unused panels go to the end!
             # re-arrange the encodings accordingly
             panels_shuffle += [all_panel_features[i][garment_id] for i in pattern_shuffle]
+            num_shuffles += len(passive_panels)
 
         panel_encodings = torch.cat(panels_shuffle)  
         panel_encodings = panel_encodings.view(batch_size, -1, panel_encodings.shape[-1])
 
-        return panel_encodings, points_weights.view(batch_size, -1, points_weights.shape[-1]) if self.save_att_weights else []
+        points_weights = points_weights.view(batch_size, -1, points_weights.shape[-1]) if self.save_att_weights else []
 
-    def forward(self, positions_batch):
+        return panel_encodings, points_weights, float(num_shuffles) / batch_size
+
+    def forward(self, positions_batch, log_step=None):
         """3D to pattern with attention on per-point features"""
 
         batch_size = positions_batch.shape[0]
 
         # attention-based panel encodings
-        panel_encodings, att_weights = self.forward_panel_enc_from_3d(positions_batch)
+        panel_encodings, att_weights, avg_shuffle = self.forward_panel_enc_from_3d(positions_batch)
+
+        if log_step is not None:
+            wb.log({'panel_order_shuffles': avg_shuffle, 'shuffle_threshold': self.unused_threshold}, step=log_step)
 
         # ---- decode panels from encodings ----
         panels = self.forward_panel_decode(panel_encodings.view(-1, panel_encodings.shape[-1]), batch_size)
@@ -640,6 +651,15 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         return panels
 
+    def step(self, batch_id, num_batches):
+        """
+            Scheduling scheme for internal parameters.
+            In this case, panel re-ordering thresholds
+        """
+        # updating once per epoch
+        if batch_id == num_batches - 1:
+            # don't go below the low boundary
+            self.unused_threshold = max(self.unused_threshold - 1, self.config['unused_panel_threshold'][1])
 
 
 if __name__ == "__main__":

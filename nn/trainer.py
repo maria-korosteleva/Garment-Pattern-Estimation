@@ -118,6 +118,8 @@ class Trainer():
                 self.optimizer.zero_grad()
                 if self.scheduler is not None:
                     self.scheduler.step()
+                if hasattr(model, 'step'):  # custom model hyperparams scheduling
+                    model.step(i, len(train_loader))
                 
                 # logging
                 log_step += 1

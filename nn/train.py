@@ -65,7 +65,10 @@ def get_values_from_args():
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
         'attention_token_size': 20,
-        'unused_panel_threshold': 0.01 * data_config['mesh_samples'],  # ~about N points classified to belong to panel
+        'unused_panel_threshold': [
+            0.1 * data_config['mesh_samples'],  # ~about this N points classified to belong to panel
+            0.01 * data_config['mesh_samples']  # ~about this N points classified to belong to panel
+        ],
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
