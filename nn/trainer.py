@@ -26,8 +26,8 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=300, # 00,  # 400,
-            batch_size=30,  # 30,
+            epochs=300,  # 00,  # 400,
+            batch_size=5,  # 30,  # 30,
             learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
@@ -118,7 +118,7 @@ class Trainer():
                 self.optimizer.zero_grad()
                 if self.scheduler is not None:
                     self.scheduler.step()
-                if hasattr(model, 'step'):  # custom model hyperparams scheduling
+                if hasattr(model.module, 'step'):  # custom model hyperparams scheduling
                     model.module.step(i, len(train_loader))
                 
                 # logging
