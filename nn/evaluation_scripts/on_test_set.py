@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import torch
+from torch import nn
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect

@@ -69,7 +69,7 @@ class WandbRunWrappper(object):
         try:
             self.load_file('data_split.json', './wandb')
             split_config['filename'] = './wandb/data_split.json'
-            # NOTE!!!! this is a workaround fix since the proper fix would require updates in class archtecture
+            # NOTE!!!! this is a sub-optimal workaround fix since the proper fix would require updates in class archtecture
             data_config['max_datapoints_per_type'] = None   # avoid slicing for correct loading of split on any machine
         except ValueError as e:  # if file not found, training will just proceed with generated split
             print(e)
