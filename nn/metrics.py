@@ -506,7 +506,7 @@ class UniversalL2():
         return torch.mean(L2_norms)
 
 
-# ---------- Composition loss -------------
+# ---------- Composition loss class -------------
 
 class ComposedPatternLoss():
     """

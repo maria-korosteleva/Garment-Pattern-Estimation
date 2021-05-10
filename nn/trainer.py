@@ -26,8 +26,8 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=400,
-            batch_size=30,
+            epochs=300, # 00,  # 400,
+            batch_size=30,  # 30,
             learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
@@ -78,8 +78,8 @@ class Trainer():
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
 
-        self.device = self.setup['device']
-    
+        self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['device']
+        
         self._add_optimizer(model)
         self._add_scheduler(len(self.datawraper.loader_train))
         self.es_tracking = []  # early stopping init
@@ -112,7 +112,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict, loss_structure_update = model.loss(model(features, log_step=log_step), gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.module.loss(model(features), gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -129,7 +129,7 @@ class Trainer():
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
-                losses = [model.loss(model(batch['features'].to(self.device)), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
+                losses = [model.module.loss(model(batch['features'].to(self.device)), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
                 valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
 
             # Checkpoints: & compare with previous best

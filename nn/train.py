@@ -1,6 +1,7 @@
 from pathlib import Path
 import argparse
 import numpy as np
+import torch.nn as nn
 
 # My modules
 import customconfig
@@ -87,14 +88,14 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': False,
+        'panel_origin_invariant_loss': True,
+        'panel_order_inariant_loss': True,
         'order_by': 'placement',   # placement, stitches
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 100,  # 40, 
+        'epoch_with_stitches': 40,  # 40, 
     }
 
     return data_config, nn_config, loss_config, args.net_seed
@@ -108,7 +109,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Test-Garments-Reconstruction', 
-            run_name='attention-3d', run_id='p7su8wbw'
+            run_name='Tee-JS-segment-shuffle-orderless', run_id='1niza5oy'
             # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -123,7 +124,12 @@ def get_data_config(in_config, old_stats=False):
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
-        data_config = {'max_datapoints_per_type': 500}  # upper limit of how much data to grab from each type
+        data_config = {
+            'max_datapoints_per_type': 2100,  # upper limit of how much data to grab from each type
+            # 'max_pattern_len': 10,  # to fit even the longest ones (jumpsuit)
+            # 'max_panel_len': 10,  # (jumpsuit front)
+            # 'max_num_stitches': 20  # jumpsuit (with sleeves)
+        }  
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -137,19 +143,32 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
+        # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
         # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
+        # 'data_uni_1000_pants_straight_sides_210105-10-49-02'
+        # 'merged_jumpsuit_sleeveless_950_210412-15-18-06'
+
+        # big datasets
+        'data_5000_tee_200924-16-57-59_regen_210327-15-20-23',
+        # 'data_5000_skirt_4_panels_201019-12-23-24_regen_210331-16-18-32',
         # 'data_uni_1000_pants_straight_sides_210105-10-49-02',
+        # 'merged_skirt_2_panels_700_210407-18-30-56',
         # 'merged_jumpsuit_sleeveless_950_210412-15-18-06',
+        # 'merged_skirt_8_panels_950_210412-16-11-33',
+        # 'merged_wb_pants_straight_1150_210421-10-50-34',
         # 'merged_tee_sleeveless_1150_210420-17-50-25'
+        # 'merged_jacket_1550_210420-16-54-04',
+        # 'merged_dress_sleeveless_1350_210422-11-26-50',
+        # 'merged_wb_dress_sleeveless_1350_210423-13-14-22',
+        # 'merged_jacket_hood_1700_210425-21-23-1'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='segment-shuffle-schedule', 
+        project_name='Garments-Reconstruction', 
+        run_name='Tee-segment-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -157,7 +176,7 @@ if __name__ == "__main__":
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
-    #     Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
                                                data_config, gt_caching=True, feature_caching=True)
 
@@ -166,12 +185,18 @@ if __name__ == "__main__":
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
-    model.loss.with_quality_eval = True  # False to save compute time
-    if hasattr(model, 'config'):
-        trainer.update_config(NN=model.config)  # save NN configuration
+
+    # Multi-GPU!!!
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1', 'cuda:2'])
+    model.module.config['device_ids'] = model.device_ids
+
+    model.module.loss.with_quality_eval = True  # False to save compute time
+    if hasattr(model.module, 'config'):
+        trainer.update_config(NN=model.module.config)  # save NN configuration
 
     trainer.fit(model)  # Magic happens here
 
