@@ -112,7 +112,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict, loss_structure_update = model.loss(model(features), gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.loss(model(features, log_step=log_step), gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()

@@ -73,7 +73,7 @@ def get_encodings(model, loader, dataset, save_to=None):
             garment_encodings = model.forward_encode(features)
 
             if hasattr(model, 'forward_panel_enc_from_3d'):
-                panel_encodings, _ = model.forward_panel_enc_from_3d(features)
+                panel_encodings, _, _ = model.forward_panel_enc_from_3d(features)
                 panel_encodings = panel_encodings.view(-1, panel_encodings.shape[-1])  # flatten pattern dim
             else:
                 panel_encodings = model.forward_pattern_decode(garment_encodings)
