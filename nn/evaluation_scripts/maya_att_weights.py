@@ -9,9 +9,9 @@ import numpy as np
 import maya.cmds as cmds
 
 # setup
-pred_path = 'Tee-JS-segment-shuffle-orderless-125/test/jumpsuit_sleeveless'
-name = 'jumpsuit_sleeveless_U0K41NJ0NJ'
-# att_weight_id = 3
+pred_path = 'Tee-segment-orderless_15mxapun/test/tee'
+name = 'tee_1SFRP38K7F'
+att_weight_id = -1
 
 # code
 base_path = 'C:/Users/Asus/Desktop/Garments_outs'  # local path to all logs
