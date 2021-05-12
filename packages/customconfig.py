@@ -71,6 +71,27 @@ class Properties():
         # merge
         self._recursive_dict_update(self.properties, new_props, re_write, adding_tag)
 
+    # --- Specialised utils (require domain knowledge) --
+
+    def is_fail(self, dataname):
+        """
+            Check if a particular object is listed as fail in any of the sections
+            Fails may be listed in the stats subsection of any of the section
+        """
+        for section_key in self.properties:
+            section = self.properties[section_key]
+            if isinstance(section, dict) and 'stats' in section and ('fails' in section['stats']):
+                if isinstance(section['stats']['fails'], dict):
+                    for _, fail_list in section['stats']['fails'].items():
+                        if dataname in fail_list:
+                            return True
+                elif isinstance(section['stats']['fails'], list):
+                    if dataname in section['stats']['fails']:
+                        return True
+                else:
+                    raise NotImplementedError('Properties::Error:: Fails subsections of the type {} is not supported'.format(type(section['stats']['fails'])))
+        return False
+
     # ---------- Properties updates ---------------
     def set_basic(self, **kwconfig):
         """Adds/updates info on the top level of properties
@@ -138,7 +159,7 @@ class Properties():
                             updated = True
         return updated
 
-    # Specialised updates (require domain knowledge)
+    # -- Specialised updates (require domain knowledge) --
     def add_sys_info(self):
         """Add or update system information on the top level of config"""
 
