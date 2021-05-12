@@ -614,7 +614,10 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
             for panel_id in range(points_weights.shape[-1]):
                 panel_att_weights = points_weights[garment_id, :, panel_id]
                 
-                if panel_att_weights.sum() < sum_threshold:
+                weights_sum = panel_att_weights.sum()
+                print(weights_sum, sum_threshold)
+
+                if weights_sum < sum_threshold:
                     # Too little points have selected this panel -- so it's likely not present at all
                     passive_panels.append(panel_id)
                 else:
