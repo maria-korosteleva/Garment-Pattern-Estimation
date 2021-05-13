@@ -195,31 +195,16 @@ class MayaGarment(core.ParametrizedPattern):
 
         self.update_verts_info()
         vertices = self.current_verts
-
         panel_curves = self.MayaObjects['panels']
-        # self.MayaObjects['panels'][panel_name]['curve_group']
 
-        # https://www.aganimator.com/tutorials
-        # TODO check if this attirubute already exist
-        np_nodes = {}
-        for panel in panel_curves:
-            curve_group = panel_curves[panel]['curve_group']
-            curves = cmds.listRelatives(curve_group, children=True)
-            np_nodes[panel] = []
-
-            # create evaluators for every curve from a panel
-            for curve in curves:
-                # https://www.aganimator.com/tutorials
-                npC = cmds.createNode('nearestPointOnCurve')
-                cmds.connectAttr(curve + '.worldSpace', npC + '.inputCurve')
-                np_nodes[panel].append(npC)
-        
+        # Fast BBoxes for each panel for testing (should work for most vertices)
         bboxes = {}
         for panel in panel_curves:
             box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
             bboxes[panel] = box
 
-        count_full_checks = 0
+        start_time = time.time()
+        vertex_labels = np.zeros(len(vertices), dtype=int)
         label_counts = [0] * (len(self.panel_order()) + 1)
         vertices_multi_match = []
         for i in range(len(vertices)):
@@ -230,45 +215,69 @@ class MayaGarment(core.ParametrizedPattern):
                 if self._point_in_bbox(vertex, bboxes[panel]):
                     in_bboxes.append(panel)
             
-            if len(in_bboxes) == 0:
-                label = 0  # stitch label
-            elif len(in_bboxes) == 1:
-                label = self.panel_order().index(in_bboxes[0]) + 1
-            else:
-                # multiple matches -- skip for now
+            if len(in_bboxes) == 1:
+                label = self._panel_label(in_bboxes[0])
+                vertex_labels[i] = label
+                label_counts[label] += 1
+            elif len(in_bboxes) > 1:  # multiple matches -- skip for now
                 vertices_multi_match.append((i, in_bboxes))
-                print('Severe checks!')
-                count_full_checks += 1
-                # more expensive checks to resolve confusion
-                distances = {}
-                for panel in in_bboxes:
-                    distances[panel] = []
-                    for npC in np_nodes[panel]:
-                        cmds.setAttr(npC + '.inPosition', vertex[0], vertex[1], vertex[2], type='double3') 
-                        wsPos = cmds.getAttr(npC + '.position')
-                        # cmds.getAttr(npC + '.parameter')
-                        # TODO add checks for planar configuration (and only then add to the distance dictionary)
-                        distances[panel].append(np.linalg.norm(vertex - wsPos))
+            # Leave zero otherwise -- those are stitches!
 
-                    distances[panel] = min(distances[panel])
+        # eval for confusing cases
+        total_confisions = len(vertices_multi_match)
+        # while len(vertices_multi_match) > 0:
+        #     unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
 
-                closest_panel = min(distances, key=distances.get)
+        #     # check if vert in on the plane of any of the panels
+        #     on_panel_planes = []
+        #     for panel in matched_panels:
+        #         if self._point_on_plane(vertices[unlabeled_vert_id], panel):
+        #             on_panel_planes.append(panel)
 
-                label = self.panel_order().index(closest_panel) + 1
+        #     # TODO make proper checks for vertex being inside the region 
+        #     # plane might not be the only option 
+        #     if len(on_panel_planes) == 1:  # found!
+        #         vertex_labels[unlabeled_vert_id] = self._panel_label(on_panel_planes[0])
+        #         label_counts[vertex_labels[unlabeled_vert_id]] += 1
+        #     elif len(on_panel_planes) == 0:  # leave zero -- it's probably a stitch vertex
+        #         vertex_labels[unlabeled_vert_id] = 0
+        #     else:
 
-            label_counts[label] += 1
+        #         print('Neigbour search')
 
+        #         # by this time, many vertices already have labels, so let's just borrow from neigbours
+        #         neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+        #         unlabelled = [unl[0] for unl in vertices_multi_match]
+        #         # check only labeled neigbors
+        #         neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabeled]
+
+        #         if len(neighbors) > 0:
+        #             neighbour_labels = [vertex_labels[vert_id] for vert_id in neighbors]
+                    
+        #             # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
+        #             frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
+        #             vertex_labels[unlabeled_vert_id] = frequent_label
+        #         else:
+        #             # put back 
+        #             # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
+        #             # if the garment is freshly loaded before sim
+        #             print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
+        #             vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
+
+        print('Label evaluation: ', time.time() - start_time)
+
+        # Coloring for visualization
+        start_time = time.time()
+        for i in range(len(vertices)):
             # Color according to evaluated label!
-            color = np.ones(3) * float(label) / (len(self.panel_order()) + 1)
+            color = np.ones(3) * float(vertex_labels[i]) / (len(self.panel_order()) + 1)
             cmds.polyColorPerVertex(self.get_qlcloth_geomentry() + '.vtx[%d]' % i, rgb=color.tolist())
-
-            # break  # debug
-
         cmds.setAttr(self.get_qlcloth_geomentry() + '.displayColors', 1)
         cmds.refresh()
+        print('Colorization: ', time.time() - start_time)
 
         print('Num of vertices per label: {}'.format(label_counts))
-        print('Used expensive checks for {} from {}'.format(count_full_checks, len(vertices)))
+        print('Used expensive checks for {} from {}'.format(total_confisions, len(vertices)))
 
         # TODO account for stitches area
         # TODO optimizations
@@ -712,6 +721,59 @@ class MayaGarment(core.ParametrizedPattern):
             return False
         return True
     
+    def _point_on_plane(self, point, panel, tol=0.001):
+        """
+            Check if a point belongs to the same plane as given in the curve group
+        """
+        # I could check by panel rotation and translation!!
+        rot = self.pattern['panels'][panel]['rotation']
+        transl = np.array(self.pattern['panels'][panel]['translation'])
+
+        # default panel normal upon load, sign doesn't matter here
+        normal = np.array([0., 0., 1.])  
+        rotated_normal = self._applyEuler(normal, rot)
+
+        dot_prod = np.dot(np.array(point) - transl, rotated_normal)
+
+        return np.isclose(dot_prod, 0., atol=tol)
+
+    def _point_in_curve(self, point, curve_group, tol=0.01):
+        """
+            Check if a point is inside a given closed curve region
+            Assuming that the point is roughly in the same plane as the curve
+        """
+        # closed curve mid-point
+        # shoot a ray (new linear curve) and check if it intersects with any of 
+        pass
+
+    def _get_vert_neighbours(self, vert_id):
+        """
+            List the neigbours of given vertex in current cloth mesh
+        """
+        mesh_name = self.get_qlcloth_geomentry()
+
+        edges = cmds.polyListComponentConversion(
+            mesh_name + '.vtx[%d]' % vert_id, 
+            fromVertex=True, toEdge=True)
+
+        neighbors = []
+        for edge in edges:
+            neighbor_verts_str = cmds.polyListComponentConversion(edge, toVertex=True)
+            
+            for neighbor_str in neighbor_verts_str:
+                values = neighbor_str.split(']')[0].split('[')[-1]
+                if ':' in values:
+                    neighbors += [int(x) for x in values.split(':')]
+                else:
+                    neighbors.append(int(values))
+        
+        return list(set(neighbors))  # leave only unique
+
+    def _panel_label(self, panel):
+        """ 
+            Panel label as integer given the name of the panel
+        """
+        return int(self.panel_order().index(panel) + 1)
 
 
 class MayaGarmentWithUI(MayaGarment):
