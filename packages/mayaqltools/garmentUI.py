@@ -22,7 +22,7 @@ import mayaqltools as mymaya
 import customconfig
 
 
-# -------- Main call -------------
+# -------- Main call - Draw the UI -------------
 def start_GUI():
     """Initialize interface"""
 
@@ -60,7 +60,7 @@ def start_GUI():
     cmds.separator()
 
     # Operations
-    equal_rowlayout(4, win_width=window_width, offset=(main_offset / 2))
+    equal_rowlayout(5, win_width=window_width, offset=(main_offset / 2))
     cmds.button(label='Reload Spec', backgroundColor=[255 / 256, 169 / 256, 119 / 256], 
                 command=partial(reload_garment_callback, state))
     sim_button = cmds.button(label='Start Sim', backgroundColor=[227 / 256, 255 / 256, 119 / 256])
@@ -72,7 +72,13 @@ def start_GUI():
     scan_button = cmds.button(label='Imitate 3D Scan', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
     cmds.button(scan_button, edit=True, 
                 command=partial(imitate_3D_scan_callback, scan_button, state))
-                             
+    # TODO fix layout?
+    # TODO update color
+    segm_button = cmds.button(label='Segmentation', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
+    cmds.button(segm_button, edit=True, 
+                command=partial(display_segmentation_callback, segm_button, state))
+    
+
     cmds.setParent('..')
     # separate
     cmds.separator()
@@ -200,6 +206,7 @@ def text_button_group(callback, state, label='', button_label='Click'):
 
 
 # ----- Callbacks -----
+# -- Loading --
 def sample_callback(text, *args):
     print('Called ' + text)
     
@@ -324,8 +331,9 @@ def reload_garment_callback(state, *args):
     if state.garment is not None:
         state.garment.reloadJSON()
         state.reload_garment()
-    
 
+
+# -- Operations --
 def start_sim_callback(button, state, *args):
     """ Start simulation """
     if state.garment is None or state.scene is None:
@@ -386,8 +394,7 @@ def imitate_3D_scan_callback(button, state, *args):
 
     # indicate waiting for imitation finish
     cmds.button(button, edit=True, 
-                label='Scanning...', backgroundColor=[245 / 256, 96 / 256, 66 / 256],
-                command=partial(stop_sim_callback, button, state))
+                label='Scanning...', backgroundColor=[245 / 256, 96 / 256, 66 / 256])
     cmds.refresh(currentView=True)
 
     if 'scan_imitation' in state.config:
@@ -409,6 +416,28 @@ def imitate_3D_scan_callback(button, state, *args):
                 command=partial(imitate_3D_scan_callback, button, state))
 
 
+def display_segmentation_callback(button, state, *args):
+    """
+        Visualize the segmentation labels
+    """
+    print('Segmenting!!')
+    # indicate waiting for imitation finish
+    cmds.button(button, edit=True, 
+                label='Segmenting...', backgroundColor=[245 / 256, 96 / 256, 66 / 256])
+    cmds.refresh(currentView=True)
+
+    state.garment.eval_panel_labels()
+
+    # TODO If evaluated \ if not evaluated
+    # TODO un-visualize functionality
+    # TODO saving the segmentation
+
+    cmds.button(button, edit=True, 
+                label='Segmentation', backgroundColor=[150 / 256, 225 / 256, 80 / 256],
+                command=partial(display_segmentation_callback, button, state))    
+
+
+# -- Saving ---
 def win_closed_callback(*args):
     """Clean-up"""
     # Remove solver objects from the scene

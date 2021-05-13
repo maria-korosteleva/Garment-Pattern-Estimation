@@ -185,6 +185,97 @@ class MayaGarment(core.ParametrizedPattern):
 
         # do nothing if not loaded -- already clean =)
 
+    def eval_panel_labels(self):
+        """
+            Evalute which vertex belongs to which panel
+            NOTE: only applicable to the mesh that was JUST loaded and stitched -- before the sim started
+        """
+        # TODO check if the garment is in correct state
+        print('Evaluating panel labels')
+
+        self.update_verts_info()
+        vertices = self.current_verts
+
+        panel_curves = self.MayaObjects['panels']
+        # self.MayaObjects['panels'][panel_name]['curve_group']
+
+        # https://www.aganimator.com/tutorials
+        # TODO check if this attirubute already exist
+        np_nodes = {}
+        for panel in panel_curves:
+            curve_group = panel_curves[panel]['curve_group']
+            curves = cmds.listRelatives(curve_group, children=True)
+            np_nodes[panel] = []
+
+            # create evaluators for every curve from a panel
+            for curve in curves:
+                # https://www.aganimator.com/tutorials
+                npC = cmds.createNode('nearestPointOnCurve')
+                cmds.connectAttr(curve + '.worldSpace', npC + '.inputCurve')
+                np_nodes[panel].append(npC)
+        
+        bboxes = {}
+        for panel in panel_curves:
+            box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
+            bboxes[panel] = box
+
+        count_full_checks = 0
+        label_counts = [0] * (len(self.panel_order()) + 1)
+        vertices_multi_match = []
+        for i in range(len(vertices)):
+            vertex = vertices[i]
+            # check which panel is the closest one
+            in_bboxes = []
+            for panel in bboxes:
+                if self._point_in_bbox(vertex, bboxes[panel]):
+                    in_bboxes.append(panel)
+            
+            if len(in_bboxes) == 0:
+                label = 0  # stitch label
+            elif len(in_bboxes) == 1:
+                label = self.panel_order().index(in_bboxes[0]) + 1
+            else:
+                # multiple matches -- skip for now
+                vertices_multi_match.append((i, in_bboxes))
+                print('Severe checks!')
+                count_full_checks += 1
+                # more expensive checks to resolve confusion
+                distances = {}
+                for panel in in_bboxes:
+                    distances[panel] = []
+                    for npC in np_nodes[panel]:
+                        cmds.setAttr(npC + '.inPosition', vertex[0], vertex[1], vertex[2], type='double3') 
+                        wsPos = cmds.getAttr(npC + '.position')
+                        # cmds.getAttr(npC + '.parameter')
+                        # TODO add checks for planar configuration (and only then add to the distance dictionary)
+                        distances[panel].append(np.linalg.norm(vertex - wsPos))
+
+                    distances[panel] = min(distances[panel])
+
+                closest_panel = min(distances, key=distances.get)
+
+                label = self.panel_order().index(closest_panel) + 1
+
+            label_counts[label] += 1
+
+            # Color according to evaluated label!
+            color = np.ones(3) * float(label) / (len(self.panel_order()) + 1)
+            cmds.polyColorPerVertex(self.get_qlcloth_geomentry() + '.vtx[%d]' % i, rgb=color.tolist())
+
+            # break  # debug
+
+        cmds.setAttr(self.get_qlcloth_geomentry() + '.displayColors', 1)
+        cmds.refresh()
+
+        print('Num of vertices per label: {}'.format(label_counts))
+        print('Used expensive checks for {} from {}'.format(count_full_checks, len(vertices)))
+
+        # TODO account for stitches area
+        # TODO optimizations
+        # TODO intersections check
+        # TODO Keeping labels array
+        # TODO Saving labels array to file
+
     # ------ Simulation ------
     def add_colliders(self, obstacles=[]):
         """
@@ -607,6 +698,20 @@ class MayaGarment(core.ParametrizedPattern):
             geometry, self.name, hit_border_length, 
             self.config['object_intersect_border_threshold'] if 'object_intersect_border_threshold' in self.config else 0))
         return False
+
+    @staticmethod
+    def _point_in_bbox(point, bbox, tol=0.01):
+        """
+            Check if point is within bbox
+            bbbox given in maya format (float[]	xmin, ymin, zmin, xmax, ymax, zmax.)
+            NOTE: tol value is needed for cases when BBox collapses to 2D
+        """
+        if (point[0] < (bbox[0] - tol) or point[0] > (bbox[3] + tol)
+                or point[1] < (bbox[1] - tol) or point[1] > (bbox[4] + tol)
+                or point[2] < (bbox[2] - tol) or point[2] > (bbox[5] + tol)):
+            return False
+        return True
+    
 
 
 class MayaGarmentWithUI(MayaGarment):
