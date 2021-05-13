@@ -61,6 +61,7 @@ class MayaGarment(core.ParametrizedPattern):
         if self.self_clean:
             self.clean(True)
 
+    # ------ Basic operations ------
     def load(self, obstacles=[], shader_group=None, config={}, parent_group=None):
         """
             Loads current pattern to Maya as simulatable garment.
@@ -97,7 +98,28 @@ class MayaGarment(core.ParametrizedPattern):
         self.MayaObjects['panels'] = {}
         for panel_name in self.pattern['panels']:
             panel_maya = self._load_panel(panel_name, group_name)
-    
+
+    def stitch_panels(self):
+        """
+            Create seams between qualoth panels.
+            Assumes that panels are already loadeded (as curves).
+            Assumes that after stitching every pattern becomes a single piece of geometry
+            Returns
+                Qulaoth cloth object name
+        """
+        self.MayaObjects['stitches'] = []
+        for stitch in self.pattern['stitches']:
+            stitch_id = qw.qlCreateSeam(
+                self._maya_curve_name(stitch[0]), 
+                self._maya_curve_name(stitch[1]))
+            stitch_id = cmds.parent(stitch_id, self.MayaObjects['pattern'])  # organization
+            self.MayaObjects['stitches'].append(stitch_id[0])
+
+        # after stitching, only one cloth\cloth shape object per pattern is left -- move up the hierarechy
+        children = cmds.listRelatives(self.MayaObjects['pattern'], ad=True)
+        cloths = [obj for obj in children if 'qlCloth' in obj]
+        cmds.parent(cloths, self.MayaObjects['pattern'])
+
     def setShaderGroup(self, shader_group=None):
         """
             Sets material properties for the cloth object created from current panel
@@ -112,6 +134,58 @@ class MayaGarment(core.ParametrizedPattern):
         if self.shader_group is not None:
             cmds.sets(self.get_qlcloth_geomentry(), forceElement=self.shader_group)
 
+    def save_mesh(self, folder='', tag='sim'):
+        """
+            Saves cloth as obj file to a given folder or 
+            to the folder with the pattern if not given.
+        """
+        if not self.loaded_to_maya:
+            print('MayaGarmentWarning::Pattern is not yet loaded. Nothing saved')
+            return
+
+        if folder:
+            filepath = folder
+        else:
+            filepath = self.path
+        self._save_to_path(filepath, self.name + '_' + tag)
+
+    def sim_caching(self, caching=True):
+        """Toggles the caching of simulation steps to garment folder"""
+        if caching:
+            # create folder
+            self.cache_path = os.path.join(self.path, self.name + '_simcache')
+            try:
+                os.makedirs(self.cache_path)
+            except OSError as exc:
+                if exc.errno != errno.EEXIST:  # ok if directory exists
+                    raise
+                pass
+        else:
+            # disable caching
+            self.cache_path = ''            
+
+    def clean(self, delete=False):
+        """ Hides/removes the garment from Maya scene 
+            NOTE all of the maya ids assosiated with the garment become invalidated, 
+            if delete flag is True
+        """
+        if self.loaded_to_maya:
+            # Remove from simulation
+            cmds.setAttr(self.get_qlcloth_props_obj() + '.active', 0)
+
+            if delete:
+                print('MayaGarment::Deleting {}'.format(self.MayaObjects['pattern']))
+                cmds.delete(self.MayaObjects['pattern'])
+                qw.deleteSolver()
+
+                self.loaded_to_maya = False
+                self.MayaObjects = {}  # clean 
+            else:
+                cmds.hide(self.MayaObjects['pattern'])                
+
+        # do nothing if not loaded -- already clean =)
+
+    # ------ Simulation ------
     def add_colliders(self, obstacles=[]):
         """
             Adds given Maya objects as colliders of the garment
@@ -134,27 +208,6 @@ class MayaGarment(core.ParametrizedPattern):
             # organize object tree
             collider = cmds.parent(collider, self.MayaObjects['pattern'])
             self.MayaObjects['colliders'].append(collider)
-
-    def clean(self, delete=False):
-        """ Hides/removes the garment from Maya scene 
-            NOTE all of the maya ids assosiated with the garment become invalidated, 
-            if delete flag is True
-        """
-        if self.loaded_to_maya:
-            # Remove from simulation
-            cmds.setAttr(self.get_qlcloth_props_obj() + '.active', 0)
-
-            if delete:
-                print('MayaGarment::Deleting {}'.format(self.MayaObjects['pattern']))
-                cmds.delete(self.MayaObjects['pattern'])
-                qw.deleteSolver()
-
-                self.loaded_to_maya = False
-                self.MayaObjects = {}  # clean 
-            else:
-                cmds.hide(self.MayaObjects['pattern'])                
-
-        # do nothing if not loaded -- already clean =)
 
     def fetchSimProps(self):
         """Fetch garment material & body friction from Maya settings"""
@@ -200,6 +253,42 @@ class MayaGarment(core.ParametrizedPattern):
         # update resolution properties
         qw.setPanelsResolution(self.config['resolution_scale'])
 
+    def update_verts_info(self):
+        """
+            Retrieves current vertex positions from Maya & updates the last state.
+            For best performance, should be called on each iteration of simulation
+            Assumes the object is already loaded & stitched
+        """
+        if not self.loaded_to_maya:
+            raise RuntimeError(
+                'MayaGarmentError::Pattern is not yet loaded. Cannot update verts info')
+
+        # working with meshes http://www.fevrierdorian.com/blog/post/2011/09/27/Quickly-retrieve-vertex-positions-of-a-Maya-mesh-%28English-Translation%29
+        cloth_dag = self.get_qlcloth_geom_dag()
+        
+        mesh = OpenMaya.MFnMesh(cloth_dag)
+        maya_vertices = OpenMaya.MPointArray()
+        mesh.getPoints(maya_vertices, OpenMaya.MSpace.kWorld)
+
+        vertices = np.empty((maya_vertices.length(), 3))
+        for i in range(maya_vertices.length()):
+            for j in range(3):
+                vertices[i, j] = maya_vertices[i][j]
+
+        self.last_verts = self.current_verts
+        self.current_verts = vertices
+
+    def cache_if_enabled(self, frame):
+        """If caching is enabled -> saves current geometry to cache folder
+            Does nothing otherwise """
+        if not self.loaded_to_maya:
+            print('MayaGarmentWarning::Pattern is not yet loaded. Nothing cached')
+            return
+
+        if hasattr(self, 'cache_path') and self.cache_path:
+            self._save_to_path(self.cache_path, self.name + '_{:04d}'.format(frame))
+
+    # ------ Qualoth objects ------
     def get_qlcloth_geomentry(self):
         """
             Find the first Qualoth cloth geometry object belonging to current pattern
@@ -242,31 +331,7 @@ class MayaGarment(core.ParametrizedPattern):
 
         return self.MayaObjects['shapeDAG']
 
-    def update_verts_info(self):
-        """
-            Retrieves current vertex positions from Maya & updates the last state.
-            For best performance, should be called on each iteration of simulation
-            Assumes the object is already loaded & stitched
-        """
-        if not self.loaded_to_maya:
-            raise RuntimeError(
-                'MayaGarmentError::Pattern is not yet loaded. Cannot update verts info')
-
-        # working with meshes http://www.fevrierdorian.com/blog/post/2011/09/27/Quickly-retrieve-vertex-positions-of-a-Maya-mesh-%28English-Translation%29
-        cloth_dag = self.get_qlcloth_geom_dag()
-        
-        mesh = OpenMaya.MFnMesh(cloth_dag)
-        maya_vertices = OpenMaya.MPointArray()
-        mesh.getPoints(maya_vertices, OpenMaya.MSpace.kWorld)
-
-        vertices = np.empty((maya_vertices.length(), 3))
-        for i in range(maya_vertices.length()):
-            for j in range(3):
-                vertices[i, j] = maya_vertices[i][j]
-
-        self.last_verts = self.current_verts
-        self.current_verts = vertices
-
+    # ------ Geometry Checks ------
     def is_static(self, threshold, allowed_non_static_percent=0):
         """
             Checks wether garment is in the static equilibrium
@@ -380,67 +445,6 @@ class MayaGarment(core.ParametrizedPattern):
                 self.config['self_intersect_hit_threshold'] if 'self_intersect_hit_threshold' in self.config else 0))
             # no need to reload -- non-invasive checks 
             return False
-
-    def sim_caching(self, caching=True):
-        """Toggles the caching of simulation steps to garment folder"""
-        if caching:
-            # create folder
-            self.cache_path = os.path.join(self.path, self.name + '_simcache')
-            try:
-                os.makedirs(self.cache_path)
-            except OSError as exc:
-                if exc.errno != errno.EEXIST:  # ok if directory exists
-                    raise
-                pass
-        else:
-            # disable caching
-            self.cache_path = ''            
-    
-    def stitch_panels(self):
-        """
-            Create seams between qualoth panels.
-            Assumes that panels are already loadeded (as curves).
-            Assumes that after stitching every pattern becomes a single piece of geometry
-            Returns
-                Qulaoth cloth object name
-        """
-        self.MayaObjects['stitches'] = []
-        for stitch in self.pattern['stitches']:
-            stitch_id = qw.qlCreateSeam(
-                self._maya_curve_name(stitch[0]), 
-                self._maya_curve_name(stitch[1]))
-            stitch_id = cmds.parent(stitch_id, self.MayaObjects['pattern'])  # organization
-            self.MayaObjects['stitches'].append(stitch_id[0])
-
-        # after stitching, only one cloth\cloth shape object per pattern is left -- move up the hierarechy
-        children = cmds.listRelatives(self.MayaObjects['pattern'], ad=True)
-        cloths = [obj for obj in children if 'qlCloth' in obj]
-        cmds.parent(cloths, self.MayaObjects['pattern'])
-
-    def save_mesh(self, folder='', tag='sim'):
-        """
-            Saves cloth as obj file to a given folder or 
-            to the folder with the pattern if not given.
-        """
-        if not self.loaded_to_maya:
-            print('MayaGarmentWarning::Pattern is not yet loaded. Nothing saved')
-            return
-
-        if folder:
-            filepath = folder
-        else:
-            filepath = self.path
-        self._save_to_path(filepath, self.name + '_' + tag)
-
-    def cache_if_enabled(self, frame):
-        """If caching is enabled -> saves current geometry to cache folder
-            Does nothing otherwise """
-        if not self.loaded_to_maya:
-            print('MayaGarmentWarning::Pattern is not yet loaded. Nothing cached')
-            return
-
-        if hasattr(self, 'cache_path') and self.cache_path:
-            self._save_to_path(self.cache_path, self.name + '_{:04d}'.format(frame))
 
     # ------ ~Private -------
     def _load_panel(self, panel_name, pattern_group=None):
