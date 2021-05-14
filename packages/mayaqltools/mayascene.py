@@ -225,52 +225,62 @@ class MayaGarment(core.ParametrizedPattern):
 
         # eval for confusing cases
         total_confisions = len(vertices_multi_match)
-        # while len(vertices_multi_match) > 0:
-        #     unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
+        while len(vertices_multi_match) > 0:
+            unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
 
-        #     # check if vert in on the plane of any of the panels
-        #     on_panel_planes = []
-        #     for panel in matched_panels:
-        #         if self._point_on_plane(vertices[unlabeled_vert_id], panel):
-        #             on_panel_planes.append(panel)
+            # check if vert in on the plane of any of the panels
+            on_panel_planes = []
+            for panel in matched_panels:
+                if self._point_on_plane(vertices[unlabeled_vert_id], panel):
+                    on_panel_planes.append(panel)
 
-        #     # TODO make proper checks for vertex being inside the region 
-        #     # plane might not be the only option 
-        #     if len(on_panel_planes) == 1:  # found!
-        #         vertex_labels[unlabeled_vert_id] = self._panel_label(on_panel_planes[0])
-        #         label_counts[vertex_labels[unlabeled_vert_id]] += 1
-        #     elif len(on_panel_planes) == 0:  # leave zero -- it's probably a stitch vertex
-        #         vertex_labels[unlabeled_vert_id] = 0
-        #     else:
+            # plane might not be the only option 
+            if len(on_panel_planes) == 1:  # found!
+                vertex_labels[unlabeled_vert_id] = self._panel_label(on_panel_planes[0])
+                label_counts[vertex_labels[unlabeled_vert_id]] += 1
+            elif len(on_panel_planes) == 0:  # leave zero -- it's probably a stitch vertex
+                vertex_labels[unlabeled_vert_id] = 0
+            else:
 
-        #         print('Neigbour search')
+                print('Neigbour search')
 
-        #         # by this time, many vertices already have labels, so let's just borrow from neigbours
-        #         neighbors = self._get_vert_neighbours(unlabeled_vert_id)
-        #         unlabelled = [unl[0] for unl in vertices_multi_match]
-        #         # check only labeled neigbors
-        #         neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabeled]
+                # by this time, many vertices already have labels, so let's just borrow from neigbours
+                neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+                unlabelled = [unl[0] for unl in vertices_multi_match]
+                # check only labeled neigbors
+                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabeled]
 
-        #         if len(neighbors) > 0:
-        #             neighbour_labels = [vertex_labels[vert_id] for vert_id in neighbors]
+                if len(neighbors) > 0:
+                    neighbour_labels = [vertex_labels[vert_id] for vert_id in neighbors]
                     
-        #             # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
-        #             frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
-        #             vertex_labels[unlabeled_vert_id] = frequent_label
-        #         else:
-        #             # put back 
-        #             # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
-        #             # if the garment is freshly loaded before sim
-        #             print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
-        #             vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
+                    # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
+                    frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
+                    vertex_labels[unlabeled_vert_id] = frequent_label
+                else:
+                    # put back 
+                    # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
+                    # if the garment is freshly loaded before sim
+                    print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
+                    vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
 
         print('Label evaluation: ', time.time() - start_time)
 
         # Coloring for visualization
+        # https://www.schemecolor.com/bright-rainbow-colors.php
+        color_hex = ['FF0900', 'FF7F00', 'FFEF00', '00F11D', '0079FF', 'A800FF']
+        color_list = np.empty((len(color_hex), 3))
+        for idx in range(len(color_hex)):
+            color_list[idx] = np.array([int(color_hex[idx][i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
+
         start_time = time.time()
         for i in range(len(vertices)):
             # Color according to evaluated label!
-            color = np.ones(3) * float(vertex_labels[i]) / (len(self.panel_order()) + 1)
+            label = vertex_labels[i]
+
+            # color selection with expnasion if the list is too small
+            factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
+            color = color_list[color_id] / factor  # gets darker the more labels there are
+
             cmds.polyColorPerVertex(self.get_qlcloth_geomentry() + '.vtx[%d]' % i, rgb=color.tolist())
         cmds.setAttr(self.get_qlcloth_geomentry() + '.displayColors', 1)
         cmds.refresh()
