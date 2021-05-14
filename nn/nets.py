@@ -545,6 +545,9 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # defaults
         if 'unused_panel_threshold' not in self.config:
             self.config['unused_panel_threshold'] = [0., 0.]
+        if 'local_attention' not in self.config:
+            # Has to be false for the old runs that don't have this setting and rely on global attention
+            self.config['local_attention'] = False  
 
         # TODO loadable during resume?
         # initial value
@@ -555,7 +558,10 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # taking in per-point features and global encoding, outputting point weight per (potential) panel
         # Segmentaition aims to ensure that each point belongs to min number of panels
         # Global context gives understanding of the cutting pattern 
-        attention_input_size = self.config['pattern_encoding_size'] + self.feature_extractor.config['EConv_feature']
+        if self.config['local_attention']:
+            attention_input_size = self.feature_extractor.config['EConv_feature']  # only local feature
+        else:
+            attention_input_size = self.config['pattern_encoding_size'] + self.feature_extractor.config['EConv_feature']
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
             Sparsemax(dim=1)  # in the feature dimention
@@ -576,15 +582,21 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # ------ Point cloud features -------
         batch_size = positions_batch.shape[0]
         # per-point and total encodings
-        init_pattern_encodings, point_features_flat, batch = self.feature_extractor(positions_batch)
+        init_pattern_encodings, point_features_flat, batch = self.feature_extractor(
+            positions_batch, 
+            not self.config['local_attention']  # don't need global pool in this case
+        )
         num_points = point_features_flat.shape[0] // batch_size
 
         # ----- Predict per-point panel scores (as attention weights) -----
         # propagate the per-pattern global encoding for each point
-        global_enc_propagated = init_pattern_encodings.unsqueeze(1).repeat(1, num_points, 1).view(
-            [-1, init_pattern_encodings.shape[-1]])
+        if self.config['local_attention']:
+            points_weights = self.point_segment_mlp(point_features_flat)
+        else:
+            global_enc_propagated = init_pattern_encodings.unsqueeze(1).repeat(1, num_points, 1).view(
+                [-1, init_pattern_encodings.shape[-1]])
 
-        points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
+            points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
 
         # ----- Getting per-panel features after attention application ------
         all_panel_features = []
@@ -615,7 +627,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
                 panel_att_weights = points_weights[garment_id, :, panel_id]
                 
                 weights_sum = panel_att_weights.sum()
-                print(weights_sum, sum_threshold)
+                # print(weights_sum, sum_threshold)
 
                 if weights_sum < sum_threshold:
                     # Too little points have selected this panel -- so it's likely not present at all

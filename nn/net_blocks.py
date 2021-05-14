@@ -157,7 +157,7 @@ class EdgeConvFeatures(nn.Module):
 
         self.lin = nn.Linear(out_features, out_size)
 
-    def forward(self, positions):
+    def forward(self, positions, global_pool=True):
         batch_size = positions.size(0)
         n_vertices = positions.size(1)
         # flatten the batch for torch-geometric batch format
@@ -178,13 +178,16 @@ class EdgeConvFeatures(nn.Module):
             if self.config['skip_connections']:
                 aggr_features.append(self.global_pool(out, batch, batch_size))
         
-        # 'out' now holds per-point features
-        pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
+        if global_pool:
+            # 'out' now holds per-point features
+            pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
 
-        # post-processing
-        encoding = self.lin(pooled_feature)
+            # post-processing
+            encoding = self.lin(pooled_feature)
 
-        return encoding, out, batch
+            return encoding, out, batch
+        else:
+            return None, out, batch
 
 
 class DynamicASAPool(nn.Module):
