@@ -193,6 +193,21 @@ class MayaGarment(core.ParametrizedPattern):
             Color every vertes of the garment according to the panel is belongs to
             (as indicated in self.vertex_labels)
         """
+
+        # group vertices by label (it's faster then coloring one-by-one)
+        vertex_select_lists = dict.fromkeys(self.panel_order() + ['Other'])
+        for key in vertex_select_lists:
+            vertex_select_lists[key] = []
+
+        for vert_idx in range(len(self.current_verts)):
+            str_label = self.vertex_labels[vert_idx]
+            vert_addr = '{}.vtx[{}]'.format(self.get_qlcloth_geomentry(), vert_idx)
+
+            if str_label not in self.panel_order():
+                str_label = 'Other'
+
+            vertex_select_lists[str_label].append(vert_addr)
+
         # Coloring for visualization
         # https://www.schemecolor.com/bright-rainbow-colors.php
         color_hex = ['FF0900', 'FF7F00', 'FFEF00', '00F11D', '0079FF', 'A800FF']
@@ -201,20 +216,22 @@ class MayaGarment(core.ParametrizedPattern):
             color_list[idx] = np.array([int(color_hex[idx][i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
 
         start_time = time.time()
-        for i in range(len(self.current_verts)):
-            # Color according to evaluated label!
-            panel_name = self.vertex_labels[i]
+        for label, str_label in enumerate(vertex_select_lists.keys()):
 
-            if panel_name is None:  # non-segmented becomes black
+            if str_label == 'Other':  # non-segmented becomes black
                 color = np.zeros(3)
             else:
-                label = self._panel_to_id(panel_name)  # numeric for color scaling
-
-                # color selection with expnasion if the list is too small
+                # color selection with expansion if the list is too small
                 factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
                 color = color_list[color_id] / factor  # gets darker the more labels there are
 
-            cmds.polyColorPerVertex(self.get_qlcloth_geomentry() + '.vtx[%d]' % i, rgb=color.tolist())
+            # color corresponding vertices
+            cmds.select(clear=True)
+            cmds.select(vertex_select_lists[str_label])
+            cmds.polyColorPerVertex(rgb=color.tolist())
+
+        cmds.select(clear=True)
+
         cmds.setAttr(self.get_qlcloth_geomentry() + '.displayColors', 1)
         cmds.refresh()
         print('Colorization: ', time.time() - start_time)
