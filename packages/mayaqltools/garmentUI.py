@@ -91,7 +91,7 @@ def start_GUI():
     cmds.button(label='Save snapshot', backgroundColor=[227 / 256, 255 / 256, 119 / 256],
                 command=partial(quick_save_callback, saving_to_field, state), 
                 ann='Quick save with pattern spec and sim config')
-    cmds.button(label='Save with 3D', backgroundColor=[255 / 256, 140 / 256, 73 / 256], 
+    cmds.button(label='Save with render', backgroundColor=[255 / 256, 140 / 256, 73 / 256], 
                 command=partial(full_save_callback, saving_to_field, state), 
                 ann='Full save with pattern spec, sim config, garment mesh & rendering')
     cmds.setParent('..')
@@ -515,6 +515,8 @@ def quick_save_callback(view_field, state, *args):
 
     state.fetch()
     state.serialize(new_dir)
+
+    self.garment.save_mesh(new_dir)
 
     print('Pattern spec and sim config saved to ' + new_dir)
 
