@@ -193,7 +193,6 @@ class MayaGarment(core.ParametrizedPattern):
             Color every vertes of the garment according to the panel is belongs to
             (as indicated in self.vertex_labels)
         """
-
         # group vertices by label (it's faster then coloring one-by-one)
         vertex_select_lists = dict.fromkeys(self.panel_order() + ['Other'])
         for key in vertex_select_lists:
@@ -201,11 +200,10 @@ class MayaGarment(core.ParametrizedPattern):
 
         for vert_idx in range(len(self.current_verts)):
             str_label = self.vertex_labels[vert_idx]
-            vert_addr = '{}.vtx[{}]'.format(self.get_qlcloth_geomentry(), vert_idx)
-
             if str_label not in self.panel_order():
                 str_label = 'Other'
 
+            vert_addr = '{}.vtx[{}]'.format(self.get_qlcloth_geomentry(), vert_idx)
             vertex_select_lists[str_label].append(vert_addr)
 
         # Coloring for visualization
@@ -217,7 +215,6 @@ class MayaGarment(core.ParametrizedPattern):
 
         start_time = time.time()
         for label, str_label in enumerate(vertex_select_lists.keys()):
-
             if str_label == 'Other':  # non-segmented becomes black
                 color = np.zeros(3)
             else:
