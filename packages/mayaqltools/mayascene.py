@@ -524,7 +524,10 @@ class MayaGarment(core.ParametrizedPattern):
         """
             Evalute which vertex belongs to which panel
             NOTE: only applicable to the mesh that was JUST loaded and stitched -- before the sim started
-            Hence fuction is only called once on garment load
+                Hence fuction is only called once on garment load
+            NOTE: if garment resolution was changed from Maya tools, 
+                the segmentation is not guranteed to be consistent with the change, 
+                (reload garment geometry to get correct segmentation)
         """
         if not self.loaded_to_maya:
             raise RuntimeError('Garment should be loaded when evaluating vertex segmentation')
