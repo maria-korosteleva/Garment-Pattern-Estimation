@@ -688,7 +688,6 @@ class MayaGarment(core.ParametrizedPattern):
         with open(filepath, 'w') as f:
             for panel_name in self.vertex_labels:
                 f.write("%s\n" % panel_name)
-
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry
