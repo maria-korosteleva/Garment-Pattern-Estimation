@@ -286,9 +286,7 @@ class BasicPattern(object):
                     padded=padded)
                 in_panel_order.append(panel_name)
             except EmptyPanelError as e:
-                # Found an empty panel in the input
-                # While the rest of the panels should also be empty (normally), 
-                # the checks are run for all panels to make errors in predictions obvious if they occur
+                # Found an empty panel in the input -- moving on to the next one
                 pass
 
         self.pattern['panel_order'] = in_panel_order  # save the incoming panel order

@@ -65,10 +65,6 @@ def get_values_from_args():
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
         'attention_token_size': 20,
-        'unused_panel_threshold': [
-            0.07 * data_config['mesh_samples'],  # ~about this N points classified to belong to panel
-            0.02 * data_config['mesh_samples']  # ~about this N points classified to belong to panel
-        ],
         'local_attention': True,
 
         # stitches
@@ -169,11 +165,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-local-att', 
+        run_name='Tee-JS-local-empty-orderless', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)
+    split, data_config = get_data_config(in_data_config, old_stats=False)
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
