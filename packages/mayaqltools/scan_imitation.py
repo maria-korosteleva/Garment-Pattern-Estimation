@@ -88,7 +88,7 @@ def remove_invisible(target, obstacles=[], num_rays=30, visibile_rays=4):
         face_id = target_face_iterator.index()
 
         visible_count = 0
-        visible=False
+        visible = False
         # Send rays in all directions from the currect vertex
         for _ in range(num_rays):
             rayDir = _sample_on_sphere(ray_dist)
@@ -98,7 +98,7 @@ def remove_invisible(target, obstacles=[], num_rays=30, visibile_rays=4):
                     and not utils.test_ray_intersect(target_mesh, face_mean, rayDir, target_accelerator, hit_tol=1e-5)):  # intersects itself
                 visible_count += 1
                 if visible_count >= visibile_rays:  # enough rays are visible -- no need to test more; Python 2.7 division
-                    visible=True
+                    visible = True
 
         if not visible:
             to_delete.append(face_id)
