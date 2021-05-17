@@ -69,12 +69,10 @@ def start_GUI():
     collisions_button = cmds.button(label='Test Collisions', backgroundColor=[250 / 256, 200 / 256, 119 / 256])
     cmds.button(collisions_button, edit=True, 
                 command=partial(check_collisions_callback, collisions_button, state))
-    scan_button = cmds.button(label='Imitate 3D Scan', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
+    scan_button = cmds.button(label='3D Scan', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
     cmds.button(scan_button, edit=True, 
                 command=partial(imitate_3D_scan_callback, scan_button, state))
-    # TODO fix layout?
-    # TODO update color
-    segm_button = cmds.button(label='Segmentation', backgroundColor=[200 / 256, 225 / 256, 80 / 256])
+    segm_button = cmds.button(label='Segmentation', backgroundColor=[150 / 256, 225 / 256, 80 / 256])
     cmds.button(segm_button, edit=True, 
                 command=partial(display_segmentation_callback, segm_button, state))
     
@@ -136,7 +134,8 @@ class State(object):
 
     def fetch(self):
         """Update info in deendent object from Maya"""
-        self.scene.fetch_props_from_Maya()
+        if self.scene is not None:
+            self.scene.fetch_props_from_Maya()
         garment_conf = self.garment.fetchSimProps()
         self.config.set_section_config(
             'sim', 
@@ -426,11 +425,7 @@ def display_segmentation_callback(button, state, *args):
                 label='Segmenting...', backgroundColor=[245 / 256, 96 / 256, 66 / 256])
     cmds.refresh(currentView=True)
 
-    state.garment.eval_panel_labels()
-
-    # TODO If evaluated \ if not evaluated
-    # TODO un-visualize functionality
-    # TODO saving the segmentation
+    state.garment.display_vertex_segmentation()
 
     cmds.button(button, edit=True, 
                 label='Segmentation', backgroundColor=[150 / 256, 225 / 256, 80 / 256],
@@ -487,11 +482,12 @@ def _new_dir(root_dir, tag='snap'):
 
 
 def _create_saving_dir(view_field, state):
-    """Try if saving is possible and create directory if yes"""
-    if state.garment is None or state.scene is None:
-        cmds.confirmDialog(title='Error', message='Load pattern specification & body info first')
-        raise SceneSavingError('Scene is not ready')
+    """Create directory to save to """
 
+    if state.garment is None:
+        cmds.confirmDialog(title='Error', message='Load pattern specification first')
+        raise SceneSavingError('Garment is not loaded before saving')
+    
     if state.save_to is None:
         if not saving_folder_callback(view_field, state):
             raise SceneSavingError('Saving folder not supplied')
@@ -516,13 +512,17 @@ def quick_save_callback(view_field, state, *args):
     state.fetch()
     state.serialize(new_dir)
 
-    self.garment.save_mesh(new_dir)
+    state.garment.save_mesh(new_dir)
 
-    print('Pattern spec and sim config saved to ' + new_dir)
+    print('Garment info saved to ' + new_dir)
 
 
 def full_save_callback(view_field, state, *args):
     """Full save with pattern spec, sim config, garment mesh & rendering"""
+
+    if state.garment is None or state.scene is None:
+        cmds.confirmDialog(title='Error', message='Load pattern specification & body info first')
+        return
 
     # do the same as for quick save
     try: 

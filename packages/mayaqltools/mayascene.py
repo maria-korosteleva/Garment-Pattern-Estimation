@@ -83,6 +83,9 @@ class MayaGarment(core.ParametrizedPattern):
         self.add_colliders(obstacles)
         self.setSimProps(config)
 
+        # should be done on the mesh after stitching and res adjustment, but before sim
+        self._eval_vertex_segmentation()  
+
         print('Garment ' + self.name + ' is loaded to Maya')
 
     def load_panels(self, parent_group=None):
@@ -136,7 +139,7 @@ class MayaGarment(core.ParametrizedPattern):
 
     def save_mesh(self, folder='', tag='sim'):
         """
-            Saves cloth as obj file to a given folder or 
+            Saves cloth as obj file and its per vertex segmentation to a given folder or 
             to the folder with the pattern if not given.
         """
         if not self.loaded_to_maya:
@@ -185,85 +188,11 @@ class MayaGarment(core.ParametrizedPattern):
 
         # do nothing if not loaded -- already clean =)
 
-    def eval_panel_labels(self):
+    def display_vertex_segmentation(self):
         """
-            Evalute which vertex belongs to which panel
-            NOTE: only applicable to the mesh that was JUST loaded and stitched -- before the sim started
+            Color every vertes of the garment according to the panel is belongs to
+            (as indicated in self.vertex_labels)
         """
-        # TODO check if the garment is in correct state
-        print('Evaluating panel labels')
-
-        self.update_verts_info()
-        vertices = self.current_verts
-        panel_curves = self.MayaObjects['panels']
-
-        # Fast BBoxes for each panel for testing (should work for most vertices)
-        bboxes = {}
-        for panel in panel_curves:
-            box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
-            bboxes[panel] = box
-
-        start_time = time.time()
-        vertex_labels = np.zeros(len(vertices), dtype=int)
-        label_counts = [0] * (len(self.panel_order()) + 1)
-        vertices_multi_match = []
-        for i in range(len(vertices)):
-            vertex = vertices[i]
-            # check which panel is the closest one
-            in_bboxes = []
-            for panel in bboxes:
-                if self._point_in_bbox(vertex, bboxes[panel]):
-                    in_bboxes.append(panel)
-            
-            if len(in_bboxes) == 1:
-                label = self._panel_label(in_bboxes[0])
-                vertex_labels[i] = label
-                label_counts[label] += 1
-            else:  # multiple or zero matches -- handle later
-                vertices_multi_match.append((i, in_bboxes))
-
-        # eval for confusing cases
-        total_confisions = len(vertices_multi_match)
-        while len(vertices_multi_match) > 0:
-            unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
-
-            # check if vert in on the plane of any of the panels
-            on_panel_planes = []
-            for panel in matched_panels:
-                if self._point_on_plane(vertices[unlabeled_vert_id], panel):
-                    on_panel_planes.append(panel)
-
-            # plane might not be the only option 
-            if len(on_panel_planes) == 1:  # found!
-                vertex_labels[unlabeled_vert_id] = self._panel_label(on_panel_planes[0])
-                label_counts[vertex_labels[unlabeled_vert_id]] += 1
-            else:
-                # by this time, many vertices already have labels, so let's just borrow from neigbours
-                neighbors = self._get_vert_neighbours(unlabeled_vert_id)
-
-                if len(neighbors) == 0:
-                    print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
-                    continue
-
-                unlabelled = [unl[0] for unl in vertices_multi_match]
-                # check only labeled neigbors
-                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabelled]
-
-                if len(neighbors) > 0:
-                    neighbour_labels = [vertex_labels[vert_id] for vert_id in neighbors]
-                    
-                    # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
-                    frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
-                    vertex_labels[unlabeled_vert_id] = frequent_label
-                else:
-                    # put back 
-                    # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
-                    # if the garment is freshly loaded before sim
-                    print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
-                    vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
-
-        print('Label evaluation: ', time.time() - start_time)
-
         # Coloring for visualization
         # https://www.schemecolor.com/bright-rainbow-colors.php
         color_hex = ['FF0900', 'FF7F00', 'FFEF00', '00F11D', '0079FF', 'A800FF']
@@ -272,21 +201,23 @@ class MayaGarment(core.ParametrizedPattern):
             color_list[idx] = np.array([int(color_hex[idx][i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
 
         start_time = time.time()
-        for i in range(len(vertices)):
+        for i in range(len(self.current_verts)):
             # Color according to evaluated label!
-            label = vertex_labels[i]
+            panel_name = self.vertex_labels[i]
 
-            # color selection with expnasion if the list is too small
-            factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
-            color = color_list[color_id] / factor  # gets darker the more labels there are
+            if panel_name is None:  # non-segmented becomes black
+                color = np.zeros(3)
+            else:
+                label = self._panel_to_id(panel_name)  # numeric for color scaling
+
+                # color selection with expnasion if the list is too small
+                factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
+                color = color_list[color_id] / factor  # gets darker the more labels there are
 
             cmds.polyColorPerVertex(self.get_qlcloth_geomentry() + '.vtx[%d]' % i, rgb=color.tolist())
         cmds.setAttr(self.get_qlcloth_geomentry() + '.displayColors', 1)
         cmds.refresh()
         print('Colorization: ', time.time() - start_time)
-
-        print('Num of vertices per label: {}'.format(label_counts))
-        print('Used expensive checks for {} from {}'.format(total_confisions, len(vertices)))
 
     # ------ Simulation ------
     def add_colliders(self, obstacles=[]):
@@ -589,6 +520,90 @@ class MayaGarment(core.ParametrizedPattern):
 
         return panel_group
 
+    def _eval_vertex_segmentation(self):
+        """
+            Evalute which vertex belongs to which panel
+            NOTE: only applicable to the mesh that was JUST loaded and stitched -- before the sim started
+            Hence fuction is only called once on garment load
+        """
+        if not self.loaded_to_maya:
+            raise RuntimeError('Garment should be loaded when evaluating vertex segmentation')
+
+        self.update_verts_info()
+        vertices = self.current_verts
+        panel_curves = self.MayaObjects['panels']
+        self.vertex_labels = [None] * len(vertices)
+
+        # Fast BBoxes for each panel for testing (should work for most vertices)
+        bboxes = {}
+        for panel in panel_curves:
+            box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
+            bboxes[panel] = box
+
+        start_time = time.time()
+        label_counts = [0] * (len(self.panel_order()) + 1)
+        vertices_multi_match = []
+        for i in range(len(vertices)):
+            vertex = vertices[i]
+            # check which panel is the closest one
+            in_bboxes = []
+            for panel in bboxes:
+                if self._point_in_bbox(vertex, bboxes[panel]):
+                    in_bboxes.append(panel)
+            
+            if len(in_bboxes) == 1:
+                self.vertex_labels[i] = in_bboxes[0]
+                label = self._panel_to_id(in_bboxes[0])
+                label_counts[label] += 1
+            else:  # multiple or zero matches -- handle later
+                vertices_multi_match.append((i, in_bboxes))
+
+        # eval for confusing cases
+        total_confisions = len(vertices_multi_match)
+        while len(vertices_multi_match) > 0:
+            unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
+
+            # check if vert in on the plane of any of the panels
+            on_panel_planes = []
+            for panel in matched_panels:
+                if self._point_on_plane(vertices[unlabeled_vert_id], panel):
+                    on_panel_planes.append(panel)
+
+            # plane might not be the only option 
+            if len(on_panel_planes) == 1:  # found!
+                self.vertex_labels[unlabeled_vert_id] = on_panel_planes[0]
+
+                label_counts[self._panel_to_id(on_panel_planes[0])] += 1
+            else:
+                # by this time, many vertices already have labels, so let's just borrow from neigbours
+                neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+
+                if len(neighbors) == 0:
+                    print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
+                    continue
+
+                unlabelled = [unl[0] for unl in vertices_multi_match]
+                # check only labeled neigbors
+                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabelled]
+
+                if len(neighbors) > 0:
+                    neighbour_labels = [self.vertex_labels[vert_id] for vert_id in neighbors]
+                    
+                    # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
+                    frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
+                    self.vertex_labels[unlabeled_vert_id] = frequent_label
+                else:
+                    # put back 
+                    # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
+                    # if the garment is freshly loaded before sim
+                    print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
+                    vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
+
+        print('Label evaluation: ', time.time() - start_time)
+
+        print('Num of vertices per label: {}'.format(label_counts))
+        print('Used expensive checks for {} from {}'.format(total_confisions, len(vertices)))
+
     def _edge_as_3d_tuple_list(self, edge, vertices):
         """
             Represents given edge object as list of control points
@@ -659,9 +674,18 @@ class MayaGarment(core.ParametrizedPattern):
         return self.MayaObjects['panels'][panel_name]['edges'][edge_id]
 
     def _save_to_path(self, path, filename):
-        """Save current state of cloth object to given path with given filename as OBJ"""
+        """Save current state of cloth object to given path with given filename"""
+        
+        # geometry
         filepath = os.path.join(path, filename + '.obj')
         utils.save_mesh(self.get_qlcloth_geomentry(), filepath)
+
+        # segmentation
+        filepath = os.path.join(path, filename + '_segmentation.txt')
+        with open(filepath, 'w') as f:
+            for panel_name in self.vertex_labels:
+                f.write("%s\n" % panel_name)
+
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry
@@ -771,7 +795,7 @@ class MayaGarment(core.ParametrizedPattern):
         
         return list(set(neighbors))  # leave only unique
 
-    def _panel_label(self, panel):
+    def _panel_to_id(self, panel):
         """ 
             Panel label as integer given the name of the panel
         """
