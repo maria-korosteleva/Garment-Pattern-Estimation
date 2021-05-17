@@ -219,9 +219,8 @@ class MayaGarment(core.ParametrizedPattern):
                 label = self._panel_label(in_bboxes[0])
                 vertex_labels[i] = label
                 label_counts[label] += 1
-            elif len(in_bboxes) > 1:  # multiple matches -- skip for now
+            else:  # multiple or zero matches -- handle later
                 vertices_multi_match.append((i, in_bboxes))
-            # Leave zero otherwise -- those are stitches!
 
         # eval for confusing cases
         total_confisions = len(vertices_multi_match)
@@ -238,17 +237,17 @@ class MayaGarment(core.ParametrizedPattern):
             if len(on_panel_planes) == 1:  # found!
                 vertex_labels[unlabeled_vert_id] = self._panel_label(on_panel_planes[0])
                 label_counts[vertex_labels[unlabeled_vert_id]] += 1
-            elif len(on_panel_planes) == 0:  # leave zero -- it's probably a stitch vertex
-                vertex_labels[unlabeled_vert_id] = 0
             else:
-
-                print('Neigbour search')
-
                 # by this time, many vertices already have labels, so let's just borrow from neigbours
                 neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+
+                if len(neighbors) == 0:
+                    print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
+                    continue
+
                 unlabelled = [unl[0] for unl in vertices_multi_match]
                 # check only labeled neigbors
-                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabeled]
+                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabelled]
 
                 if len(neighbors) > 0:
                     neighbour_labels = [vertex_labels[vert_id] for vert_id in neighbors]
@@ -288,12 +287,6 @@ class MayaGarment(core.ParametrizedPattern):
 
         print('Num of vertices per label: {}'.format(label_counts))
         print('Used expensive checks for {} from {}'.format(total_confisions, len(vertices)))
-
-        # TODO account for stitches area
-        # TODO optimizations
-        # TODO intersections check
-        # TODO Keeping labels array
-        # TODO Saving labels array to file
 
     # ------ Simulation ------
     def add_colliders(self, obstacles=[]):
@@ -769,7 +762,6 @@ class MayaGarment(core.ParametrizedPattern):
         neighbors = []
         for edge in edges:
             neighbor_verts_str = cmds.polyListComponentConversion(edge, toVertex=True)
-            
             for neighbor_str in neighbor_verts_str:
                 values = neighbor_str.split(']')[0].split('[')[-1]
                 if ':' in values:
