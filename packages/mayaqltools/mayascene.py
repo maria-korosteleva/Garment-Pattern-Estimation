@@ -83,7 +83,10 @@ class MayaGarment(core.ParametrizedPattern):
         self.add_colliders(obstacles)
         self.setSimProps(config)
 
-        # should be done on the mesh after stitching and res adjustment, but before sim
+        # remove the junk after garment was stitched
+        cmds.polyClean(self.get_qlcloth_geomentry())
+
+        # should be done on the mesh after stitching, res adjustment & clean-up, but before sim
         self._eval_vertex_segmentation()  
 
         print('Garment ' + self.name + ' is loaded to Maya')
@@ -215,17 +218,18 @@ class MayaGarment(core.ParametrizedPattern):
 
         start_time = time.time()
         for label, str_label in enumerate(vertex_select_lists.keys()):
-            if str_label == 'Other':  # non-segmented becomes black
-                color = np.zeros(3)
-            else:
-                # color selection with expansion if the list is too small
-                factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
-                color = color_list[color_id] / factor  # gets darker the more labels there are
+            if len(vertex_select_lists[str_label]) > 0:   # 'Other' may not be present at all
+                if str_label == 'Other':  # non-segmented becomes black
+                    color = np.zeros(3)
+                else:
+                    # color selection with expansion if the list is too small
+                    factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
+                    color = color_list[color_id] / factor  # gets darker the more labels there are
 
-            # color corresponding vertices
-            cmds.select(clear=True)
-            cmds.select(vertex_select_lists[str_label])
-            cmds.polyColorPerVertex(rgb=color.tolist())
+                # color corresponding vertices
+                cmds.select(clear=True)
+                cmds.select(vertex_select_lists[str_label])
+                cmds.polyColorPerVertex(rgb=color.tolist())
 
         cmds.select(clear=True)
 
