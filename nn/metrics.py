@@ -773,7 +773,7 @@ class ComposedPatternLoss():
             gt_updated = {}
 
             # Match the order
-            if self.config['order_by'] == 'placement' or self.config['order_by'] == 'stitch_tags':
+            if self.config['order_by'] == 'placement':
                 if ('translations' not in preds 
                         or 'rotations' not in preds):
                     raise ValueError('ComposedPatternLoss::Error::Ordering by placement requested but placement is not predicted')
@@ -782,6 +782,10 @@ class ComposedPatternLoss():
                 gt_placement = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
                 gt_permutation = self._panel_order_match(pred_placement, gt_placement)
+            elif self.config['order_by'] == 'translation':
+                if 'translations' not in preds:
+                    raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
+                gt_permutation = self._panel_order_match(preds['translations'], ground_truth['translations'])
 
             elif self.config['order_by'] == 'stitches':
                 if ('free_edges_mask' not in preds
