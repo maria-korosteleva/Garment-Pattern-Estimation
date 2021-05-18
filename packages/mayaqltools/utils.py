@@ -2,11 +2,12 @@
 
 import ctypes
 import os
+import numpy as np
 from maya import OpenMaya
 from maya import cmds
 
-# ----- Working with Mesh objects -----
 
+# ----- Working with files -----
 def load_file(filepath, name='object'):
     """Load mesh to the scene"""
     if not os.path.isfile(filepath):
@@ -18,6 +19,26 @@ def load_file(filepath, name='object'):
     return obj
 
 
+def save_mesh(target, to_file):
+    """Save given object to file as a mesh"""
+
+    # Make sure to only select requested mesh
+    cmds.select(clear=True)
+    cmds.select(target)
+
+    cmds.file(
+        to_file,
+        type='OBJExport',  
+        exportSelectedStrict=True,  # export selected -- only explicitely selected
+        options='groups=0;ptgroups=0;materials=0;smoothing=0;normals=1',  # very simple obj
+        force=True,   # force override if file exists
+        defaultExtensions=False
+    )
+
+    cmds.select(clear=True)
+
+
+# ----- Mesh info -----
 def get_dag(object_name):
     """Return DAG for requested object"""
     selectionList = OpenMaya.MSelectionList()
@@ -37,6 +58,28 @@ def get_mesh_dag(object_name):
     return mesh, dag
 
 
+def match_vert_lists(short_list, long_list):
+    """
+        Find the vertices from long list that correspond to verts in short_list
+        Both lists are numpy arrays
+        NOTE: Assuming order is matching => O(len(long_list)) complexity: 
+            order of vertices in short list is the same as in long list (for those that are left)
+    """
+    match_list = []
+
+    idx_short = 0
+    for idx_long in range(len(long_list)):
+        long_vertex = long_list[idx_long]
+        short_vertex = short_list[idx_short]
+
+        if all(np.isclose(short_vertex, long_vertex, atol=1e-5)):
+            match_list.append(idx_long)
+            idx_short += 1  # advance the short list indexing
+    
+    return match_list
+
+
+# ---- Mesh operations ----
 def test_ray_intersect(mesh, raySource, rayVector, accelerator=None, hit_tol=None, return_info=False):
     """Check if given ray intersect given mesh
         * hit_tol ignores intersections that are within hit_tol from the ray source (as % of ray length) -- usefull when checking self-intersect
@@ -81,25 +124,6 @@ def edge_vert_ids(mesh, edge_id):
     ty = ctypes.c_uint * 2
     v_ids_list = ty.from_address(int(v_ids_cptr))
     return v_ids_list[0], v_ids_list[1]
-
-
-def save_mesh(target, to_file):
-    """Save given object to file as a mesh"""
-
-    # Make sure to only select requested mesh
-    cmds.select(clear=True)
-    cmds.select(target)
-
-    cmds.file(
-        to_file,
-        type='OBJExport',  
-        exportSelectedStrict=True,  # export selected -- only explicitely selected
-        options='groups=0;ptgroups=0;materials=0;smoothing=0;normals=1',  # very simple obj
-        force=True,   # force override if file exists
-        defaultExtensions=False
-    )
-
-    cmds.select(clear=True)
 
 
 def scale_to_cm(target, max_height_cm=220):
