@@ -208,7 +208,7 @@ class MayaGarment(core.ParametrizedPattern):
             vert_addr = '{}.vtx[{}]'.format(self.get_qlcloth_geomentry(), vert_idx)
             vertex_select_lists[str_label].append(vert_addr)
 
-        # Coloring for visualization
+        # Contrasting Panel Coloring for visualization
         # https://www.schemecolor.com/bright-rainbow-colors.php
         color_hex = ['FF0900', 'FF7F00', 'FFEF00', '00F11D', '0079FF', 'A800FF']
         color_list = np.empty((len(color_hex), 3))
@@ -218,9 +218,11 @@ class MayaGarment(core.ParametrizedPattern):
         start_time = time.time()
         for label, str_label in enumerate(vertex_select_lists.keys()):
             if len(vertex_select_lists[str_label]) > 0:   # 'Other' may not be present at all
-                if str_label == 'Other':  # non-segmented becomes black
+                if str_label == 'Other':  # non-segmented becomes white
+                    color = np.ones(3)
+                elif str_label == 'stitch':  # stitches are black
                     color = np.zeros(3)
-                else:
+                else: 
                     # color selection with expansion if the list is too small
                     factor, color_id = (label // len(color_list)) + 1, label % len(color_list)
                     color = color_list[color_id] / factor  # gets darker the more labels there are
@@ -560,6 +562,7 @@ class MayaGarment(core.ParametrizedPattern):
         self.update_verts_info()
         self.vertex_labels = [None] * len(self.current_verts)
         label_counts = [0] * (len(self.panel_order()) + 1)  # debug
+        start_time = time.time()
 
         # -- Stitches (provided in qualoth objects directly) ---
         on_stitches = self._verts_on_stitches()  # TODO I can even distinguish stitches from each other!
@@ -571,7 +574,6 @@ class MayaGarment(core.ParametrizedPattern):
         vertices = self.current_verts
         # BBoxes give fast results for most vertices
         bboxes = self._all_panel_bboxes() 
-        start_time = time.time()
         vertices_multi_match = []
         for i in range(len(vertices)):
             if i in on_stitches:  # already labeled
@@ -787,9 +789,9 @@ class MayaGarment(core.ParametrizedPattern):
     def _verts_on_stitches(self):
         """
             List all the vertices in garment mesh located on stitches
-            NOTE: it does not output vertices correctly on the meshes that are already stitched!!
+            NOTE: it does not output vertices correctly on is the mesh topology was changed 
+                (e.g. after cmds.polyClean())!!
         """
-        print('_verts_on_stitches is depricated')
         on_stitches = []
         for stitch in self.pattern['stitches']:
             # querying one side is enough since they share the vertices
