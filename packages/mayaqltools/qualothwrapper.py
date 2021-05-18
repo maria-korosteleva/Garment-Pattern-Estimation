@@ -171,6 +171,46 @@ def deleteSolver():
     cmds.delete(cmds.ls('*qlSolver*'))
 
 
+def flipPanelNormal(panel_geom):
+    """Set flippling normals to True for a given panel geom objects
+        at least one of the provided objects should a qlPattern object"""
+
+    ql_pattern = [obj for obj in panel_geom if 'Pattern' in obj]
+    ql_pattern = ql_pattern[0]
+    shape = cmds.listRelatives(ql_pattern, shapes=True, path=True)
+
+    cmds.setAttr(shape[0] + '.flipNormal', 1)
+
+
+def getVertsOnCurve(panel_node, curve):
+    """
+        Return the list of mesh vertices located on the curve 
+        panel node is qlPattern object to which the curve belongs
+    """
+    # find qlDiscretizer node
+    if 'Shape' not in panel_node:
+        shapes = cmds.listRelatives(panel_node, shapes=True)
+        panel_node = panel_node + '|' + shapes[0]
+
+    connections = cmds.listConnections(panel_node)
+
+    discretizer = [node for node in connections if 'qlDiscretizer' in node]
+    discretizer = discretizer[0]
+    info_array = discretizer + '.curveVeritcesInfoArray'
+
+    # iterate over curveVeritcesInfoArray 
+    num_curves = cmds.getAttr(info_array, size=True)
+    for idx in range(num_curves):
+        curve_name = cmds.getAttr(info_array + '[%d].curveName' % idx)
+        if curve in curve_name:
+            # found!
+            vertices = cmds.getAttr(info_array + '[%d].curveVertices' % idx)
+            return vertices
+
+    return None
+
+
+# ------ Working with props ------
 def setColliderFriction(collider_objects, friction_value):
     """Sets the level of friction of the given collider to friction_value"""
 
@@ -301,18 +341,7 @@ def fetchPanelResolution():
     return cmds.getAttr(shape[0] + '.resolutionScale')
 
 
-def flipPanelNormal(panel_geom):
-    """Set flippling normals to True for a given panel geom objects
-        at least one of the provided objects should a qlPattern object"""
-
-    ql_pattern = [obj for obj in panel_geom if 'Pattern' in obj]
-    ql_pattern = ql_pattern[0]
-    shape = cmds.listRelatives(ql_pattern, shapes=True, path=True)
-
-    cmds.setAttr(shape[0] + '.flipNormal', 1)
-
-
-# ------- Utils ---------
+# ------- Self-Utils ---------
 def _init_sim(config):
     """
         Basic simulation settings before starting simulation

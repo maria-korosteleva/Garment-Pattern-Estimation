@@ -197,13 +197,13 @@ class MayaGarment(core.ParametrizedPattern):
             (as indicated in self.vertex_labels)
         """
         # group vertices by label (it's faster then coloring one-by-one)
-        vertex_select_lists = dict.fromkeys(self.panel_order() + ['Other'])
+        vertex_select_lists = dict.fromkeys(self.panel_order() + ['stitch', 'Other'])
         for key in vertex_select_lists:
             vertex_select_lists[key] = []
 
         for vert_idx in range(len(self.current_verts)):
             str_label = self.vertex_labels[vert_idx]
-            if str_label not in self.panel_order():
+            if str_label not in self.panel_order() and str_label != 'stitch':
                 str_label = 'Other'
 
             vert_addr = '{}.vtx[{}]'.format(self.get_qlcloth_geomentry(), vert_idx)
@@ -536,6 +536,12 @@ class MayaGarment(core.ParametrizedPattern):
         panel_geom = list(set(panel_geom) - set(solvers))
         panel_geom = cmds.parent(panel_geom, panel_group)  # organize
 
+        pattern_object = [node for node in panel_geom if 'Pattern' in node]
+        
+        self.MayaObjects['panels'][panel_name]['qlPattern'] = (
+            pattern_object[0] if panel_group in pattern_object[0] else panel_group + '|' + pattern_object[0]
+        )
+
         return panel_group
 
     def _eval_vertex_segmentation(self):
@@ -551,74 +557,98 @@ class MayaGarment(core.ParametrizedPattern):
             raise RuntimeError('Garment should be loaded when evaluating vertex segmentation')
 
         self.update_verts_info()
+        self.vertex_labels = [None] * len(self.current_verts)
+        label_counts = [0] * (len(self.panel_order()) + 1)  # debug
+
+        # -- Stitches (provided in qualoth objects directly) ---
+        on_stitches = self._verts_on_stitches()
+        on_all_curves = self._verts_on_curves()
+        for idx in on_stitches:
+            self.vertex_labels[idx] = 'stitch'
+            label_counts[0] += 1
+        
+        # TODO I can even distinguish stitches from each other!
+        
+        
+        # --- vertices ---
+        # Using the fact that vertices on panel curves are always labeled first
+        # So, contigious chunks of vertex ids would belong to the same panel, 
+        # with only being interupted by vertices on curves
+
         vertices = self.current_verts
-        panel_curves = self.MayaObjects['panels']
-        self.vertex_labels = [None] * len(vertices)
-
-        # Fast BBoxes for each panel for testing (should work for most vertices)
-        bboxes = {}
-        for panel in panel_curves:
-            box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
-            bboxes[panel] = box
-
+        
+        # Fast BBoxes for each panel for testing the first vertex in sequence
+        bboxes = self._all_panel_bboxes() 
         start_time = time.time()
-        label_counts = [0] * (len(self.panel_order()) + 1)
-        vertices_multi_match = []
+        last_panel = None
+        skipped_sequence = []
         for i in range(len(vertices)):
-            vertex = vertices[i]
-            # check which panel is the closest one
-            in_bboxes = []
-            for panel in bboxes:
-                if self._point_in_bbox(vertex, bboxes[panel]):
-                    in_bboxes.append(panel)
-            
-            if len(in_bboxes) == 1:
-                self.vertex_labels[i] = in_bboxes[0]
-                label = self._panel_to_id(in_bboxes[0])
+            if i in on_all_curves:  # skip vertices on curves
+                last_panel = None
+                continue
+            if last_panel is not None:  # label the same as the last vertices in sequence
+                self.vertex_labels[i] = last_panel
+                label = self._panel_to_id(last_panel)
                 label_counts[label] += 1
-            else:  # multiple or zero matches -- handle later
-                vertices_multi_match.append((i, in_bboxes))
-
-        # eval for confusing cases
-        total_confisions = len(vertices_multi_match)
-        while len(vertices_multi_match) > 0:
-            unlabeled_vert_id, matched_panels = vertices_multi_match.pop(0)
-
-            # check if vert in on the plane of any of the panels
-            on_panel_planes = []
-            for panel in matched_panels:
-                if self._point_on_plane(vertices[unlabeled_vert_id], panel):
-                    on_panel_planes.append(panel)
-
-            # plane might not be the only option 
-            if len(on_panel_planes) == 1:  # found!
-                self.vertex_labels[unlabeled_vert_id] = on_panel_planes[0]
-
-                label_counts[self._panel_to_id(on_panel_planes[0])] += 1
             else:
-                # by this time, many vertices already have labels, so let's just borrow from neigbours
-                neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+                # No info on previous vertex in sequence -- need to determine to wich panels it belongs
+                
+                # fast check which panel is the closest one
+                vertex = vertices[i]
+                in_bboxes = []
+                for panel in bboxes:
+                    if self._point_in_bbox(vertex, bboxes[panel]):
+                        in_bboxes.append(panel)
 
-                if len(neighbors) == 0:
-                    print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
-                    continue
+                if len(in_bboxes) == 1:
+                    last_panel = in_bboxes[0]   # start of the vertices of this panel in a sequence
+                    self.vertex_labels[i] = last_panel
 
-                unlabelled = [unl[0] for unl in vertices_multi_match]
-                # check only labeled neigbors
-                neighbors = [vert_id for vert_id in neighbors if vert_id not in unlabelled]
+                    if skipped_sequence:
+                        # if some consequtive vertices before this one were unclear where they belong to
+                        # update their label
+                        for skipped_vert_id in skipped_sequence:
+                            self.vertex_labels[skipped_vert_id] = last_panel
+                        skipped_sequence = []
 
-                if len(neighbors) > 0:
-                    neighbour_labels = [self.vertex_labels[vert_id] for vert_id in neighbors]
-                    
-                    # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
-                    frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
-                    self.vertex_labels[unlabeled_vert_id] = frequent_label
-                else:
-                    # put back 
-                    # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
-                    # if the garment is freshly loaded before sim
-                    print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
-                    vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
+                    label = self._panel_to_id(last_panel)
+                    label_counts[label] += 1
+                else:  # multiple or zero matches -- handle later
+                    skipped_sequence.append(i)
+
+        # -- sort out the rest --- 
+        # we only have some vertices on the edges and maybe some verts inside left
+        undecided = [idx for idx in on_all_curves if idx not in on_stitches]
+        print(undecided)
+        undecided = list(set(undecided)) + skipped_sequence
+
+        # assign the same value as non-stitch neighbors
+        total_confisions = len(undecided)
+        while len(undecided) > 0:
+            unlabeled_vert_id = undecided.pop(0)
+
+            # by this time, many vertices already have labels, so let's just borrow from neigbours
+            neighbors = self._get_vert_neighbours(unlabeled_vert_id)
+
+            if len(neighbors) == 0:
+                print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
+                continue
+
+            # check only labeled neigbors that don't belong to stitches
+            neighbors = [vert_id for vert_id in neighbors if vert_id not in undecided and vert_id not in on_stitches]
+
+            if len(neighbors) > 0:
+                neighbour_labels = [self.vertex_labels[vert_id] for vert_id in neighbors]
+                
+                # https://www.geeksforgeeks.org/python-find-most-frequent-element-in-a-list
+                frequent_label = max(set(neighbour_labels), key=neighbour_labels.count)
+                self.vertex_labels[unlabeled_vert_id] = frequent_label
+            else:
+                # put back 
+                # NOTE! There is a ponetial for infinite loop here, but it shoulf not occur
+                # if the garment is freshly loaded before sim
+                print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
+                undecided.append(unlabeled_vert_id)
 
         print('Label evaluation: ', time.time() - start_time)
 
@@ -754,6 +784,50 @@ class MayaGarment(core.ParametrizedPattern):
             geometry, self.name, hit_border_length, 
             self.config['object_intersect_border_threshold'] if 'object_intersect_border_threshold' in self.config else 0))
         return False
+
+    def _verts_on_stitches(self):
+        """
+            List all the vertices in garment mesh located on stitches
+        """
+        on_stitches = []
+        for stitch in self.pattern['stitches']:
+            # querying one side is enough since they share the vertices
+            stitch_curve = self._maya_curve_name(stitch[0]) 
+            panel_name = stitch[0]['panel']
+            panel_node = self.MayaObjects['panels'][panel_name]['qlPattern']
+            verts_on_curve = qw.getVertsOnCurve(panel_node, stitch_curve)
+            on_stitches += verts_on_curve
+        return on_stitches
+    
+    def _verts_on_curves(self):
+        """
+            List all the vertices of garment mesh that are located on panel curves
+        """
+        all_edge_verts = []
+        for panel in self.panel_order():
+            panel_info = self.MayaObjects['panels'][panel]
+            panel_node = panel_info['qlPattern']
+
+            # curves
+            for curve in panel_info['edges']:
+                verts_on_curve = qw.getVertsOnCurve(panel_node, curve)
+                all_edge_verts += verts_on_curve
+    
+                print(min(verts_on_curve), max(verts_on_curve))
+
+        # might contain duplicates
+        return all_edge_verts
+
+    def _all_panel_bboxes(self):
+        """
+            Evaluate 3D bounding boxes for all panels (as original curve loops)
+        """
+        panel_curves = self.MayaObjects['panels']
+        bboxes = {}
+        for panel in panel_curves:
+            box = cmds.exactWorldBoundingBox(panel_curves[panel]['curve_group'])
+            bboxes[panel] = box
+        return bboxes
 
     @staticmethod
     def _point_in_bbox(point, bbox, tol=0.01):
