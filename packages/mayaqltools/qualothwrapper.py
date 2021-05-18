@@ -182,10 +182,13 @@ def flipPanelNormal(panel_geom):
     cmds.setAttr(shape[0] + '.flipNormal', 1)
 
 
-def getVertsOnCurve(panel_node, curve):
+def getVertsOnCurve(panel_node, curve, curve_group=None):
     """
         Return the list of mesh vertices located on the curve 
-        panel node is qlPattern object to which the curve belongs
+        * panel_node is qlPattern object to which the curve belongs
+        * curve is a main name of a curve object to get vertex info for
+            OR any substring of it's full Maya name that would uniquely identify it
+        * (optional) curve_group is a name of parent group of given curve to uni quely distinguish the curve 
     """
     # find qlDiscretizer node
     if 'Shape' not in panel_node:
@@ -200,9 +203,18 @@ def getVertsOnCurve(panel_node, curve):
 
     # iterate over curveVeritcesInfoArray 
     num_curves = cmds.getAttr(info_array, size=True)
+    # avoid matching 'curve1' with 'Acurve10' by adding a starting and ending caharacter
+    if curve[0] != '|':
+        curve = '|' + curve
+    if curve[-1] != '|':
+        curve = curve + '|'
     for idx in range(num_curves):
         curve_name = cmds.getAttr(info_array + '[%d].curveName' % idx)
+
         if curve in curve_name:
+            if curve_group is not None and curve_group not in curve_name:
+                # erroneous match
+                continue
             # found!
             vertices = cmds.getAttr(info_array + '[%d].curveVertices' % idx)
             return vertices
