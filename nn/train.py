@@ -85,8 +85,8 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': True,
-        'panel_order_inariant_loss': False,
+        'panel_origin_invariant_loss': False,
+        'panel_order_inariant_loss': True,
         'order_by': 'translation',   # placement, translation, stitches
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
