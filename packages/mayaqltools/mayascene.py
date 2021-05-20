@@ -80,7 +80,7 @@ class MayaGarment(core.ParametrizedPattern):
         self.setShaderGroup(shader_group)
 
         self.add_colliders(obstacles)
-        self.setSimProps(config)
+        self._setSimProps(config)
 
         # should be done on the mesh after stitching, res adjustment, but before sim & clean-up
         self._eval_vertex_segmentation()  
@@ -280,31 +280,6 @@ class MayaGarment(core.ParametrizedPattern):
         self.config['resolution_scale'] = qw.fetchPanelResolution()
 
         return self.config
-
-    def setSimProps(self, config={}):
-        """Pass material properties for cloth & colliders to Qualoth"""
-        if not self.loaded_to_maya:
-            raise RuntimeError('MayaGarmentError::Pattern is not yet loaded.')
-
-        if config:
-            self.config = config
-
-        qw.setFabricProps(
-            self.get_qlcloth_props_obj(), 
-            self.config['material']
-        )
-
-        if 'colliders' in self.MayaObjects:
-            for collider in self.MayaObjects['colliders']:
-                qw.setColliderFriction(collider, self.config['body_friction'])
-
-        if 'collision_thickness' in self.config:
-            # if not provided, use default auto-calculated value
-            cmds.setAttr(self.get_qlcloth_props_obj() + '.overrideThickness', 1)
-            cmds.setAttr(self.get_qlcloth_props_obj() + '.thickness', self.config['collision_thickness'])
-
-        # update resolution properties
-        qw.setPanelsResolution(self.config['resolution_scale'])
 
     def update_verts_info(self):
         """
@@ -545,6 +520,31 @@ class MayaGarment(core.ParametrizedPattern):
 
         return panel_group
 
+    def _setSimProps(self, config={}):
+        """Pass material properties for cloth & colliders to Qualoth"""
+        if not self.loaded_to_maya:
+            raise RuntimeError('MayaGarmentError::Pattern is not yet loaded.')
+
+        if config:
+            self.config = config
+
+        qw.setFabricProps(
+            self.get_qlcloth_props_obj(), 
+            self.config['material']
+        )
+
+        if 'colliders' in self.MayaObjects:
+            for collider in self.MayaObjects['colliders']:
+                qw.setColliderFriction(collider, self.config['body_friction'])
+
+        if 'collision_thickness' in self.config:
+            # if not provided, use default auto-calculated value
+            cmds.setAttr(self.get_qlcloth_props_obj() + '.overrideThickness', 1)
+            cmds.setAttr(self.get_qlcloth_props_obj() + '.thickness', self.config['collision_thickness'])
+
+        # update resolution properties
+        qw.setPanelsResolution(self.config['resolution_scale'])
+    
     def _eval_vertex_segmentation(self):
         """
             Evalute which vertex belongs to which panel

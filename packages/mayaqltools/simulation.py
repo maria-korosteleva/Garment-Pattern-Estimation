@@ -210,7 +210,8 @@ def template_simulation(spec, scene, sim_props, delete_on_clean=False, caching=F
     garment = mymaya.MayaGarment(spec)
     garment.load(
         shader_group=scene.cloth_SG(), 
-        obstacles=[scene.body]  # I don't add floor s.t. garment falls infinitely if falls
+        obstacles=[scene.body],  # I don't add floor s.t. garment falls infinitely if falls
+        config=sim_props['config']
     )
     # garment.save_mesh(tag='stitched')  # Saving the geometry before eny forces were applied
     garment.sim_caching(caching)

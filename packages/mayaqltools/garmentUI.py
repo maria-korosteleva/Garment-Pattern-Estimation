@@ -287,11 +287,10 @@ def load_props_callback(view_field, state, *args):
         state.scene = mymaya.Scene(
             state.body_file, state.config['render'], 
             scenes_path=state.scenes_path, clean_on_die=True)  
-        state.reload_garment()
-    
+        
     # Load material props
     if state.garment is not None:
-        state.garment.setSimProps(state.config['sim']['config'])
+        state.reload_garment()
 
 
 def load_scene_callback(view_field, state, *args):
