@@ -736,7 +736,7 @@ class MayaGarment(core.ParametrizedPattern):
                 f.write("%s\n" % panel_name)
 
         # eval
-        num_verts = cmds.polyEvaluate(v=True)
+        num_verts = cmds.polyEvaluate(self.get_qlcloth_geomentry(), v=True)
         if num_verts != len(self.vertex_labels):
             print('MayaGarment::WARNING::Segmentation list does not match mesh topology in save {}'.format(self.name))
         
