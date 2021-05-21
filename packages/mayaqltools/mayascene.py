@@ -616,7 +616,7 @@ class MayaGarment(core.ParametrizedPattern):
                 neighbour_checks += 1
 
                 if len(neighbors) == 0:
-                    print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
+                    # print('Skipped Vertex {} with zero neigbors'.format(unlabeled_vert_id))
                     continue
 
                 unlabelled = [unl[0] for unl in vertices_multi_match]
@@ -636,12 +636,6 @@ class MayaGarment(core.ParametrizedPattern):
                     print('Garment::Labelling::vertex {} needs revisit'.format(unlabeled_vert_id))
                     vertices_multi_match.append((unlabeled_vert_id, on_panel_planes))
 
-        print('Label evaluation: ', time.time() - start_time)
-
-        print('Num of vertices per label: {}'.format(label_counts))
-        print('Used expensive checks for {} from {} with {} by neigborhood'.format(
-            total_confisions, len(vertices), neighbour_checks))
-
     def _clean_mesh(self):
         """
             Clean mesh from incosistencies introduces by stitching, 
@@ -654,7 +648,11 @@ class MayaGarment(core.ParametrizedPattern):
         self.update_verts_info()
         match_verts = utils.match_vert_lists(self.current_verts, self.last_verts)
 
+        print('Reduced labeling from {} to {} after mesh clean-up'.format(len(self.vertex_labels), len(match_verts)))
         self.vertex_labels = [self.vertex_labels[i] for i in match_verts]
+
+        print(len(self.vertex_labels))
+
 
     def _edge_as_3d_tuple_list(self, edge, vertices):
         """
