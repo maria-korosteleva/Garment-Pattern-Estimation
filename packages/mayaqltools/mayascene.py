@@ -653,7 +653,6 @@ class MayaGarment(core.ParametrizedPattern):
 
         print(len(self.vertex_labels))
 
-
     def _edge_as_3d_tuple_list(self, edge, vertices):
         """
             Represents given edge object as list of control points
@@ -735,6 +734,11 @@ class MayaGarment(core.ParametrizedPattern):
         with open(filepath, 'w') as f:
             for panel_name in self.vertex_labels:
                 f.write("%s\n" % panel_name)
+
+        # eval
+        num_verts = cmds.polyEvaluate(v=True)
+        if num_verts != len(self.vertex_labels):
+            print('MayaGarment::WARNING::Segmentation list does not match mesh topology in save {}'.format(self.name))
         
     def _intersect_object(self, geometry):
         """Check if given object intersects current cloth geometry
