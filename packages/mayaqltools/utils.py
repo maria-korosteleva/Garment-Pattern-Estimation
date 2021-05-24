@@ -58,6 +58,21 @@ def get_mesh_dag(object_name):
     return mesh, dag
 
 
+def get_vertices_np(mesh):
+    """
+        Retreive vertex info as np array for given mesh object
+    """
+    maya_vertices = OpenMaya.MPointArray()
+    mesh.getPoints(maya_vertices, OpenMaya.MSpace.kWorld)
+
+    vertices = np.empty((maya_vertices.length(), 3))
+    for i in range(maya_vertices.length()):
+        for j in range(3):
+            vertices[i, j] = maya_vertices[i][j]
+
+    return vertices
+
+
 def match_vert_lists(short_list, long_list):
     """
         Find the vertices from long list that correspond to verts in short_list
@@ -75,6 +90,11 @@ def match_vert_lists(short_list, long_list):
         if all(np.isclose(short_vertex, long_vertex, atol=1e-5)):
             match_list.append(idx_long)
             idx_short += 1  # advance the short list indexing
+    
+    if len(match_list) != len(short_list):
+        raise ValueError('Vertex matching unsuccessfull: matched {} of {} vertices in short list'.format(
+            len(match_list), len(short_list)
+        ))
     
     return match_list
 

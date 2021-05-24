@@ -295,13 +295,8 @@ class MayaGarment(core.ParametrizedPattern):
         cloth_dag = self.get_qlcloth_geom_dag()
         
         mesh = OpenMaya.MFnMesh(cloth_dag)
-        maya_vertices = OpenMaya.MPointArray()
-        mesh.getPoints(maya_vertices, OpenMaya.MSpace.kWorld)
 
-        vertices = np.empty((maya_vertices.length(), 3))
-        for i in range(maya_vertices.length()):
-            for j in range(3):
-                vertices[i, j] = maya_vertices[i][j]
+        vertices = utils.get_vertices_np(mesh)
 
         self.last_verts = self.current_verts
         self.current_verts = vertices
