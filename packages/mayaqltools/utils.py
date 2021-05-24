@@ -90,6 +90,8 @@ def match_vert_lists(short_list, long_list):
         if all(np.isclose(short_vertex, long_vertex, atol=1e-5)):
             match_list.append(idx_long)
             idx_short += 1  # advance the short list indexing
+            if idx_short >= len(short_list):  # short list finished before the long one
+                break
     
     if len(match_list) != len(short_list):
         raise ValueError('Vertex matching unsuccessfull: matched {} of {} vertices in short list'.format(
