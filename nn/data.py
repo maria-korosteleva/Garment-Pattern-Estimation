@@ -13,8 +13,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern.core import ParametrizedPattern, BasicPattern, InvalidPatternDefError
-from pattern.wrappers import VisPattern
+from pattern_converter import NNSewingPattern, InvalidPatternDefError
 
 
 # ---------------------- Main Wrapper ------------------
@@ -765,7 +764,7 @@ class GarmentBaseDataset(BaseDataset):
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
-        pattern = BasicPattern(self.root_path / datapoint_name / spec_list[0])
+        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
         return pattern.pattern_as_tensors(
             pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
@@ -779,7 +778,7 @@ class GarmentBaseDataset(BaseDataset):
         if std_config and 'standardize' in std_config:
             tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
 
-        pattern = VisPattern(view_ids=False)
+        pattern = NNSewingPattern(view_ids=False)
         pattern.name = dataname
         try: 
             pattern.pattern_from_tensors(
