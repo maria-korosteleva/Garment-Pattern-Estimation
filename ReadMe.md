@@ -1,41 +1,32 @@
 # Estimating 2D pattern from a 3D garment
 
+Provides tools to train and run the pattern prediction model on 3D garment geometry 
+
 ## Licensing 
 This is work-in-progress, and licensing terms are not finalized. If you want to use this code, contact the authors. 
 
-## Modules
+## Data
 ---
-
-### Data Creation
-
-Provides tools for creating datasets of 3D garments with patterns. See [Data Creation Readme](data_generation/ReadMe.md).
-
-### Training and evaluating Neural Network to predict pattern from 3D garment model
-
-Provides tools to train and run the pattern prediction model on 3D garment geometry 
+This NN training code uses dataset created with [Garment-Pattern-Data](https://motionlab.kaist.ac.kr/git/mariako/Garment-Pattern-Data).
+* Data is available from Maria, on Lab GPU server & on [Beyori's Dropbox](https://www.dropbox.com/sh/s7np66uisrr5g3k/AAC-ScwVh-938V4J2R5rbvHIa?dl=0)
 
 ## Filesystem paths settings
 ---
 Create system.json file in the root of this directory with your machine's file paths using system.template.json as a template. 
 system.json should include the following: 
-* General
-    * path for creating logs at (including generated data from dataset generation routined & NN predictions) ('output')
-
-* Data generation & Simulation resources 
-    * path to pattern templates folder ('templates_path') 
-    * path to folder containing body files ('bodies_path')
-    * path to folder containing rendering setup (scenes) ('scenes_path')
-    * path to folder with simulation\rendering configurations ('sim_configs_path')
-
-* NN Training references
-    * path to finalized garment datasets that could be used for training NN ('datasets_path')
-    * username for wandb tool for correct experiment tracking ('wandb_username')
-
-
+* path for creating logs at (including generated data from dataset generation routined & NN predictions) ('output')
+* path to finalized garment datasets that could be used for training NN ('datasets_path')
+* username for wandb tool for correct experiment tracking ('wandb_username')
 
 ## Dependencies
 ---
 
+### Custom Data loading
+
+* [Garment-Pattern-Data](https://motionlab.kaist.ac.kr/git/mariako/Garment-Pattern-Data) code (for pattern loading)
+* Add `Garment-Pattern-Data/packages` to `PYTHONPATH` on your system for correct importing of our custom modules.
+
+### Other
 * Developed and tested on Python 3.6+
 * For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` will likely fail
 * When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools: 
@@ -52,7 +43,6 @@ system.json should include the following:
     * `wandb` 
     * `svglib` 
     * `svgwrite`
-* The project has custom Python packages. Add `Garment-Pattern-Estimation/packages` to `PYTHONPATH` environmental variable for the project to work correctly!
 
 Development was done on _Windows 10_. If running on other OS ends up with errors, please, raise an issue!
 
@@ -64,11 +54,3 @@ You might experience errors related with PIL (pillow) Image module. Those most o
 * For ReportLab (saving patterns as png images) to work: 
     * Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
     * Python 3.8.5 + ReportLab 3.5.55 + pillow 7.1.1
-
-### Additional requirements for Simulating garment patterns on a human 3D model
-
-* Autodesk Maya 2018 or Autodesk Maya 2020 
-    * With `numpy` installed (there are a number of instruction around the Internet on how to get `numpy` to work in Maya)
-* [Qualoth](https://www.qualoth.com/) for Maya as Simulator
-
-See more details in dedicated [Data Creation Readme](data_generation/ReadMe.md).

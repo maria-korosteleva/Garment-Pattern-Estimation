@@ -5,16 +5,18 @@ import wandb
 system_props = customconfig.Properties('./system.json')
 
 to_upload = {
-    # 'merged_dress_sleeveless_2550_210429-13-12-52': 'dress_sleeveless',
-    # 'merged_jumpsuit_sleeveless_2000_210429-11-46-14': 'jumpsuit_sleeveless',
-    # 'merged_skirt_8_panels_1000_210521-16-20-14': 'skirt_8_panels',
-    # 'merged_wb_pants_straight_1500_210521-16-30-57': 'wb_pants_straight',
-    # 'merged_skirt_2_panels_1200_210521-16-46-27': 'skirt_2_panels',
-    # 'merged_jacket_2200_210521-16-55-26': 'jacket',
-    # 'merged_tee_sleeveless_1800_210521-17-10-22': 'tee_sleeveless',
-    # 'merged_wb_dress_sleeveless_2600_210521-17-26-08': 'wb_dress_sleeveless',
-    'merged_jacket_hood_2700_210521-17-47-44': 'jacket_hood',
-    'data_1000_pants_straight_sides_210520-22-34-57': 'pants_straight_sides'
+    # 'dress_sleeveless_2550': 'dress_sleeveless',
+    # 'jumpsuit_sleeveless_2000': 'jumpsuit_sleeveless',
+    # 'skirt_8_panels_1000': 'skirt_8_panels',
+    # 'wb_pants_straight_1500': 'wb_pants_straight',
+    # 'skirt_2_panels_1200': 'skirt_2_panels',
+    # 'jacket_2200': 'jacket',
+    # 'tee_sleeveless_1800': 'tee_sleeveless',
+    # 'wb_dress_sleeveless_2600': 'wb_dress_sleeveless',
+    'jacket_hood_2700': 'jacket_hood',
+    'pants_straight_sides_1000': 'pants_straight_sides'
+    # 'tee_2300': 'tee',
+    # 'skirt_4_panels_1600': 'skirt_4_panels'
     
     # 'test_150_jacket_hood_sleeveless_210331-11-16-33': 'jacket_hood_sleeveless-test', 
     # 'test_150_skirt_waistband_210331-16-05-37': 'skirt_waistband-test',
@@ -28,12 +30,12 @@ to_upload = {
 for dataset, art_name in to_upload.items():
     wandb.init(project='Garments-Reconstruction', job_type='dataset')
 
-    artifact = wandb.Artifact(art_name, type='dataset', description= dataset + ' + Scan imitation')
+    artifact = wandb.Artifact(art_name, type='dataset', description= dataset + ' + props cleanup')
     # Add a file to the artifact's contents
     datapath = Path(system_props['datasets_path']) / dataset
     artifact.add_dir(str(datapath))
     # Save the artifact version to W&B and mark it as the output of this run
-    wandb.run.log_artifact(artifact)
+    wandb.run.log_artifact(artifact, aliases=['latest', 'nips21'])
 
     wandb.finish()  # sync all data before moving to next dataset
 
