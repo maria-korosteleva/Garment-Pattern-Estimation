@@ -868,15 +868,21 @@ class ComposedPatternLoss():
                     pred_features[pattern_idx].view(pat_len, -1),   # flatten feature
                     gt_features[pattern_idx].view(pat_len, -1))
 
-                # find optimal order assignment, see https://pypi.org/project/munkres/1.0.9/
-                indexes = assignment_solver.compute(dist_matrix)
-                if len(indexes) != pat_len:
-                    raise RuntimeError("ComposedPatternLoss::Error:: Failed to match panel order" )
-
-                # Gather the GT in requested order
+                # (Sub) optimal assignment solving by matching the best matches first!
+                # Optimal assignemnt by Hungarian algorithm was extremely slow (especially with 10-15 panels)
                 match = [-1] * pat_len
-                for left, right in indexes:
-                    match[left] = right
+                for _ in range(pat_len):  # this many pair to arrange
+                    to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
+                    row = to_match_idx // dist_matrix.shape[0]
+                    col = to_match_idx % dist_matrix.shape[0]
+                    match[row] = col
+
+                    # exlude distances with matches
+                    dist_matrix[row, :] = float('inf')
+                    dist_matrix[:, col] = float('inf')
+                
+                if torch.isfinite(dist_matrix).any():
+                    raise ValueError('ComposedPatternLoss::Error::Failed to match panel order'.format)
 
                 per_pettern_permutation.append(match)
         

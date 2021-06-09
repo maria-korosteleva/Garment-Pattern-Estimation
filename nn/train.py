@@ -140,24 +140,18 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        # 'data_uni_1000_tee_200527-14-50-42_regen_200612-16-56-43',
-        # 'data_uni_1000_skirt_4_panels_200616-14-14-40', 
-        # 'data_uni_1000_pants_straight_sides_210105-10-49-02'
-        # 'merged_jumpsuit_sleeveless_950_210412-15-18-06'
-
-        # big datasets
-        'data_5000_tee_200924-16-57-59_regen_210327-15-20-23',
-        # 'data_5000_skirt_4_panels_201019-12-23-24_regen_210331-16-18-32',
-        'data_uni_1000_pants_straight_sides_210105-10-49-02',
-        # 'merged_skirt_2_panels_700_210407-18-30-56',
-        'merged_jumpsuit_sleeveless_950_210412-15-18-06',
-        # 'merged_skirt_8_panels_950_210412-16-11-33',
-        # 'merged_wb_pants_straight_1150_210421-10-50-34',
-        'merged_tee_sleeveless_1150_210420-17-50-25'
-        # 'merged_jacket_1550_210420-16-54-04',
-        # 'merged_dress_sleeveless_1350_210422-11-26-50',
-        # 'merged_wb_dress_sleeveless_1350_210423-13-14-22',
-        # 'merged_jacket_hood_1700_210425-21-23-1'
+        # 'dress_sleeveless_2550',
+        'jumpsuit_sleeveless_2000',
+        # 'skirt_8_panels_1000',
+        # 'wb_pants_straight_1500',
+        # 'skirt_2_panels_1200',
+        # 'jacket_2200',
+        'tee_sleeveless_1800',
+        # 'wb_dress_sleeveless_2600',
+        # 'jacket_hood_2700',
+        'pants_straight_sides_1000',
+        'tee_2300',
+        # 'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
@@ -165,7 +159,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-loc-emp-by-transl', 
+        run_name='Tee-JS-loc-emp-transl-speed-up', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
