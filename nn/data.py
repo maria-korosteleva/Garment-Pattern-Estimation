@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 import igl
 # import meshplot  # when uncommented, could lead to problems with wandb run syncing
 
@@ -81,6 +81,14 @@ class DatasetWrapper(object):
 
         self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
         self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
+        # loader with per-data folder examples for visualization
+        if self.validation:
+            # indices_breakdown = self.dataset.indices_by_data_folder(self.validation.indices)
+            single_sample_ids = [folder_ids.indices[0] for folder_ids in self.validation_per_datafolder.values()]
+            self.loader_valid_single_per_data = DataLoader(
+                Subset(self.dataset, single_sample_ids), batch_size=self.batch_size, shuffle=False) 
+        else:
+            self.loader_valid_single_per_data = None
 
         self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
         self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
@@ -487,7 +495,7 @@ class BaseDataset(Dataset):
         per_data = self.indices_by_data_folder(index_list)
         breakdown = {}
         for folder, ids_list in per_data.items():
-            breakdown[self.data_folders_nicknames[folder]] = torch.utils.data.Subset(self, ids_list)
+            breakdown[self.data_folders_nicknames[folder]] = Subset(self, ids_list)
         return breakdown
 
     def random_split_by_dataset(self, valid_per_type, test_per_type=0, split_type='count', with_breakdown=False):
@@ -538,22 +546,22 @@ class BaseDataset(Dataset):
                 test_ids += test_sub
             
             if with_breakdown:
-                train_breakdown[folder_nickname] = torch.utils.data.Subset(self, train_sub)
-                valid_breakdown[folder_nickname] = torch.utils.data.Subset(self, valid_sub)
-                test_breakdown[folder_nickname] = torch.utils.data.Subset(self, test_sub) if test_size else None
+                train_breakdown[folder_nickname] = Subset(self, train_sub)
+                valid_breakdown[folder_nickname] = Subset(self, valid_sub)
+                test_breakdown[folder_nickname] = Subset(self, test_sub) if test_size else None
 
         if with_breakdown:
             return (
-                torch.utils.data.Subset(self, train_ids), 
-                torch.utils.data.Subset(self, valid_ids),
-                torch.utils.data.Subset(self, test_ids) if test_per_type else None, 
+                Subset(self, train_ids), 
+                Subset(self, valid_ids),
+                Subset(self, test_ids) if test_per_type else None, 
                 train_breakdown, valid_breakdown, test_breakdown
             )
             
         return (
-            torch.utils.data.Subset(self, train_ids), 
-            torch.utils.data.Subset(self, valid_ids),
-            torch.utils.data.Subset(self, test_ids) if test_percent else None
+            Subset(self, train_ids), 
+            Subset(self, valid_ids),
+            Subset(self, test_ids) if test_size else None
         )
 
     def split_from_dict(self, split_dict, with_breakdown=False):
@@ -583,16 +591,16 @@ class BaseDataset(Dataset):
             test_breakdown = self.subsets_per_datafolder(test_ids)
 
             return (
-                torch.utils.data.Subset(self, train_ids), 
-                torch.utils.data.Subset(self, valid_ids),
-                torch.utils.data.Subset(self, test_ids) if len(test_ids) > 0 else None,
+                Subset(self, train_ids), 
+                Subset(self, valid_ids),
+                Subset(self, test_ids) if len(test_ids) > 0 else None,
                 train_breakdown, valid_breakdown, test_breakdown
             )
 
         return (
-            torch.utils.data.Subset(self, train_ids), 
-            torch.utils.data.Subset(self, valid_ids),
-            torch.utils.data.Subset(self, test_ids) if len(test_ids) > 0 else None
+            Subset(self, train_ids), 
+            Subset(self, valid_ids),
+            Subset(self, test_ids) if len(test_ids) > 0 else None
         )
 
     # -------- Data-specific functions --------

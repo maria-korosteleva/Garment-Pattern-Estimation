@@ -1,12 +1,10 @@
 # Training loop func
 import numpy as np
-import os
 from pathlib import Path
-import requests
 import time
+import traceback
 
 import torch
-import torch.nn as nn
 import wandb as wb
 
 # My modules
@@ -253,24 +251,33 @@ class Trainer():
         """Log image of one example prediction to wandb.
             If the loader does not shuffle batches, logged image is the same on every step"""
         with torch.no_grad():
-            # take one sample from the supplied loader
-            sample = loader.dataset[0]  
-            # use it as "one-sample batch"
+            # using one-sample-from-each-of-the-base-folders loader
+            single_sample_loader = self.datawraper.loader_valid_single_per_data
+            if single_sample_loader is None:
+                print('Trainer::Error::Suitable loader is not available. Nothing logged')
+
             try: 
-                img_files = self.datawraper.dataset.save_prediction_batch(
-                    model(sample['features'].unsqueeze(0).to(self.device)), 
-                    [sample['name']], [sample['data_folder']],
-                    save_to=self.folder_for_preds)
+                img_files = []
+                for batch in single_sample_loader:
+
+                    batch_img_files = self.datawraper.dataset.save_prediction_batch(
+                        model(batch['features'].to(self.device)), 
+                        batch['name'], batch['data_folder'],
+                        save_to=self.folder_for_preds)
+
+                    img_files += batch_img_files
             except BaseException as e:
                 print(e)
-                print('Trainer::Error::On saving pattern prediction for {}. Nothing logged'.format(sample['name']))
+                traceback.print_exc()
+                print('Trainer::Error::On saving pattern prediction for image logging. Nothing logged')
             else:
-                print('Trainer::Logged pattern prediction for {}'.format(img_files[0].name))
-                try:
-                    wb.log({sample['name']: [wb.Image(str(img_files[0]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
-                except BaseException as e:
-                    print(e)
-                    pass
+                for i in range(len(img_files)):
+                    print('Trainer::Logged pattern prediction for {}'.format(img_files[i].name))
+                    try:
+                        wb.log({img_files[i].name: [wb.Image(str(img_files[i]))], 'epoch': epoch}, step=log_step)  # will raise errors if given file is not an image
+                    except BaseException as e:
+                        print(e)
+                        pass
 
     def _save_checkpoint(self, model, epoch, best=False):
         """Save checkpoint that can be used to resume training"""
