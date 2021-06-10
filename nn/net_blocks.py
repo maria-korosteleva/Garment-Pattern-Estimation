@@ -178,6 +178,10 @@ class EdgeConvFeatures(nn.Module):
             if self.config['skip_connections']:
                 aggr_features.append(self.global_pool(out, batch, batch_size))
         
+        if self.config['skip_connections']:
+            # concat positions and final features
+            out = torch.cat([out, pos_flat], dim=-1)
+        
         if global_pool:
             # 'out' now holds per-point features
             pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)

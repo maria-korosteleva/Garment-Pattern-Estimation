@@ -552,18 +552,23 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         # taking in per-point features and global encoding, outputting point weight per (potential) panel
         # Segmentaition aims to ensure that each point belongs to min number of panels
         # Global context gives understanding of the cutting pattern 
-        if self.config['local_attention']:
-            attention_input_size = self.feature_extractor.config['EConv_feature']  # only local feature
-        else:
-            attention_input_size = self.config['pattern_encoding_size'] + self.feature_extractor.config['EConv_feature']
+        attention_input_size = self.feature_extractor.config['EConv_feature']  
+        if not self.config['local_attention']:  # adding global  feature
+            attention_input_size += self.config['pattern_encoding_size']
+        if self.config['skip_connections']:
+            attention_input_size += 3  # initial coordinates
+
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
             Sparsemax(dim=1)  # in the feature dimention
         )
 
         # additional panel encoding post-procedding
+        panel_att_out_size = self.feature_extractor.config['EConv_feature']
+        if self.config['skip_connections']: 
+            panel_att_out_size += 3
         self.panel_dec_lin = nn.Linear(
-            self.feature_extractor.config['EConv_feature'], self.feature_extractor.config['panel_encoding_size'])
+            panel_att_out_size, self.feature_extractor.config['panel_encoding_size'])
 
         # pattern decoder is not needed any more
         del self.pattern_decoder
