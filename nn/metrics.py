@@ -866,60 +866,23 @@ class ComposedPatternLoss():
                     gt_features.view(batch_size, pat_len, -1))
             total_dist_flat_view = total_dist_matrix.view(batch_size, -1)
 
-            per_pattern_permutation = torch.empty((batch_size, pat_len), dtype=torch.long, device=pred_features.device)
+            # Assingment (vectorized in batch dimention)
+            per_pattern_permutation = torch.full((batch_size, pat_len), fill_value=-1, dtype=torch.long, device=pred_features.device)
             print(per_pattern_permutation.shape)
-
             for _ in range(pat_len):  # this many pair to arrange
                 to_match_ids = total_dist_flat_view.argmin(dim=1)  # current global min is also a best match for the pair it's calculated for!
-                
-                print(to_match_ids)
-
-                print(to_match_ids.shape)
                 
                 rows = to_match_ids // total_dist_matrix.shape[1]
                 cols = to_match_ids % total_dist_matrix.shape[1]
 
-                print(rows.shape, cols.shape)
-                # print(per_pattern_permutation[rows].shape)
-                # row_idx = torch.stack([
-                #     torch.tensor((i, j), device=pred_features.device, dtype=torch.int) for i in range(rows.shape[0]) for j in rows[i]
-                # ])
-
-                #3 print(row_idx)
-                # for i in range(batch_size):
-                per_pattern_permutation[:, rows] = cols
-                # exlude distances with matches
-                total_dist_matrix[:, rows, :] = float('inf')
-                total_dist_matrix[:, :, cols] = float('inf')
-            
-            print(total_dist_matrix)
+                for i in range(batch_size):  # only the easy operation is left unvectorized
+                    per_pattern_permutation[i, rows[i]] = cols[i]
+                    # exlude distances with matches
+                    total_dist_matrix[i, rows[i], :] = float('inf')
+                    total_dist_matrix[i, :, cols[i]] = float('inf')
 
             if torch.isfinite(total_dist_matrix).any():
                 raise ValueError('ComposedPatternLoss::Error::Failed to match panel order')
-
-            # # per-pattern processing
-            # per_pattern_permutation_list = []
-            # for pattern_idx in range(pred_features.shape[0]):
-
-            #     dist_matrix = total_dist_matrix[pattern_idx]
-
-            #     # (Sub) optimal assignment solving by matching the best matches first!
-            #     # Optimal assignemnt by Hungarian algorithm was extremely slow (especially with 10-15 panels)
-            #     match = [-1] * pat_len
-            #     for _ in range(pat_len):  # this many pair to arrange
-            #         to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
-            #         row = to_match_idx // dist_matrix.shape[0]
-            #         col = to_match_idx % dist_matrix.shape[0]
-            #         match[row] = col
-
-            #         # exlude distances with matches
-            #         dist_matrix[row, :] = float('inf')
-            #         dist_matrix[:, col] = float('inf')
-                
-            #     if torch.isfinite(dist_matrix).any():
-            #         raise ValueError('ComposedPatternLoss::Error::Failed to match panel order'.format)
-
-            #     per_pattern_permutation_list.append(match)
         
         return per_pattern_permutation
 
@@ -954,7 +917,8 @@ class ComposedPatternLoss():
                         in_panel_edge_id = edge_id - (panel_id * max_panel_len)
 
                         # where is this panel placed
-                        new_panel_id = permutation[pattern_id].index(panel_id)  
+                        # https://stackoverflow.com/questions/47863001/how-pytorch-tensor-get-the-index-of-specific-value
+                        new_panel_id = (permutation[pattern_id] == panel_id).nonzero(as_tuple=False)[0]
 
                         # update with pattern-level edge id
                         stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
