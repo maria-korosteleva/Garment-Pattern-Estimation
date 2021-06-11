@@ -857,36 +857,71 @@ class ComposedPatternLoss():
             based on the provided panel features
         """
         with torch.no_grad():
-            assignment_solver = Munkres()  # one solver for all problems
+            batch_size = pred_features.shape[0]
+            pat_len = gt_features.shape[1]
 
-            per_pettern_permutation = []
-            # per-pattern processing
-            for pattern_idx in range(pred_features.shape[0]):
-                pat_len = gt_features.shape[1]
-                # distances between panels
-                dist_matrix = torch.cdist(
-                    pred_features[pattern_idx].view(pat_len, -1),   # flatten feature
-                    gt_features[pattern_idx].view(pat_len, -1))
+            # distances between panels (vectorized)
+            total_dist_matrix = torch.cdist(
+                    pred_features.view(batch_size, pat_len, -1),   # flatten feature
+                    gt_features.view(batch_size, pat_len, -1))
+            total_dist_flat_view = total_dist_matrix.view(batch_size, -1)
 
-                # (Sub) optimal assignment solving by matching the best matches first!
-                # Optimal assignemnt by Hungarian algorithm was extremely slow (especially with 10-15 panels)
-                match = [-1] * pat_len
-                for _ in range(pat_len):  # this many pair to arrange
-                    to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
-                    row = to_match_idx // dist_matrix.shape[0]
-                    col = to_match_idx % dist_matrix.shape[0]
-                    match[row] = col
+            per_pattern_permutation = torch.empty((batch_size, pat_len), dtype=torch.long, device=pred_features.device)
+            print(per_pattern_permutation.shape)
 
-                    # exlude distances with matches
-                    dist_matrix[row, :] = float('inf')
-                    dist_matrix[:, col] = float('inf')
+            for _ in range(pat_len):  # this many pair to arrange
+                to_match_ids = total_dist_flat_view.argmin(dim=1)  # current global min is also a best match for the pair it's calculated for!
                 
-                if torch.isfinite(dist_matrix).any():
-                    raise ValueError('ComposedPatternLoss::Error::Failed to match panel order'.format)
+                print(to_match_ids)
 
-                per_pettern_permutation.append(match)
+                print(to_match_ids.shape)
+                
+                rows = to_match_ids // total_dist_matrix.shape[1]
+                cols = to_match_ids % total_dist_matrix.shape[1]
+
+                print(rows.shape, cols.shape)
+                # print(per_pattern_permutation[rows].shape)
+                # row_idx = torch.stack([
+                #     torch.tensor((i, j), device=pred_features.device, dtype=torch.int) for i in range(rows.shape[0]) for j in rows[i]
+                # ])
+
+                #3 print(row_idx)
+                # for i in range(batch_size):
+                per_pattern_permutation[:, rows] = cols
+                # exlude distances with matches
+                total_dist_matrix[:, rows, :] = float('inf')
+                total_dist_matrix[:, :, cols] = float('inf')
+            
+            print(total_dist_matrix)
+
+            if torch.isfinite(total_dist_matrix).any():
+                raise ValueError('ComposedPatternLoss::Error::Failed to match panel order')
+
+            # # per-pattern processing
+            # per_pattern_permutation_list = []
+            # for pattern_idx in range(pred_features.shape[0]):
+
+            #     dist_matrix = total_dist_matrix[pattern_idx]
+
+            #     # (Sub) optimal assignment solving by matching the best matches first!
+            #     # Optimal assignemnt by Hungarian algorithm was extremely slow (especially with 10-15 panels)
+            #     match = [-1] * pat_len
+            #     for _ in range(pat_len):  # this many pair to arrange
+            #         to_match_idx = dist_matrix.argmin()  # current global min is also a best match for the pair it's calculated for!
+            #         row = to_match_idx // dist_matrix.shape[0]
+            #         col = to_match_idx % dist_matrix.shape[0]
+            #         match[row] = col
+
+            #         # exlude distances with matches
+            #         dist_matrix[row, :] = float('inf')
+            #         dist_matrix[:, col] = float('inf')
+                
+            #     if torch.isfinite(dist_matrix).any():
+            #         raise ValueError('ComposedPatternLoss::Error::Failed to match panel order'.format)
+
+            #     per_pattern_permutation_list.append(match)
         
-        return per_pettern_permutation
+        return per_pattern_permutation
 
     @staticmethod
     def _feature_permute(pattern_features, permutation):
