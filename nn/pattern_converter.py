@@ -121,6 +121,7 @@ class NNSewingPattern(VisPattern):
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         in_panel_order = []
+        new_panel_ids = [None] * len(pattern_representation)  # for correct stitches assignment in case of empty panels in-between
         for idx in range(len(pattern_representation)):
             panel_name = 'panel_' + str(idx)
             
@@ -132,6 +133,7 @@ class NNSewingPattern(VisPattern):
                     translation=panel_translations[idx] if panel_translations is not None else None,
                     padded=padded)
                 in_panel_order.append(panel_name)
+                new_panel_ids[idx] = len(in_panel_order) - 1
             except EmptyPanelError as e:
                 # Found an empty panel in the input -- moving on to the next one
                 pass
@@ -150,12 +152,12 @@ class NNSewingPattern(VisPattern):
                 stitch_object = []
                 for side_id in range(stitches.shape[0]):
                     pattern_edge_id = stitches[side_id][stitch_id]
-                    panel_id = int(pattern_edge_id // edges_per_panel)
-                    if panel_id > (len(in_panel_order) - 1):  # validity of stitch definition
+                    in_panel_id = int(pattern_edge_id // edges_per_panel)
+                    if in_panel_id > (len(pattern_representation) - 1) or new_panel_ids[in_panel_id] is None:  # validity of stitch definition
                         raise InvalidPatternDefError(self.name, 'stitch {} referes to non-existing panel {}'.format(stitch_id, panel_id))
                     stitch_object.append(
                         {
-                            "panel": in_panel_order[panel_id],
+                            "panel": in_panel_order[new_panel_ids[in_panel_id]],  # map to names of filteres non-empty panels
                             "edge": int(pattern_edge_id % edges_per_panel), 
                         }
                     )
