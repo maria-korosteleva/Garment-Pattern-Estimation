@@ -965,7 +965,13 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
             # save prediction
             folder_nick = self.data_folders_nicknames[folder]
-            final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
+
+            try: 
+                final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
+            except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+                print('Garment3DPatternDataset::Error::{} serializing skipped: {}'.format(name, e))
+                continue
+            
             final_file = pattern.name + '_predicted__pattern.png'
             prediction_imgs.append(Path(final_dir) / final_file)
 
@@ -1194,7 +1200,7 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
                 padded=True)   
             # save
             pattern.serialize(save_to, to_subfolder=True)
-        except InvalidPatternDefError as e:
+        except (RuntimeError, InvalidPatternDefError, TypeError) as e:
             print(e)
             print('Saving predictions::Skipping pattern {}'.format(name))
             pass
