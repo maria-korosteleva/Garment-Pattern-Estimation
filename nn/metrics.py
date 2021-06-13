@@ -530,7 +530,8 @@ class ComposedPatternLoss():
             'stitch_hardnet_version': False,
             'panel_origin_invariant_loss': True,
             'panel_order_inariant_loss': True,
-            'order_by': 'placement'
+            'order_by': 'placement',
+            'epoch_with_order_matching': 0, 
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -781,11 +782,11 @@ class ComposedPatternLoss():
                 pred_placement = torch.cat([preds['translations'], preds['rotations']], dim=-1)
                 gt_placement = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
-                gt_permutation = self._panel_order_match(pred_placement, gt_placement)
+                gt_permutation = self._panel_order_match(pred_placement, gt_placement, epoch)
             elif self.config['order_by'] == 'translation':
                 if 'translations' not in preds:
                     raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
-                gt_permutation = self._panel_order_match(preds['translations'], ground_truth['translations'])
+                gt_permutation = self._panel_order_match(preds['translations'], ground_truth['translations'], epoch)
 
             elif self.config['order_by'] == 'stitches':
                 if ('free_edges_mask' not in preds
@@ -813,7 +814,7 @@ class ComposedPatternLoss():
                     print('ComposedPatternLoss::Warning::skipped order match by stitch tags as stitch loss is not enabled')
 
                 
-                gt_permutation = self._panel_order_match(pred_feature, gt_feature)
+                gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
 
             else:
                 raise NotImplemented('ComposedPatternLoss::Error::Ordering by requested feature <{}> is not implemented'.format(
@@ -851,7 +852,7 @@ class ComposedPatternLoss():
 
         return gt_updated
 
-    def _panel_order_match(self, pred_features, gt_features):
+    def _panel_order_match(self, pred_features, gt_features, epoch):
         """
             Find the best-matching permutation of gt panels to the predicted panels (in panel order)
             based on the provided panel features
@@ -860,6 +861,14 @@ class ComposedPatternLoss():
             batch_size = pred_features.shape[0]
             pat_len = gt_features.shape[1]
 
+            if epoch < self.config['epoch_with_order_matching']:
+                # assign ordering randomly -- all the panel in the NN output have some non-zero signals at some point
+                per_pattern_permutation = torch.stack(
+                    [torch.randperm(pat_len, dtype=torch.long, device=pred_features.device) for _ in range(batch_size)]
+                )
+                return per_pattern_permutation
+
+            # evaluate best order match
             # distances between panels (vectorized)
             total_dist_matrix = torch.cdist(
                     pred_features.view(batch_size, pat_len, -1),   # flatten feature
@@ -868,7 +877,6 @@ class ComposedPatternLoss():
 
             # Assingment (vectorized in batch dimention)
             per_pattern_permutation = torch.full((batch_size, pat_len), fill_value=-1, dtype=torch.long, device=pred_features.device)
-            print(per_pattern_permutation.shape)
             for _ in range(pat_len):  # this many pair to arrange
                 to_match_ids = total_dist_flat_view.argmin(dim=1)  # current global min is also a best match for the pair it's calculated for!
                 

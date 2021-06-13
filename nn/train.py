@@ -93,6 +93,7 @@ def get_values_from_args():
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 40, 
+        'epoch_with_order_matching': 30,
     }
 
     return data_config, nn_config, loss_config, args.net_seed
@@ -105,8 +106,8 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='Tee-JS-shuffle-schedule', run_id='39yff7k0'
+            project_name='Test-Garments-Reconstruction', 
+            run_name='vectorized-order-match', run_id='3u3w5zmf'
             # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-loc-skip-coords', 
+        run_name='Tee-JS-rand-permute-curriculum', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
