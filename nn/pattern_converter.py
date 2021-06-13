@@ -154,7 +154,7 @@ class NNSewingPattern(VisPattern):
                     pattern_edge_id = stitches[side_id][stitch_id]
                     in_panel_id = int(pattern_edge_id // edges_per_panel)
                     if in_panel_id > (len(pattern_representation) - 1) or new_panel_ids[in_panel_id] is None:  # validity of stitch definition
-                        raise InvalidPatternDefError(self.name, 'stitch {} referes to non-existing panel {}'.format(stitch_id, panel_id))
+                        raise InvalidPatternDefError(self.name, 'stitch {} referes to non-existing panel {}'.format(stitch_id, in_panel_id))
                     stitch_object.append(
                         {
                             "panel": in_panel_order[new_panel_ids[in_panel_id]],  # map to names of filteres non-empty panels
