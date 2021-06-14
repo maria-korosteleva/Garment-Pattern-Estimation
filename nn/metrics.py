@@ -871,8 +871,8 @@ class ComposedPatternLoss():
             # evaluate best order match
             # distances between panels (vectorized)
             total_dist_matrix = torch.cdist(
-                    pred_features.view(batch_size, pat_len, -1),   # flatten feature
-                    gt_features.view(batch_size, pat_len, -1))
+                pred_features.view(batch_size, pat_len, -1),   # flatten feature
+                gt_features.view(batch_size, pat_len, -1))
             total_dist_flat_view = total_dist_matrix.view(batch_size, -1)
 
             # Assingment (vectorized in batch dimention)
@@ -900,14 +900,18 @@ class ComposedPatternLoss():
             Permute all given features (in the batch) according to given panel order permutation
         """
         with torch.no_grad():
-            all_updated = []
-            for pattern_idx in range(len(pattern_features)):
-                # permutation is unique for every pattern hence cannot perform vector operations
-                # Padding is mixed up in the permutation, no need for additional processing
-                updated_feature = torch.stack([pattern_features[pattern_idx][i] for i in permutation[pattern_idx]])
-                all_updated.append(updated_feature)
+            extended_permutation = permutation
+            # match indexing with feature size
+            if len(permutation.shape) < len(pattern_features.shape):
+                for _ in range(len(pattern_features.shape) - len(permutation.shape)):
+                    extended_permutation = extended_permutation.unsqueeze(-1)
+                # expand just creates a new view without extra copies
+                extended_permutation = extended_permutation.expand(pattern_features.shape)
+
+            # collect features with correct permutation in pattern dimention
+            indexed_features = torch.gather(pattern_features, dim=1, index=extended_permutation)
         
-        return torch.stack(all_updated).to(pattern_features.device)
+        return indexed_features
 
     @staticmethod
     def _stitch_after_permute(stitches, stitches_num, permutation, max_panel_len):
@@ -917,6 +921,12 @@ class ComposedPatternLoss():
         with torch.no_grad():  # GT updates don't require gradient compute
             # add pattern dimention
             for pattern_id in range(len(stitches)):
+                
+                # inverse permutation for this pattern for faster access
+                new_panel_ids_list = [-1] * permutation.shape[1]
+                for i in range(permutation.shape[1]):
+                    new_panel_ids_list[permutation[pattern_id][i]] = i
+
                 # re-assign GT edge ids according to shift
                 for side in (0, 1):
                     for i in range(stitches_num[pattern_id]):
@@ -925,15 +935,14 @@ class ComposedPatternLoss():
                         in_panel_edge_id = edge_id - (panel_id * max_panel_len)
 
                         # where is this panel placed
-                        # https://stackoverflow.com/questions/47863001/how-pytorch-tensor-get-the-index-of-specific-value
-                        new_panel_id = (permutation[pattern_id] == panel_id).nonzero(as_tuple=False)[0]
+                        new_panel_id = new_panel_ids_list[panel_id]
 
                         # update with pattern-level edge id
                         stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
                 
         return stitches
 
-    # ------ Ground truth panel shift  ---------
+    # ------ Ground truth panel edge loop origin shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):
         """
             Create a new GT object where panels are rotated to best match the predicted panels
@@ -1004,8 +1013,6 @@ class ComposedPatternLoss():
         """
             Find the optimal origin for gt panel that matches with the pred_panel best
         """
-        # TODO Faster version? -- I think I already did smth like with stitch tags
-
         shifted_gt_panel = gt_panel
         min_dist = ((pred_panel - shifted_gt_panel) ** 2).sum()
         chosen_panel = shifted_gt_panel
@@ -1052,7 +1059,6 @@ class ComposedPatternLoss():
         """
         with torch.no_grad():  # GT updates don't require gradient compute
             # add pattern dimention
-            # TODO less nested loops!!!!
             for pattern_id in range(len(gt_stitches)):
                 # re-assign GT edge ids according to shift
                 for side in (0, 1):
