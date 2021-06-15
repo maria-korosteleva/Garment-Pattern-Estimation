@@ -258,8 +258,10 @@ class AttentionDistributionLoss():
         * This should result in each separate panel class allocated to its separate attnction slot
         (even if those panel classes never appear in the same garment)
     """
-    def __init__(self):
-        pass
+    def __init__(self, saturation_level=0.1):
+
+        self.saturation_level = saturation_level
+        
 
     def __call__(self, attention_weights):
         """
@@ -269,10 +271,20 @@ class AttentionDistributionLoss():
         att_vector_len = attention_weights.shape[-1]
 
         # Sum for all elements in batch
-        per_panel_sum = torch.sum(attention_weights.view(-1, att_vector_len), dim=0) / batch_size  # normalized on batch size
+        flatten_att_weights = attention_weights.view(-1, att_vector_len)  # all the first dimentions
+        per_panel_sum = torch.sum(flatten_att_weights, dim=0) / flatten_att_weights.shape[0]
+
+        print('Sum')
+        print(per_panel_sum)
 
         # Put the highest value to the near-zero panel sums
-        clamped = 1. - torch.sigmoid(per_panel_sum - 1)  # TODO div by 2?
+        # Original sigmoid saturates outside [-1, 1], 
+        # while the range of weight values is [0, 1] -- twice shorter 
+        # => adjusting the basic scaling by factor of 2
+        scaling_factor = 2 * 1. / self.saturation_level
+        clamped = 1. - torch.sigmoid(scaling_factor * per_panel_sum - 1) 
+
+        print(clamped)
 
         return clamped.sum() / clamped.shape[0]
 
@@ -557,6 +569,7 @@ class ComposedPatternLoss():
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0, 
+            'att_distribution_saturation': 0.1
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -597,7 +610,7 @@ class ComposedPatternLoss():
             self.free_edge_class_loss = nn.BCEWithLogitsLoss()  # binary classification loss
         
         if 'att_distribution' in self.l_components:
-            self.att_distribution = AttentionDistributionLoss()  # custom
+            self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
 
         # -------- quality metrics ------
         if 'shape' in self.q_components:
