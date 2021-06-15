@@ -535,12 +535,18 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         Forward functions are subdivided for convenience of latent space inspection
     """
     def __init__(self, data_config, config={}, in_loss_config={}):
+
+        if 'loss_components' not in in_loss_config:
+            # with attention distribution!
+            in_loss_config.update(loss_components=[
+                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class', 'att_distribution'])
+
         super().__init__(data_config, config, in_loss_config)
 
         # TODO is it a good way to do dynamic configuration?
-        # set to true to get attention weights with prediction -- for visualization
+        # set to true to get attention weights with prediction -- for visualization or loss evaluation
         # Keep false in all unnecessary cases to save memory!
-        self.save_att_weights = False 
+        self.save_att_weights = 'att_distribution' in self.loss.config['loss_components'] 
 
         # defaults
         if 'local_attention' not in self.config:

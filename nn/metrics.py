@@ -252,6 +252,31 @@ class PatternStitchLoss():
         return sum(total_neg_loss) / len(total_neg_loss)
 
 
+class AttentionDistributionLoss():
+    """
+        Penalize the cases when an attention slot never gets allocated to panels in the batch
+        * This should result in each separate panel class allocated to its separate attnction slot
+        (even if those panel classes never appear in the same garment)
+    """
+    def __init__(self):
+        pass
+
+    def __call__(self, attention_weights):
+        """
+            Penalize the attention weight if an attention slot never gets allocated within a batch
+        """
+        batch_size = attention_weights.shape[0]
+        att_vector_len = attention_weights.shape[-1]
+
+        # Sum for all elements in batch
+        per_panel_sum = torch.sum(attention_weights.view(-1, att_vector_len), dim=0) / batch_size  # normalized on batch size
+
+        # Put the highest value to the near-zero panel sums
+        clamped = 1. - torch.sigmoid(per_panel_sum - 1)  # TODO div by 2?
+
+        return clamped.sum() / clamped.shape[0]
+
+
 # ------- custom quality metrics --------
 class PatternStitchPrecisionRecall():
     """Evaluate Precision and Recall scores for pattern stitches prediction
@@ -571,6 +596,9 @@ class ComposedPatternLoss():
         if 'free_class' in self.l_components:
             self.free_edge_class_loss = nn.BCEWithLogitsLoss()  # binary classification loss
         
+        if 'att_distribution' in self.l_components:
+            self.att_distribution = AttentionDistributionLoss()  # custom
+
         # -------- quality metrics ------
         if 'shape' in self.q_components:
             self.pattern_shape_quality = PanelVertsL2(self.max_panel_len, data_stats=self.gt_outline_stats)
@@ -681,6 +709,11 @@ class ComposedPatternLoss():
             translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'])
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
+
+        if 'att_distribution' in self.l_components:
+            att_loss = self.att_distribution(preds['att_weights'])
+            full_loss += att_loss
+            loss_dict.update(att_distribution_loss=att_loss)
 
         return full_loss, loss_dict
 
