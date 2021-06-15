@@ -94,7 +94,7 @@ def get_values_from_args():
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 40, 
         'epoch_with_order_matching': 20,
-        'att_distribution_saturation': 0.5
+        'att_distribution_saturation': 0.05
     }
 
     return data_config, nn_config, loss_config, args.net_seed
