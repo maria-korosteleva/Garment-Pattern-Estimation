@@ -694,7 +694,7 @@ class ComposedPatternLoss():
             gt_rotated = self._rotate_gt(preds, gt_rotated, gt_num_edges, epoch)
 
         # ---- Losses ------
-        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
+        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges, epoch)
         full_loss += main_losses
         loss_dict.update(main_dict)
 
