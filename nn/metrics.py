@@ -274,7 +274,7 @@ class AttentionDistributionLoss():
         flatten_att_weights = attention_weights.view(-1, att_vector_len)  # all the first dimentions
         per_panel_sum = torch.sum(flatten_att_weights, dim=0) / flatten_att_weights.shape[0]
 
-        print('Sum')
+        print('dist')
         print(per_panel_sum)
 
         # Put the highest value to the near-zero panel sums
@@ -287,6 +287,29 @@ class AttentionDistributionLoss():
         print(clamped)
 
         return clamped.sum() / clamped.shape[0]
+
+
+class AttentionEmptyMinLoss():
+    """
+        Force attention weights to be close to zero for all points if it leads to predicting empty panels
+    """
+    def __init__(self):
+        super().__init__()
+    
+    def __call__(self, attention_weights, gt_empty_panels_mask):
+        """
+            Evaluate the sum of attention weights on empty panels
+        """
+        batch_size = attention_weights.shape[0]
+        att_vector_len = attention_weights.shape[-1]
+
+        # Sum for all elements in batch
+        per_pattern_sum = torch.sum(attention_weights, dim=1) / attention_weights.shape[1]
+        
+        # only the ones corresponding to empty panels will be left non-zero
+        per_empty_sum = per_pattern_sum * gt_empty_panels_mask
+
+        return per_empty_sum.sum() / per_empty_sum.numel()
 
 
 # ------- custom quality metrics --------
@@ -612,6 +635,9 @@ class ComposedPatternLoss():
         if 'att_distribution' in self.l_components:
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
 
+        if 'min_empty_att' in self.l_components:
+            self.min_empty_panels_att = AttentionEmptyMinLoss()
+
         # -------- quality metrics ------
         if 'shape' in self.q_components:
             self.pattern_shape_quality = PanelVertsL2(self.max_panel_len, data_stats=self.gt_outline_stats)
@@ -727,6 +753,11 @@ class ComposedPatternLoss():
             att_loss = self.att_distribution(preds['att_weights'])
             full_loss += att_loss
             loss_dict.update(att_distribution_loss=att_loss)
+        
+        if 'min_empty_att' in self.l_components:
+            att_empty_loss = self.min_empty_panels_att(preds['att_weights'], ground_truth['empty_panels_mask'])
+            full_loss += att_empty_loss
+            loss_dict.update(att_empty_loss=att_empty_loss)
 
         return full_loss, loss_dict
 
@@ -833,7 +864,6 @@ class ComposedPatternLoss():
                 if 'translations' not in preds:
                     raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
                 gt_permutation = self._panel_order_match(preds['translations'], ground_truth['translations'], epoch)
-
             elif self.config['order_by'] == 'stitches':
                 if ('free_edges_mask' not in preds
                         or 'translations' not in preds 
@@ -861,7 +891,6 @@ class ComposedPatternLoss():
 
                 
                 gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
-
             else:
                 raise NotImplemented('ComposedPatternLoss::Error::Ordering by requested feature <{}> is not implemented'.format(
                     self.config['order_by']
@@ -876,6 +905,8 @@ class ComposedPatternLoss():
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
             if 'translation' in self.l_components:
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
+            if 'min_empty_att' in self.l_components:
+                gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
             
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components

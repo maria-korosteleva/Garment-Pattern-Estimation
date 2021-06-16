@@ -1067,6 +1067,15 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         
         return mask
 
+    @staticmethod
+    def empty_panels_mask(num_panels, tot_length):
+        """Empty panels as boolean mask"""
+
+        mask = np.zeros(tot_length, dtype=np.bool)
+        mask[num_panels:] = True
+
+        return mask
+
     def _get_features(self, datapoint_name, folder_elements):
         """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
         points = self._sample_points(datapoint_name, folder_elements)
@@ -1080,13 +1089,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pad_panel_num=self.config['max_pattern_len'],
             pad_stitches_num=self.config['max_num_stitches'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
-        mask = self.free_edges_mask(pattern, stitches, num_stitches)
+        free_edges_mask = self.free_edges_mask(pattern, stitches, num_stitches)
+        empty_panels_mask = self.empty_panels_mask(num_panels, len(pattern))  # useful for evaluation
 
         return {
             'outlines': pattern, 'num_edges': num_edges,
             'rotations': rots, 'translations': tranls, 
-            'num_panels': num_panels, 'num_stitches': num_stitches,
-            'stitches': stitches, 'free_edges_mask': mask, 'stitch_tags': stitch_tags}
+            'num_panels': num_panels, 'empty_panels_mask': empty_panels_mask, 'num_stitches': num_stitches,
+            'stitches': stitches, 'free_edges_mask': free_edges_mask, 'stitch_tags': stitch_tags}
 
     def _pred_to_pattern(self, prediction, dataname):
         """Convert given predicted value to pattern object
