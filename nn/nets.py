@@ -537,9 +537,9 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
 
         if 'loss_components' not in in_loss_config:
-            # with attention losses!
+            # with attention losses! 'att_distribution',
             in_loss_config.update(loss_components=[
-                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class', 'att_distribution', 'min_empty_att'])
+                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class', 'min_empty_att'])
 
         super().__init__(data_config, config, in_loss_config)
 
