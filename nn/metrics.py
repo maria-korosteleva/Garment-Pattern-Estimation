@@ -592,7 +592,9 @@ class ComposedPatternLoss():
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0, 
-            'att_distribution_saturation': 0.1
+            'att_empty_weight': 1,  # for empty panels zero attention loss
+            'att_distribution_saturation': 0.1,
+            'epoch_with_att_saturation': 0
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -720,7 +722,7 @@ class ComposedPatternLoss():
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
 
     # ------- evaluation breakdown -------
-    def _main_losses(self, preds, ground_truth, gt_num_edges):
+    def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
         """
             Main loss components. Evaluated in the same way regardless of the training stage
         """
@@ -749,14 +751,14 @@ class ComposedPatternLoss():
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
 
-        if 'att_distribution' in self.l_components:
+        if 'att_distribution' in self.l_components and epoch >= self.config['epoch_with_att_saturation']:
             att_loss = self.att_distribution(preds['att_weights'])
             full_loss += att_loss
             loss_dict.update(att_distribution_loss=att_loss)
         
         if 'min_empty_att' in self.l_components:
             att_empty_loss = self.min_empty_panels_att(preds['att_weights'], ground_truth['empty_panels_mask'])
-            full_loss += att_empty_loss
+            full_loss += self.config['att_empty_weight'] * att_empty_loss
             loss_dict.update(att_empty_loss=att_empty_loss)
 
         return full_loss, loss_dict
