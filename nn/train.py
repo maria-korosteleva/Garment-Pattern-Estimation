@@ -12,6 +12,9 @@ from trainer import Trainer
 from experiment import WandbRunWrappper
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
+import warnings
+warnings.filterwarnings('ignore', category='UserWarning')
+
 
 def get_values_from_args():
     """command line arguments to control the run for running wandb Sweeps!"""

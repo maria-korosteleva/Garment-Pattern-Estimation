@@ -923,6 +923,9 @@ class ComposedPatternLoss():
             if self.training:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
+                print(ground_truth['name'])
+
+
                 gt_permutation, collision_swaps_stats = self._att_cluster_analysis(
                     gt_feature, gt_permutation, ground_truth['empty_panels_mask']
                 )
@@ -1055,7 +1058,7 @@ class ComposedPatternLoss():
             else:  # got a warning or the one-cluster distortion is about zero
                 single_class.append(panel_id)      
 
-        # print('Single class: {}; Multi-class: {}; Empty: {};'.format(single_class, multiple_classes, empty_att_slots))
+        print('Single class: {}; Multi-class: {}; Empty: {};'.format(single_class, multiple_classes, empty_att_slots))
 
         # Update permutation if some multi-class assignment was detected and there is space to move
         num_swaps = 0
