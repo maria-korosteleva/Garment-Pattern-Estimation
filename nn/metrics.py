@@ -946,7 +946,7 @@ class ComposedPatternLoss():
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
             if 'translation' in self.l_components:
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
-            if 'min_empty_att' in self.l_components:
+            # if 'min_empty_att' in self.l_components:
                 
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
