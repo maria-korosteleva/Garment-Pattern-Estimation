@@ -920,7 +920,7 @@ class ComposedPatternLoss():
             gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
 
             collision_swaps_stats = {}
-            if self.training:
+            if self.training and epoch > self.config['epoch_with_order_matching']:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
