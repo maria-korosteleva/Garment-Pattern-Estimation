@@ -923,8 +923,6 @@ class ComposedPatternLoss():
             if self.training:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
-                print(ground_truth['name'])
-
 
                 gt_permutation, collision_swaps_stats = self._att_cluster_analysis(
                     gt_feature, gt_permutation, ground_truth['empty_panels_mask']
