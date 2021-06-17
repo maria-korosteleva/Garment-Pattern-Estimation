@@ -933,13 +933,21 @@ class ComposedPatternLoss():
 
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
 
+            gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
+            empty_att_slots = []
+            for panel_id in range(gt_updated['empty_panels_mask'].shape[-1]):
+                if gt_updated['empty_panels_mask'][:, panel_id].all():  
+                    # all panels at this place are empty
+                    empty_att_slots.append(panel_id)
+            print('Empty panels after swaps: ', empty_att_slots)
+
+
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
             if 'translation' in self.l_components:
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
             if 'min_empty_att' in self.l_components:
-                gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
-            
+                
             if epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
                     or 'stitch_supervised' in self.l_components
