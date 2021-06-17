@@ -13,7 +13,7 @@ from experiment import WandbRunWrappper
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 import warnings
-warnings.filterwarnings('ignore', category='UserWarning')
+warnings.filterwarnings('ignore')  # , category='UserWarning'
 
 
 def get_values_from_args():
