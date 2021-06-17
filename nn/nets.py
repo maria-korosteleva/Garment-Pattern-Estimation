@@ -30,6 +30,17 @@ class BaseModule(nn.Module):
         return loss, {'regression loss': loss}, False  # second term is for compound losses, third -- to indicate dynamic update of loss structure
 
 
+    def train(self, mode=True):
+        super().train(mode)
+        if isinstance(self.loss, object):
+            self.loss.train(mode)
+    
+    def eval(self):
+        super().eval()
+        if isinstance(self.loss, object):
+            self.loss.eval()
+
+
 # -------- Nets architectures -----------
 class GarmentPanelsAE(BaseModule):
     """
@@ -537,9 +548,9 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
 
         if 'loss_components' not in in_loss_config:
-            # with attention losses! 
+            # with\wihtout attention losses!   , 'att_distribution', 'min_empty_att'
             in_loss_config.update(loss_components=[
-                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class', 'att_distribution', 'min_empty_att'])
+                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'])
 
         super().__init__(data_config, config, in_loss_config)
 

@@ -2,10 +2,19 @@
     List of metrics to evalute on a model and a dataset, along with pre-processing methods needed for such evaluation
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 
 from munkres import Munkres  # solving assignemnt problem
+
+# gt clustering
+from sklearn.cluster import KMeans
+from sklearn import metrics
+from sklearn.exceptions import ConvergenceWarning
+from scipy.spatial.distance import cdist
+import warnings
+from operator import itemgetter
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
@@ -274,8 +283,8 @@ class AttentionDistributionLoss():
         flatten_att_weights = attention_weights.view(-1, att_vector_len)  # all the first dimentions
         per_panel_sum = torch.sum(flatten_att_weights, dim=0) / flatten_att_weights.shape[0]
 
-        print('dist')
-        print(per_panel_sum)
+        # print('dist')
+        # print(per_panel_sum)
 
         # Put the highest value to the near-zero panel sums
         # Original sigmoid saturates outside [-1, 1], 
@@ -284,7 +293,7 @@ class AttentionDistributionLoss():
         scaling_factor = 2 * 1. / self.saturation_level
         clamped = 1. - torch.sigmoid(scaling_factor * per_panel_sum - 1) 
 
-        print(clamped)
+        # print(clamped)
 
         return clamped.sum() / clamped.shape[0]
 
@@ -599,6 +608,7 @@ class ComposedPatternLoss():
         self.config.update(in_config)  # override with requested settings
 
         self.with_quality_eval = True  # quality evaluation switch -- may allow to speed up the loss evaluation if False
+        self.training = False  # training\evaluation state
 
         # Convenience properties
         self.l_components = self.config['loss_components']
@@ -684,7 +694,8 @@ class ComposedPatternLoss():
 
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
-            gt_rotated = self._gt_order_match(preds, ground_truth, epoch) 
+            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth, epoch) 
+            loss_dict.update(order_metrics)
         else:  # keep original
             gt_rotated = ground_truth
         
@@ -720,6 +731,13 @@ class ComposedPatternLoss():
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
         return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
+
+    def eval(self):
+        """ Loss to evaluation mode """
+        self.training = False
+
+    def train(self, mode=True):
+        self.training = mode
 
     # ------- evaluation breakdown -------
     def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
@@ -858,14 +876,16 @@ class ComposedPatternLoss():
                         or 'rotations' not in preds):
                     raise ValueError('ComposedPatternLoss::Error::Ordering by placement requested but placement is not predicted')
 
-                pred_placement = torch.cat([preds['translations'], preds['rotations']], dim=-1)
-                gt_placement = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
+                pred_feature = torch.cat([preds['translations'], preds['rotations']], dim=-1)
+                gt_feature = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
-                gt_permutation = self._panel_order_match(pred_placement, gt_placement, epoch)
             elif self.config['order_by'] == 'translation':
                 if 'translations' not in preds:
                     raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
-                gt_permutation = self._panel_order_match(preds['translations'], ground_truth['translations'], epoch)
+                
+                pred_feature = preds['translations']
+                gt_feature = ground_truth['translations']
+                
             elif self.config['order_by'] == 'stitches':
                 if ('free_edges_mask' not in preds
                         or 'translations' not in preds 
@@ -889,14 +909,23 @@ class ComposedPatternLoss():
                     gt_feature = torch.cat([gt_feature, gt_mask], dim=-1)
 
                 else:
-                    print('ComposedPatternLoss::Warning::skipped order match by stitch tags as stitch loss is not enabled')
-
+                    print('ComposedPatternLoss::Warning::skipped order match by stitch tags as stitch loss is not enabled')      
                 
-                gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
             else:
                 raise NotImplemented('ComposedPatternLoss::Error::Ordering by requested feature <{}> is not implemented'.format(
                     self.config['order_by']
                 ))
+
+            # run the optimal permutation eval
+            gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
+
+            collision_swaps_stats = {}
+            if self.training:
+                # remove panel types collision even it's not the best match with net output
+                # enourages good separation of panel "classes" during training, but not needed at evaluation time
+                gt_permutation, collision_swaps_stats = self._att_cluster_analysis(
+                    gt_feature, gt_permutation, ground_truth['empty_panels_mask']
+                )
 
             # Update gt info according to the permutation
             gt_updated['outlines'] = self._feature_permute(ground_truth['outlines'], gt_permutation)
@@ -929,7 +958,7 @@ class ComposedPatternLoss():
                 if key not in gt_updated:
                     gt_updated[key] = ground_truth[key]
 
-        return gt_updated
+        return gt_updated, collision_swaps_stats
 
     def _panel_order_match(self, pred_features, gt_features, epoch):
         """
@@ -972,6 +1001,91 @@ class ComposedPatternLoss():
                 raise ValueError('ComposedPatternLoss::Error::Failed to match panel order')
         
         return per_pattern_permutation
+
+    def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
+        """ (try) to find and resolve cases when multiple panel clusters 
+            were assigned to the same panel id (hence attention slot)
+            in the given batch
+            Clusters are evaluated in unsupervised manner based on fiven feature
+        """
+        # to separate empty panels from clustering consideration
+        empty_mask = self._feature_permute(empty_panel_mask, permutation)
+        non_empty = ~empty_mask
+
+        empty_att_slots = []
+        single_class = []
+        multiple_classes = []
+        for panel_id in range(empty_mask.shape[-1]):
+            if empty_mask[:, panel_id].all():  
+                # all panels at this place are empty
+                empty_att_slots.append(panel_id)
+                continue
+
+            non_empty_ids = torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1)
+            if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
+                single_class.append(panel_id)
+                continue
+            
+            # estimate if one or more clusters are present
+            selected_features = features[non_empty_ids, panel_id, :].cpu()
+
+            distortions = []
+            K = range(1, 3)  # TODO there might be more then 2 clusters on sone occasions
+            with warnings.catch_warnings():
+                # https://stackoverflow.com/questions/48100939/how-to-detect-a-scikit-learn-warning-programmatically
+                warnings.filterwarnings('error', category=ConvergenceWarning)
+                for k in K:
+                    try:
+                        kmeanModel = KMeans(n_clusters=k, random_state=0).fit(selected_features)
+                    except ConvergenceWarning as w:
+                        # This check may not detect ALL single-class cases
+                        break 
+
+                    distortions.append(sum(np.min(
+                        cdist(selected_features, kmeanModel.cluster_centers_, 'euclidean'), 
+                        axis=1)) / selected_features.shape[0])
+
+            if len(distortions) > 1 and not np.isclose(distortions[0], 0.): 
+                # TODO Additionally decide if it's single-or-multi class situation
+                multiple_classes.append(
+                    # id, improvement evaluation, labeling from the last 2-cluster trial
+                    (panel_id, distortions[0] - distortions[1], kmeanModel.labels_)
+                )
+
+            else:  # got a warning or the one-cluster distortion is about zero
+                single_class.append(panel_id)      
+
+        # print('Single class: {}; Multi-class: {}; Empty: {};'.format(single_class, multiple_classes, empty_att_slots))
+
+        # Update permutation if some multi-class assignment was detected and there is space to move
+        num_swaps = 0
+        swapped_distortion_levels = []
+        if len(multiple_classes) and len(empty_att_slots):
+            # sort according to distortion power to separate most obvious cases first
+            # https://stackoverflow.com/a/10695158
+            sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+
+            for current_slot, curr_distortion, labels in sorted_multi_classes:
+                if not len(empty_att_slots): 
+                    # no more empty slots to use 
+                    break
+                empty_slot = empty_att_slots.pop()  # use empty slot
+
+                # Label 1 definetely exists & is probably used less then label 0
+                indices = np.transpose((labels == 1).nonzero()).squeeze(-1)
+
+                # move some of the panels from current_slot to empty_slot in permutation
+                permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
+                
+                # Logging Info
+                num_swaps += 1
+                swapped_distortion_levels.append(curr_distortion)
+
+        # updated permutation & logging info
+        return permutation, {
+            'order_collision_swaps': num_swaps, 
+            'distortion_level_improvement': sum(swapped_distortion_levels) / len(swapped_distortion_levels) if len(swapped_distortion_levels) else 0
+        }
 
     @staticmethod
     def _feature_permute(pattern_features, permutation):
