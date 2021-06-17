@@ -317,6 +317,8 @@ class LSTMEncoderModule(nn.Module):
             elem_len, encoding_size, n_layers, 
             dropout=dropout, batch_first=True)
 
+        self.lstm.flatten_parameters()  # getting rid of warnings
+
         _init_weights(self.lstm, init_type=custom_init)
 
     def forward(self, batch_sequence):
@@ -344,6 +346,7 @@ class LSTMDecoderModule(nn.Module):
 
         self.lstm = nn.LSTM(encoding_size, hidden_size, n_layers, 
                             dropout=dropout, batch_first=True)
+        self.lstm.flatten_parameters()  # getting rid of warnings
 
         # post-process to match the desired outut shape
         self.lin = nn.Linear(hidden_size, out_elem_size)
@@ -390,6 +393,9 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
                                     dropout=dropout, batch_first=True)
         self.lstm_forward = nn.LSTM(hidden_size + encoding_size, hidden_size, n_layers, 
                                     dropout=dropout, batch_first=True)
+        
+        self.lstm_reverse.flatten_parameters()
+        self.lstm_forward.flatten_parameters()
 
         # post-process to match the desired outut shape
         self.lin = nn.Linear(hidden_size, out_elem_size)

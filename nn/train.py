@@ -12,8 +12,8 @@ from trainer import Trainer
 from experiment import WandbRunWrappper
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
-import warnings
-warnings.filterwarnings('ignore', category='UserWarning')
+# import warnings
+# warnings.filterwarnings('ignore', category='UserWarning')
 
 
 def get_values_from_args():
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
+        project_name='Test-Garments-Reconstruction', 
         run_name='Tee-JS-cluster-separation', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
