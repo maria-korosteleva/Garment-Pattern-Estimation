@@ -1072,13 +1072,17 @@ class ComposedPatternLoss():
             sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
 
             for current_slot, curr_quality, labels in sorted_multi_classes:
-                if not len(empty_att_slots): 
+                if len(empty_att_slots) == 0: 
                     # no more empty slots to use 
                     break
                 empty_slot = empty_att_slots.pop()  # use empty slot
+                print('Using Empty ', empty_slot)
 
-                # Label 1 definetely exists & is probably used less then label 0
-                indices = np.transpose((labels == 1).nonzero()).squeeze(-1)
+                # Choose labels that is used the least
+                indices_0 = np.transpose((labels == 1).nonzero()).squeeze(-1)
+                indices_1 = np.transpose((labels == 1).nonzero()).squeeze(-1)
+                min_len = min(len(indices_0), len(indices_1)) 
+                indices = indices_0 if len(indices_0) == min_len else indices_1
 
                 # move some of the panels from current_slot to empty_slot in permutation
                 permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
