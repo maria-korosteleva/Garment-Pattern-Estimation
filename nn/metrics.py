@@ -886,6 +886,16 @@ class ComposedPatternLoss():
                 pred_feature = preds['translations']
                 gt_feature = ground_truth['translations']
                 
+            elif self.config['order_by'] == 'shape_translation':
+                if 'translations' not in preds:
+                    raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
+
+                pred_outlines_flat = preds['outlines'].view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
+                gt_outlines_flat = ground_truth['outlines'].view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
+
+                pred_feature = torch.cat([preds['translations'], pred_outlines_flat], dim=-1)
+                gt_feature = torch.cat([ground_truth['translations'], gt_outlines_flat], dim=-1)
+ 
             elif self.config['order_by'] == 'stitches':
                 if ('free_edges_mask' not in preds
                         or 'translations' not in preds 
