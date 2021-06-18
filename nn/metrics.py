@@ -892,8 +892,8 @@ class ComposedPatternLoss():
                 if 'translations' not in preds:
                     raise ValueError('ComposedPatternLoss::Error::Ordering by translation requested but translation is not predicted')
 
-                pred_outlines_flat = preds['outlines'].view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
-                gt_outlines_flat = ground_truth['outlines'].view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
+                pred_outlines_flat = preds['outlines'].contiguous().view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
+                gt_outlines_flat = ground_truth['outlines'].contiguous().view(preds['outlines'].shape[0], preds['outlines'].shape[1], -1)
 
                 pred_feature = torch.cat([preds['translations'], pred_outlines_flat], dim=-1)
                 gt_feature = torch.cat([ground_truth['translations'], gt_outlines_flat], dim=-1)
@@ -1029,9 +1029,10 @@ class ComposedPatternLoss():
             in the given batch
             Clusters are evaluated in unsupervised manner based on fiven feature
         """
-        # to separate empty panels from clustering consideration
+        # Apply permutation (since we need to check the quality of permutation, cap =))
         empty_mask = self._feature_permute(empty_panel_mask, permutation)
         non_empty = ~empty_mask
+        features = self._feature_permute(features, permutation)  # !!
 
         # evaluate clustering
         empty_att_slots = []
