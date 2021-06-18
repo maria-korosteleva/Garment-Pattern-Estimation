@@ -16,6 +16,8 @@ from scipy.spatial.distance import cdist
 import warnings
 from operator import itemgetter
 
+from gap import gap as gap_statistics
+
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
 
@@ -930,7 +932,7 @@ class ComposedPatternLoss():
             gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
 
             collision_swaps_stats = {}
-            if self.training and epoch > self.config['epoch_with_order_matching']:
+            if (self.training and epoch > self.config['epoch_with_order_matching']):
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
@@ -1031,6 +1033,7 @@ class ComposedPatternLoss():
         empty_mask = self._feature_permute(empty_panel_mask, permutation)
         non_empty = ~empty_mask
 
+        # evaluate clustering
         empty_att_slots = []
         single_class = []
         multiple_classes = []
@@ -1045,46 +1048,29 @@ class ComposedPatternLoss():
                 single_class.append(panel_id)
                 continue
             
-            # estimate if one or more clusters are present
+            # Differentiate single cluster from multi-cluster cases based on gap statistic
             selected_features = features[non_empty_ids, panel_id, :].cpu()
-
-            distortions = []
             K = range(1, 3)  # TODO there might be more then 2 clusters on sone occasions
-            with warnings.catch_warnings():
-                # https://stackoverflow.com/questions/48100939/how-to-detect-a-scikit-learn-warning-programmatically
-                warnings.filterwarnings('error', category=ConvergenceWarning)
-                for k in K:
-                    try:
-                        kmeanModel = KMeans(n_clusters=k, random_state=0).fit(selected_features)
-                    except ConvergenceWarning as w:
-                        # This check may not detect ALL single-class cases
-                        break 
 
-                    distortions.append(sum(np.min(
-                        cdist(selected_features, kmeanModel.cluster_centers_, 'euclidean'), 
-                        axis=1)) / selected_features.shape[0])
+            gaps, labels_2_class = gap_statistics(selected_features.numpy(), ks=K)
 
-            if len(distortions) > 1 and not np.isclose(distortions[0], 0.): 
-                # TODO Additionally decide if it's single-or-multi class situation
-                multiple_classes.append(
-                    # id, improvement evaluation, labeling from the last 2-cluster trial
-                    (panel_id, distortions[0] - distortions[1], kmeanModel.labels_)
-                )
-
-            else:  # got a warning or the one-cluster distortion is about zero
-                single_class.append(panel_id)      
+            # reduction in quality with number of classes increase -- or no differences in elements at all
+            if gaps[0] > gaps[1] or gaps[1] is None or gaps[0] is None or np.isnan(gaps[0]) or np.isnan(gaps[1]):
+                single_class.append(panel_id)
+            else:
+                multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(single_class, multiple_classes, empty_att_slots))
 
         # Update permutation if some multi-class assignment was detected and there is space to move
         num_swaps = 0
-        swapped_distortion_levels = []
+        swapped_quality_levels = []
         if len(multiple_classes) and len(empty_att_slots):
             # sort according to distortion power to separate most obvious cases first
             # https://stackoverflow.com/a/10695158
             sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
 
-            for current_slot, curr_distortion, labels in sorted_multi_classes:
+            for current_slot, curr_quality, labels in sorted_multi_classes:
                 if not len(empty_att_slots): 
                     # no more empty slots to use 
                     break
@@ -1098,12 +1084,12 @@ class ComposedPatternLoss():
                 
                 # Logging Info
                 num_swaps += 1
-                swapped_distortion_levels.append(curr_distortion)
+                swapped_quality_levels.append(curr_quality)
 
         # updated permutation & logging info
         return permutation, {
             'order_collision_swaps': num_swaps, 
-            'distortion_level_improvement': sum(swapped_distortion_levels) / len(swapped_distortion_levels) if len(swapped_distortion_levels) else 0
+            'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0
         }
 
     @staticmethod
