@@ -90,7 +90,7 @@ def get_values_from_args():
         # Extra loss parameters
         'panel_origin_invariant_loss': False,
         'panel_order_inariant_loss': True,
-        'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
+        'order_by': 'translation',   # placement, translation, stitches, shape_translation
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-cluster-by-shape-transl', 
+        run_name='Tee-JS-cluster-batch-size', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
