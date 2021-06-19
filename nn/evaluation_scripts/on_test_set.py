@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-segmentation-orderless', 
-    run_id='7h6bdudt')  # finished experiment
+    run_name='Tee-JS-cluster-gap-shape_tr', 
+    run_id='3bylw5fn')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -57,7 +57,7 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
-# valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
+valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
 # print('Validation metrics: {}'.format(valid_loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
@@ -76,8 +76,8 @@ model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_d
 
 # -------- Predict ---------
 # save prediction for validation to file
-prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-print('Saved to {}'.format(prediction_path))
+# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+# print('Saved to {}'.format(prediction_path))
 # # # reflect predictions info in expetiment
 # experiment.add_statistic('pred_folder', prediction_path.name)
 

@@ -603,6 +603,7 @@ class ComposedPatternLoss():
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0, 
+            'epoch_with_cluster_checks': 0,
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
             'epoch_with_att_saturation': 0
@@ -932,7 +933,7 @@ class ComposedPatternLoss():
             gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
 
             collision_swaps_stats = {}
-            if (self.training and epoch > self.config['epoch_with_order_matching']):
+            if (self.training and epoch > self.config['epoch_with_cluster_checks']):
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
@@ -1077,12 +1078,21 @@ class ComposedPatternLoss():
                     break
                 empty_slot = empty_att_slots.pop()  # use empty slot
                 print('Using Empty ', empty_slot)
-
-                # Choose labels that is used the least
-                indices_0 = np.transpose((labels == 1).nonzero()).squeeze(-1)
+                
+                # Choose labels that is used the least 
+                indices_0 = np.transpose((labels == 0).nonzero()).squeeze(-1)
                 indices_1 = np.transpose((labels == 1).nonzero()).squeeze(-1)
                 min_len = min(len(indices_0), len(indices_1)) 
+                # these are ids among non-empty features only
                 indices = indices_0 if len(indices_0) == min_len else indices_1
+
+                # convert to ids in batch 
+                # TODO reuse this info from above
+                non_empty_ids = torch.nonzero(non_empty[:, current_slot], as_tuple=False).squeeze(-1)
+                print(current_slot, ' non_empty: ', non_empty_ids)
+                print(indices)
+                indices = non_empty_ids[indices]
+                print(indices)
 
                 # move some of the panels from current_slot to empty_slot in permutation
                 permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
