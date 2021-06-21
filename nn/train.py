@@ -91,6 +91,7 @@ def get_values_from_args():
         'panel_origin_invariant_loss': False,
         'panel_order_inariant_loss': True,
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
+        'cluster_by': 'panel_encodings',  # 'panel_encodings', 'order_feature'
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,

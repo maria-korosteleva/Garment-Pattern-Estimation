@@ -602,7 +602,8 @@ class ComposedPatternLoss():
             'panel_origin_invariant_loss': True,
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
-            'epoch_with_order_matching': 0, 
+            'epoch_with_order_matching': 0,
+            'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
@@ -937,8 +938,13 @@ class ComposedPatternLoss():
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
+                if self.config['cluster_by'] == 'panel_encodings':
+                    cluster_feature = preds['panel_encodings']
+                else:  # order_feature -- default by the same feature as ordering
+                    cluster_feature = self._feature_permute(gt_feature, gt_permutation)  # !!
+
                 gt_permutation, collision_swaps_stats = self._att_cluster_analysis(
-                    gt_feature, gt_permutation, ground_truth['empty_panels_mask']
+                    cluster_feature, gt_permutation, ground_truth['empty_panels_mask']
                 )
 
             # Update gt info according to the permutation
@@ -1033,7 +1039,6 @@ class ComposedPatternLoss():
         # Apply permutation (since we need to check the quality of permutation, cap =))
         empty_mask = self._feature_permute(empty_panel_mask, permutation)
         non_empty = ~empty_mask
-        features = self._feature_permute(features, permutation)  # !!
 
         # evaluate clustering
         empty_att_slots = []

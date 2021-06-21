@@ -90,7 +90,7 @@ class DatasetWrapper(object):
         else:
             self.loader_valid_single_per_data = None
 
-        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
+        self.loader_test = DataLoader(self.test, self.batch_size, shuffle=True) if self.test else None   # DEBUG!!!!
         self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
 
         self.loader_full = DataLoader(self.dataset, self.batch_size)
