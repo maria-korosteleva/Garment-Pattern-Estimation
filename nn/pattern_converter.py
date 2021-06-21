@@ -118,6 +118,9 @@ class NNSewingPattern(VisPattern):
         if sys.version_info[0] < 3:
             raise RuntimeError('BasicPattern::Error::pattern_from_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
 
+        # Invalidate parameter & constraints values
+        self._invalidate_all_values()
+
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         in_panel_order = []
