@@ -605,6 +605,7 @@ class ComposedPatternLoss():
             'epoch_with_order_matching': 0,
             'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
+            'cluster_gap_nrefs': 20,   # reducing will speed up training
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
             'epoch_with_att_saturation': 0
@@ -1059,7 +1060,7 @@ class ComposedPatternLoss():
             selected_features = features[non_empty_ids, panel_id, :].cpu()
             K = range(1, 3)  # TODO there might be more then 2 clusters on sone occasions
 
-            gaps, labels_2_class = gap_statistics(selected_features.numpy(), ks=K)
+            gaps, labels_2_class = gap_statistics(selected_features.numpy(), nrefs=self.config['cluster_gap_nrefs'], ks=K)
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
             if gaps[0] > gaps[1] or gaps[1] is None or gaps[0] is None or np.isnan(gaps[0]) or np.isnan(gaps[1]):
@@ -1077,7 +1078,7 @@ class ComposedPatternLoss():
             # sort according to distortion power to separate most obvious cases first
             # https://stackoverflow.com/a/10695158
             sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
-            
+
             print(sorted_multi_classes)
 
             for current_slot, curr_quality, labels in sorted_multi_classes:

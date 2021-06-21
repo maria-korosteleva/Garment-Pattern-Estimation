@@ -53,6 +53,10 @@ def gap(data, refs=None, nrefs=20, ks=range(1,11)):
                 (kmc,kml) = kmeanModel.cluster_centers_, kmeanModel.labels_
                 disp = sum([dst(data[m,:],kmc[kml[m],:]) for m in range(shape[0])])
 
+                if np.isclose(disp, 0.):
+                    gaps[i] = None
+                    continue 
+
                 refdisps = scipy.zeros((rands.shape[2],))
                 for j in range(rands.shape[2]):
                     kmeanModel = KMeans(n_clusters=k).fit(rands[:,:,j])
@@ -60,8 +64,8 @@ def gap(data, refs=None, nrefs=20, ks=range(1,11)):
                     refdisps[j] = sum([dst(rands[m,:,j],kmc[kml[m],:]) for m in range(shape[0])])
 
             except ConvergenceWarning as w:
-                gaps[i] = None
-                break 
+                gaps[i] = None  
+                break  # next iterations will also have convergence warning
 
         if np.isclose(disp, 0.) or np.allclose(refdisps, 0.):  # degenerate cases
             gaps[i] = None
