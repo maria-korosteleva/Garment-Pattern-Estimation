@@ -5,6 +5,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import time
 
 from munkres import Munkres  # solving assignemnt problem
 
@@ -14,9 +15,10 @@ from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
 from scipy.spatial.distance import cdist
 import warnings
+
 from operator import itemgetter
 
-from gap import gap as gap_statistics
+from gap import gap_torch as gap_statistic
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
@@ -1056,11 +1058,12 @@ class ComposedPatternLoss():
                 single_class.append(panel_id)
                 continue
             
-            # Differentiate single cluster from multi-cluster cases based on gap statistic
-            selected_features = features[non_empty_ids, panel_id, :].cpu()
-            K = range(1, 3)  # TODO there might be more then 2 clusters on sone occasions
+            # Differentiate single cluster from multi-cluster cases based on gap statistic            
+            K = range(1, 3)  # enough to compare 1 cluster and 2 cluster cases
 
-            gaps, labels_2_class = gap_statistics(selected_features.numpy(), nrefs=self.config['cluster_gap_nrefs'], ks=K)
+            gaps, labels_2_class = gap_statistic(
+                features[non_empty_ids, panel_id, :],
+                nrefs=self.config['cluster_gap_nrefs'], ks=K)
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
             if gaps[0] > gaps[1] or gaps[1] is None or gaps[0] is None or np.isnan(gaps[0]) or np.isnan(gaps[1]):
@@ -1089,8 +1092,9 @@ class ComposedPatternLoss():
                 print('Using Empty ', empty_slot)
                 
                 # Choose labels that is used the least 
-                indices_0 = np.transpose((labels == 0).nonzero()).squeeze(-1)
-                indices_1 = np.transpose((labels == 1).nonzero()).squeeze(-1)
+                indices_0 = (labels == 0).nonzero(as_tuple=False).squeeze(-1)
+                indices_1 = (labels == 1).nonzero(as_tuple=False).squeeze(-1)
+
                 min_len = min(len(indices_0), len(indices_1)) 
                 # these are ids among non-empty features only
                 indices = indices_0 if len(indices_0) == min_len else indices_1
