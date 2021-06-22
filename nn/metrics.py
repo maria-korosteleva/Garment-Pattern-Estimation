@@ -1062,7 +1062,8 @@ class ComposedPatternLoss():
                 nrefs=self.config['cluster_gap_nrefs'], ks=K)
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
-            if gaps[0] > gaps[1] or gaps[1] is None or gaps[0] is None:
+            print('Gaps: ', gaps)
+            if gaps[1] is None or gaps[0] is None or gaps[0] > gaps[1]:
                 single_class.append(panel_id)
             else:
                 multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
