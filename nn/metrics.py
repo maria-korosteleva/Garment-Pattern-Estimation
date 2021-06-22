@@ -7,15 +7,6 @@ import torch
 import torch.nn as nn
 import time
 
-from munkres import Munkres  # solving assignemnt problem
-
-# gt clustering
-from sklearn.cluster import KMeans
-from sklearn import metrics
-from sklearn.exceptions import ConvergenceWarning
-from scipy.spatial.distance import cdist
-import warnings
-
 from operator import itemgetter
 
 from gap import gap_torch as gap_statistic
