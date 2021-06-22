@@ -41,7 +41,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
     else:
         rands = refs
 
-    gaps = [] * len(ks)  # lists allow for None values
+    gaps = [None] * len(ks)  # lists allow for None values
     zero = torch.zeros(1, device=data.device)
     labels_per_k = []
     for (i, k) in enumerate(ks):   
