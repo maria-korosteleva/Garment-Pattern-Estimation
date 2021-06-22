@@ -1032,19 +1032,24 @@ class ComposedPatternLoss():
         """
         # Apply permutation (since we need to check the quality of permutation, cap =))
         empty_mask = self._feature_permute(empty_panel_mask, permutation)
+
+        # references to non-empty elements only
         non_empty = ~empty_mask
+        non_empty_ids_per_slot = []
+        for panel_id in range(empty_mask.shape[-1]):
+            non_empty_ids_per_slot.append(torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1))
 
         # evaluate clustering
         empty_att_slots = []
         single_class = []
         multiple_classes = []
         for panel_id in range(empty_mask.shape[-1]):
-            if empty_mask[:, panel_id].all():  
+            non_empty_ids = non_empty_ids_per_slot[panel_id]
+            if len(non_empty_ids) == 0:  
                 # all panels at this place are empty
                 empty_att_slots.append(panel_id)
                 continue
 
-            non_empty_ids = torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1)
             if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
                 single_class.append(panel_id)
                 continue
@@ -1091,9 +1096,7 @@ class ComposedPatternLoss():
                 indices = indices_0 if len(indices_0) == min_len else indices_1
 
                 # convert to ids in batch 
-                # TODO reuse this info from above
-                non_empty_ids = torch.nonzero(non_empty[:, current_slot], as_tuple=False).squeeze(-1)
-                indices = non_empty_ids[indices]
+                indices = non_empty_ids_per_slot[current_slot][indices]
 
                 # move some of the panels from current_slot to empty_slot in permutation
                 permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
