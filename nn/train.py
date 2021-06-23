@@ -98,7 +98,7 @@ def get_values_from_args():
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 40, 
         'epoch_with_order_matching': 0,
-        'epoch_with_cluster_checks': 0,
+        'epoch_with_cluster_checks': 80,
         'cluster_gap_nrefs': 5,
         'att_distribution_saturation': 0.03,
         'att_empty_weight': 10,
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='Tee-JS-cluster-speedup-no-warmup', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
