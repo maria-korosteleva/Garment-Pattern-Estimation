@@ -71,21 +71,14 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
 
             refdisps[j] = sum([torch.dist(rands[j, m], cluster_centers[labels[m]]) for m in range(shape[0])])
 
-            # TODO any sort of warning in degenerate cases here?
-
-        # gap statistic
-        if torch.isclose(disp, zero) or torch.allclose(refdisps, zero):  # degenerate cases
-            print('Degenerate afterwards')
-            gaps[i] = None
-        else:
-            # Step 2 in original paper
-            # flipped mean & log https://gist.github.com/michiexile/5635273#gistcomment-2324237
-            reflogs = torch.log(refdisps)
-            refmean = torch.mean(reflogs)
-            gaps[i] = refmean - torch.log(disp)
-            
-            # Step 3 in the original paper
-            std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
+        # Step 2 in original paper
+        # flipped mean & log https://gist.github.com/michiexile/5635273#gistcomment-2324237
+        reflogs = torch.log(refdisps)
+        refmean = torch.mean(reflogs)
+        gaps[i] = refmean - torch.log(disp)
+        
+        # Step 3 in the original paper
+        std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
 
     return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None
 
