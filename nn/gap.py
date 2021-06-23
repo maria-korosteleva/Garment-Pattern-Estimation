@@ -6,7 +6,7 @@
 # Gap statistic defined in
 # Tibshirani, Walther, Hastie:
 #  Estimating the number of clusters in a data set via the gap statistic
-#  J. R. Statist. Soc. B (2001) 63, Part 2, pp 411-423
+#  J. R. Statist. Soc. B (2001) 63, Part 2, pp 411-423  (http://web.stanford.edu/~hastie/Papers/gap.pdf)
 # Available here: https://gist.github.com/michiexile/5635273
 
 # Maria Korosteleva: Re-written for PyTorch allowing GPU-only operations
@@ -34,6 +34,10 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         bots, _ = data.min(dim=0)
         dists = tops - bots 
 
+        if torch.allclose(tops, bots):  # degenerate case, no need for further processing
+            labels, _ = _single_cluster_kmeans(data)
+            return [None] * len(ks), [None] * len(ks), labels
+
         # uniform distribution
         rands = torch.rand((nrefs, shape[0], shape[1]), device=data.device)
         rands = rands * dists + bots
@@ -42,6 +46,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         rands = refs
 
     gaps = [None] * len(ks)  # lists allow for None values
+    std_errors = [None] * len(ks)
     zero = torch.zeros(1, device=data.device)
     labels_per_k = []
     for (i, k) in enumerate(ks):   
@@ -54,10 +59,6 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         labels_per_k.append(labels)  # save labels to return
 
         disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])])
-
-        if torch.isclose(disp, zero):   # degenerate case
-            gaps[i] = None
-            continue
 
         # on the reference distributions
         refdisps = torch.zeros(nrefs, device=data.device)
@@ -74,12 +75,19 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
 
         # gap statistic
         if torch.isclose(disp, zero) or torch.allclose(refdisps, zero):  # degenerate cases
+            print('Degenerate afterwards')
             gaps[i] = None
         else:
+            # Step 2 in original paper
             # flipped mean & log https://gist.github.com/michiexile/5635273#gistcomment-2324237
-            gaps[i] = torch.mean(torch.log(refdisps)) - torch.log(disp)
+            reflogs = torch.log(refdisps)
+            refmean = torch.mean(reflogs)
+            gaps[i] = refmean - torch.log(disp)
+            
+            # Step 3 in the original paper
+            std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
 
-    return gaps, labels_per_k[-1] if len(labels_per_k) else None
+    return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None
 
 
 def _single_cluster_kmeans(data):

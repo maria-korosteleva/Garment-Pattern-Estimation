@@ -1057,16 +1057,16 @@ class ComposedPatternLoss():
             # Differentiate single cluster from multi-cluster cases based on gap statistic            
             K = range(1, 3)  # enough to compare 1 cluster and 2 cluster cases
 
-            gaps, labels_2_class = gap_statistic(
+            gaps, stds, labels_2_class = gap_statistic(
                 features[non_empty_ids, panel_id, :],
                 nrefs=self.config['cluster_gap_nrefs'], ks=K)
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
-            print('Gaps: ', gaps)
-            if gaps[1] is None or gaps[0] is None or gaps[0] > gaps[1]:
+            print('Gaps: ', gaps, ' STDS: ', stds)
+            if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - stds[1]):  # the last comes from gap stats formula
                 single_class.append(panel_id)
             else:
-                multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
+                multiple_classes.append((panel_id, (gaps[1] - stds[1]) - gaps[0], labels_2_class))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(
             single_class, [el[0] for el in multiple_classes], empty_att_slots))
@@ -1109,7 +1109,9 @@ class ComposedPatternLoss():
         # updated permutation & logging info
         return permutation, {
             'order_collision_swaps': num_swaps, 
-            'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0
+            'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0,
+            'multi-class-diffs': sum([el[1] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
+            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1]
         }
 
     @staticmethod
