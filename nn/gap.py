@@ -34,7 +34,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         bots, _ = data.min(dim=0)
         dists = tops - bots 
 
-        if torch.allclose(tops, bots):  # degenerate case, no need for further processing
+        if torch.allclose(tops, bots, atol=0.1):  # degenerate case, no need for further processing
             labels, _ = _single_cluster_kmeans(data)
             return [None] * len(ks), [None] * len(ks), labels
 
