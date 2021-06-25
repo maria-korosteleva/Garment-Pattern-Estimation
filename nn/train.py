@@ -133,9 +133,9 @@ def get_data_config(in_config, old_stats=False):
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
             'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
-            'max_pattern_len': 10,  # to fit even the longest ones (jumpsuit)
-            'max_panel_len': 10,  # (jumpsuit front)
-            'max_num_stitches': 20  # jumpsuit (with sleeves)
+            'max_pattern_len': 14,  # to fit even the longest ones (jumpsuit)
+            'max_panel_len': 14,  # (jumpsuit front)
+            'max_num_stitches': 24  # jumpsuit (with sleeves)
         }  
 
     # update with freshly configured values
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-cluster-speedup-no-warmup-stds', 
+        run_name='Tee-JS-cluster-more-empties', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
