@@ -99,7 +99,7 @@ def get_values_from_args():
         'epoch_with_stitches': 1000,  # turn off stitches
         'epoch_with_order_matching': 0,
         'epoch_with_cluster_checks': 80,
-        'gap_cluster_threshold': 0.5,
+        'gap_cluster_threshold': 0.9,
         'cluster_gap_nrefs': 5,
         'att_distribution_saturation': 0.03,
         'att_empty_weight': 10,
