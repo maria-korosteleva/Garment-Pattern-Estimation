@@ -96,9 +96,10 @@ def get_values_from_args():
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 40, 
+        'epoch_with_stitches': 1000,  # turn off stitches
         'epoch_with_order_matching': 0,
         'epoch_with_cluster_checks': 80,
+        'gap_cluster_threshold': 0.5,
         'cluster_gap_nrefs': 5,
         'att_distribution_saturation': 0.03,
         'att_empty_weight': 10,
@@ -169,7 +170,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-cluster-more-empties', 
+        run_name='Tee-JS-cluster-more-empties-threshold', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples

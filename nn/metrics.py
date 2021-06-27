@@ -598,6 +598,7 @@ class ComposedPatternLoss():
             'epoch_with_order_matching': 0,
             'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
+            'gap_cluster_threshold': 0.,  # differentiating single\multi class cases 
             'cluster_gap_nrefs': 20,   # reducing will speed up training
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
@@ -728,7 +729,9 @@ class ComposedPatternLoss():
                     loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
-        return full_loss, loss_dict, epoch == self.config['epoch_with_stitches']
+        return full_loss, loss_dict, (epoch == self.config['epoch_with_stitches'] 
+                                      or epoch == self.config['epoch_with_order_matching']
+                                      or epoch == self.config['epoch_with_cluster_checks'])
 
     def eval(self):
         """ Loss to evaluation mode """
@@ -1063,10 +1066,11 @@ class ComposedPatternLoss():
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
             print('Gaps: ', gaps, ' STDS: ', stds)
-            if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - stds[1]):  # the last comes from gap stats formula
+            threshold = self.config['gap_cluster_threshold']  # or stds[1]?
+            if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - threshold):  # the last comes from gap stats formula
                 single_class.append(panel_id)
             else:
-                multiple_classes.append((panel_id, (gaps[1] - stds[1]) - gaps[0], labels_2_class))  
+                multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(
             single_class, [el[0] for el in multiple_classes], empty_att_slots))
