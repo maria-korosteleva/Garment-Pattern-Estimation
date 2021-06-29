@@ -410,22 +410,7 @@ class BaseDataset(Dataset):
         folder_elements = None  
         datapoint_name = self.datapoints_names[idx]
 
-        if datapoint_name in self.gt_cached:  # might not be compatible with list indexing
-            ground_truth = self.gt_cached[datapoint_name]
-        else:
-            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-            ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
-            if self.gt_caching:
-                self.gt_cached[datapoint_name] = ground_truth
-        
-        if datapoint_name in self.feature_cached:
-            features = self.feature_cached[datapoint_name]
-        else:
-            folder_elements = folder_elements if folder_elements is not None else [file.name for file in (self.root_path / datapoint_name).glob('*')]
-            features = self._get_features(datapoint_name, folder_elements)
-            
-            if self.feature_caching:  # save read values 
-                self.feature_cached[datapoint_name] = features
+        features, ground_truth = self._get_sample_info(datapoint_name)
         
         folder, name = tuple(datapoint_name.split('/'))
         sample = {'features': features, 'ground_truth': ground_truth, 'name': name, 'data_folder': folder}
@@ -606,7 +591,7 @@ class BaseDataset(Dataset):
     # -------- Data-specific functions --------
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
         """Saves predicted params of the datapoint to the original data folder"""
-        pass
+        print('{}::Warning::No prediction saving is implemented'.format(self.__class__.__name__))
 
     def standardize(self, training=None):
         """Use element normalization/standardization based on stats from the training subset.
@@ -617,12 +602,35 @@ class BaseDataset(Dataset):
             configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided:
                 this allows to save some time
         """
-        print('{}::Warning::No normalization is implemented'.format(self.__class__.__name__))
+        print('{}::Warning::No standardization is implemented'.format(self.__class__.__name__))
 
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         """Remove non-datapoints subfolders, failing cases, etc. Children are to override this function when needed"""
         # See https://stackoverflow.com/questions/57042695/calling-super-init-gives-the-wrong-method-when-it-is-overridden
         return datapoints_names
+
+    def _get_sample_info(self, datapoint_name):
+        """
+            Get features and Ground truth prediction for requested data example
+        """
+        if datapoint_name in self.gt_cached:  # might not be compatible with list indexing
+            ground_truth = self.gt_cached[datapoint_name]
+        else:
+            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+            ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
+            if self.gt_caching:
+                self.gt_cached[datapoint_name] = ground_truth
+        
+        if datapoint_name in self.feature_cached:
+            features = self.feature_cached[datapoint_name]
+        else:
+            folder_elements = folder_elements if folder_elements is not None else [file.name for file in (self.root_path / datapoint_name).glob('*')]
+            features = self._get_features(datapoint_name, folder_elements)
+            
+            if self.feature_caching:  # save read values 
+                self.feature_cached[datapoint_name] = features
+        
+        return features, ground_truth
 
     def _get_features(self, datapoint_name, folder_elements=None):
         """Read/generate datapoint features"""
@@ -1148,6 +1156,82 @@ class Garment2DPatternDataset(Garment3DPatternFullDataset):
             prediction, 
             std_config={}, 
             supress_error=True)
+
+
+class GarmentStitchPairsDataset(GarmentBaseDataset):
+    """
+        Dataset targets the task of predicting if a particular pair of edges is connected by a stitch or not
+    """
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+        if gt_caching or feature_caching:
+            gt_caching = feature_caching = True  # ensure that both are simulataneously True or False
+        
+        # data-specific defaults
+        if 'edge_pairs_num' not in start_config:
+            start_config.update(edge_pairs_num=100) 
+
+        super().__init__(root_dir, start_config, 
+                         gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+
+    def standardize(self, training=None):
+        """Use shifting and scaling for fitting data to interval comfortable for NN training.
+            Accepts either of two inputs: 
+            * training subset to calculate the data statistics -- the stats are only based on training subsection of the data
+            * if stats info is already defined in config, it's used instead of calculating new statistics (usually when calling to restore dataset from existing experiment)
+            configuration has a priority: if it's given, the statistics are NOT recalculated even if training set is provided
+                => speed-up by providing stats or speeding up multiple calls to this function
+        """
+        print('{}::Using data normalization for features & ground truth'.format(self.__class__.__name__))
+
+        if 'standardize' in self.config:
+            print('{}::Using stats from config'.format(self.__class__.__name__))
+            stats = self.config['standardize']
+        elif training is not None:
+            loader = DataLoader(training, batch_size=len(training), shuffle=False)
+            for batch in loader:
+                # TODO decide on the type of stats needed
+                feature_shift, feature_scale = self._get_distribution_stats(batch['features'], padded=False)
+                break  # only one batch out there anyway
+
+            self.config['standardize'] = {
+                'f_shift': feature_shift.cpu().numpy(), 
+                'f_scale': feature_scale.cpu().numpy(),
+            }
+            stats = self.config['standardize']
+        else:  # nothing is provided
+            raise ValueError('Garment3DPatternFullDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
+
+        # clean-up tranform list to avoid duplicates
+        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
+
+        self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
+
+
+    def _get_sample_info(self, datapoint_name):
+        """
+            Get features and Ground truth prediction for requested data example
+        """
+        if datapoint_name in self.gt_cached:  # autpmatically means that features are cashed too
+            ground_truth = self.gt_cached[datapoint_name]
+            features = self.feature_cached[datapoint_name]
+
+            return features, ground_truth
+
+        # Get stitch pairs & mask from spec
+        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+        spec_list = [file for file in folder_elements if 'specification.json' in file]
+        if not spec_list:
+            raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+        
+        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
+        features, ground_truth = pattern.stitches_as_3D_pairs(self.config['edge_pairs_num'], True, True)  # randomization!
+        
+        # save elements
+        if self.gt_caching and self.feature_caching:
+            self.gt_cached[datapoint_name] = ground_truth
+            self.feature_cached[datapoint_name] = features
+        
+        return features, ground_truth
 
 
 # ------------------------- Utils for non-dataset examples --------------------------
