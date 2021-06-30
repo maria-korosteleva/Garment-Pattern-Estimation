@@ -55,37 +55,42 @@ def get_values_from_args():
     print(args)
 
     data_config = {
-        'mesh_samples': args.mesh_samples_multiplier * 500,
-        'obj_filetag': args.obj_nametag,
+        # 'mesh_samples': args.mesh_samples_multiplier * 500,
+        # 'obj_filetag': args.obj_nametag,
+        'edge_pairs_num': 150,
         'shuffle_pairs': False, 
-        'shuffle_pairs_order': False
+        'shuffle_pairs_order': True
     }
 
     nn_config = {
-        # pattern decoders
-        'panel_encoding_size': args.panel_encoding_multiplier * 10,
-        'panel_n_layers': args.panel_n_layers,
-        'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
-        'pattern_n_layers': args.pattern_n_layers,
-        'panel_decoder': args.panel_decoder,
-        'pattern_decoder': args.pattern_decoder,
-        'attention_token_size': 20,
-        'local_attention': True,
+        # # pattern decoders
+        # 'panel_encoding_size': args.panel_encoding_multiplier * 10,
+        # 'panel_n_layers': args.panel_n_layers,
+        # 'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
+        # 'pattern_n_layers': args.pattern_n_layers,
+        # 'panel_decoder': args.panel_decoder,
+        # 'pattern_decoder': args.pattern_decoder,
+        # 'attention_token_size': 20,
+        # 'local_attention': True,
 
-        # stitches
-        'stitch_tag_dim': args.st_tag_len, 
+        # # stitches
+        # 'stitch_tag_dim': args.st_tag_len, 
 
-        # EdgeConv params
-        'conv_depth': args.conv_depth, 
-        'k_neighbors': args.k_multiplier * 5, 
-        'EConv_hidden': args.ec_hidden_multiplier * 8, 
-        'EConv_hidden_depth': args.ec_hidden_depth, 
-        'EConv_feature': args.ec_feature_multiplier * 8, 
-        'EConv_aggr': args.ec_conv_aggr, 
-        'global_pool': args.ec_global_aggr, 
-        'skip_connections': bool(args.ec_skip),
-        'graph_pooling': bool(args.ec_gpool),
-        'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
+        # # EdgeConv params
+        # 'conv_depth': args.conv_depth, 
+        # 'k_neighbors': args.k_multiplier * 5, 
+        # 'EConv_hidden': args.ec_hidden_multiplier * 8, 
+        # 'EConv_hidden_depth': args.ec_hidden_depth, 
+        # 'EConv_feature': args.ec_feature_multiplier * 8, 
+        # 'EConv_aggr': args.ec_conv_aggr, 
+        # 'global_pool': args.ec_global_aggr, 
+        # 'skip_connections': bool(args.ec_skip),
+        # 'graph_pooling': bool(args.ec_gpool),
+        # 'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
+
+        # indep stitch config
+        'stitch_hidden_size': 200, 
+        'stitch_mlp_n_layers': 3
     }
 
     loss_config = {
@@ -172,7 +177,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-stitches-prec-rec', 
+        run_name='Tee-JS-stitches-net-size', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
