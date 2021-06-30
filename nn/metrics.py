@@ -571,7 +571,7 @@ class UniversalL2():
 
 # ---------- Composition loss class -------------
 
-class BaseComposedLoss():
+class ComposedLoss():
     """Base interface for compound loss objects"""
 
     def __init__(self, data_config, in_config={}):
@@ -636,7 +636,6 @@ class BaseComposedLoss():
     def train(self, mode=True):
         self.training = mode
 
-
     def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
         """
             Main loss components. Evaluated in the same way regardless of the training stage
@@ -659,15 +658,34 @@ class BaseComposedLoss():
         """
         loss_dict = {}
     
-        if 'edge_pair_class' in self.q_components:
+        if 'edge_pair_class' in self.q_components or 'edge_pair_stitch_recall' in self.q_components:
             edge_pair_class = torch.round(torch.sigmoid(preds))
             gt_mask = ground_truth.to(preds.device)
-            acc = (edge_pair_class == gt_mask).sum().float() / gt_mask.numel()
 
+        if 'edge_pair_class' in self.q_components:
+            acc = (edge_pair_class == gt_mask).sum().float() / gt_mask.numel()
             loss_dict.update(edge_pair_class_acc=acc)
+        
+        if 'edge_pair_stitch_recall' in self.q_components:
+            prec, rec = self._prec_recall(edge_pair_class, gt_mask, target_label=1)
+            loss_dict.update(stitch_precision=prec, stitch_recall=rec)
 
         return loss_dict
 
+    def _prec_recall(self, preds, ground_truth, target_label):
+        """ Evaluate precision/recall for given label in predictions """
+
+        # correctly labeled as target label
+        target_label_ids = (ground_truth == target_label).nonzero(as_tuple=True)
+        correct_count = torch.count_nonzero(preds[target_label_ids] == target_label).float()
+
+        # total number of labeled as target label
+        pred_as_target_count = torch.count_nonzero(preds == target_label).float()
+
+        precision = correct_count / pred_as_target_count
+        recall = correct_count / len(target_label_ids[0])  
+
+        return precision, recall
 
 
 class ComposedPatternLoss():

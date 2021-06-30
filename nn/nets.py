@@ -686,14 +686,14 @@ class StitchOnEdge3DPairs(BaseModule):
         # --- Losses ---
         self.config['loss'] = {
             'loss_components': ['edge_pair_class'],
-            'quality_components': ['edge_pair_class'],
+            'quality_components': ['edge_pair_class', 'edge_pair_stitch_recall'],
             'panel_origin_invariant_loss': False,  # don't even try to evaluate
             'panel_order_inariant_loss': False
         }
         self.config['loss'].update(in_loss_config)  # apply input settings 
 
         # create loss!
-        self.loss = metrics.BaseComposedLoss(data_config, self.config['loss'])
+        self.loss = metrics.ComposedLoss(data_config, self.config['loss'])
         self.config['loss'] = self.loss.config  # sync
 
         # ------ Modules ----
