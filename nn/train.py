@@ -89,7 +89,7 @@ def get_values_from_args():
     loss_config = {
         # Extra loss parameters
         'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': True,
+        'panel_order_inariant_loss': False,
         'order_by': 'translation',   # placement, translation, stitches, shape_translation
         'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature'
         'stitch_tags_margin': args.st_tag_margin,
@@ -151,26 +151,26 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        'dress_sleeveless_2550',
+        # 'dress_sleeveless_2550',
         'jumpsuit_sleeveless_2000',
-        'skirt_8_panels_1000',
-        'wb_pants_straight_1500',
-        'skirt_2_panels_1200',
-        'jacket_2200',
+        # 'skirt_8_panels_1000',
+        # 'wb_pants_straight_1500',
+        # 'skirt_2_panels_1200',
+        # 'jacket_2200',
         'tee_sleeveless_1800',
-        'wb_dress_sleeveless_2600',
-        'jacket_hood_2700',
+        # 'wb_dress_sleeveless_2600',
+        # 'jacket_hood_2700',
         'pants_straight_sides_1000',
         'tee_2300',
-        'skirt_4_panels_1600'
+        # 'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-cluster-all-data', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Tee-JS-stitches', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -179,18 +179,15 @@ if __name__ == "__main__":
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-                                               data_config, gt_caching=True, feature_caching=True)
+    dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
     model = nn.DataParallel(model)  # , device_ids=['cuda:0', 'cuda:1', 'cuda:2'])
@@ -227,20 +224,3 @@ if __name__ == "__main__":
     final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test', final_metrics)
-
-    # save TSNE plot
-    garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'), dataset)
-
-    tsne_plot.tsne_plot(garment_enc, garment_classes, 2, experiment.local_path(), 'garments', dpi=150)
-    tsne_plot.tsne_plot(panel_enc, panel_classes, 2, experiment.local_path(), 'panels', dpi=150)
-    tsne_plot.tsne_plot(garment_enc, garment_classes, 3, experiment.local_path(), 'garments', dpi=150)
-    tsne_plot.tsne_plot(panel_enc, panel_classes, 3, experiment.local_path(), 'panels', dpi=150)
-
-    # save predictions
-    prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-    print('Predictions saved to {}'.format(prediction_path))
-    # reflect predictions info in expetiment
-    experiment.add_statistic('predictions_folder', prediction_path.name)
-    art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
-
-    experiment.add_artifact(prediction_path, art_name, 'result')

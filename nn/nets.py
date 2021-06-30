@@ -42,6 +42,7 @@ class BaseModule(nn.Module):
 
 
 # -------- Nets architectures -----------
+# -------- AEs--------------
 class GarmentPanelsAE(BaseModule):
     """
         Model to test encoding & decoding of garment 2D panels (sewing patterns components)
@@ -216,6 +217,7 @@ class GarmentPatternAE(GarmentPanelsAE):
         return {'outlines': prediction}
 
 
+# ------------ Pattern predictions ----------
 class GarmentFullPattern3D(BaseModule):
     """
         Predicting 2D pattern inluding panel placement and stitches information from 3D garment geometry 
@@ -656,6 +658,61 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
             panels.update(panel_encodings=panel_encodings)
 
         return panels
+
+
+# ----------- Stitches (independent) predictions ---------
+class StitchOnEdge3DPairs(BaseModule):
+    """
+        Predicting status of a particular pair of edges (defined in 3D) -- whether they are connected 
+        with a stitch or not.
+
+        Binary classification problem
+    """
+
+    def __init__(self, data_config, config={}, in_loss_config={}):
+        super().__init__()
+
+        # data props
+        self.pair_feature_len = data_config['element_size']
+
+        # ---- Net configuration ----
+        self.config.update({
+            'stitch_hidden_size': 20, 
+            'stitch_mlp_n_layers': 3
+        })
+        # update with input settings
+        self.config.update(config) 
+
+        # --- Losses ---
+        self.config['loss'] = {
+            'loss_components': ['edge_pair_class'],
+            'quality_components': ['edge_pair_class'],
+            'panel_origin_invariant_loss': False,  # don't even try to evaluate
+            'panel_order_inariant_loss': False
+        }
+        self.config['loss'].update(in_loss_config)  # apply input settings 
+
+        # create loss!
+        self.loss = metrics.BaseComposedLoss(data_config, self.config['loss'])
+        self.config['loss'] = self.loss.config  # sync
+
+        # ------ Modules ----
+        mid_layers = [self.config['stitch_hidden_size']] * self.config['stitch_mlp_n_layers']
+        self.mlp = blocks.MLP([self.pair_feature_len] + mid_layers + [1])
+
+
+    def forward(self, pairs_batch, **kwargs):
+        self.device = pairs_batch.device
+        self.batch_size = pairs_batch.size(0)
+        return_shape = list(pairs_batch.shape)
+        return_shape.pop(-1)
+
+        # reduce extra dimentions if needed
+        out = self.mlp(pairs_batch.contiguous().view(-1, pairs_batch.shape[-1])) 
+
+        # follow the same dimentions structure
+        return out.view(return_shape)
+
 
 
 if __name__ == "__main__":

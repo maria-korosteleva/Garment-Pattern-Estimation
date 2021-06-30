@@ -387,13 +387,11 @@ class NNSewingPattern(VisPattern):
                         pair_edges.append(np.random.randint(len(self.pattern['panels'][pair_names[-1]]['edges'])))
 
                     if pair_names[0] == pair_names[1] and pair_edges[0] == pair_edges[1]:
-                        print('OOOps, same edge')
                         continue  # try again
 
                     # check if pair is already used
                     pair_id = ((pair_names[0], pair_edges[0]), (pair_names[1], pair_edges[1]))
                     if pair_id in taken or (pair_id[1], pair_id[0]) in taken:
-                        print('OOOPs! Taken pair')
                         continue  # try again
 
                     # success! Use it

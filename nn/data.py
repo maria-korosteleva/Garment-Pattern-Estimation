@@ -1173,6 +1173,11 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         super().__init__(root_dir, start_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
+        self.config.update(
+            element_size=self[0]['features'].shape[-1],
+        )
+        
+
     def standardize(self, training=None):
         """Use shifting and scaling for fitting data to interval comfortable for NN training.
             Accepts either of two inputs: 
@@ -1224,7 +1229,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
-        features, ground_truth = pattern.stitches_as_3D_pairs(self.config['edge_pairs_num'], True, True)  # randomization!
+        features, ground_truth = pattern.stitches_as_3D_pairs(self.config['edge_pairs_num'], False, False)  # randomization!
         
         # save elements
         if self.gt_caching and self.feature_caching:
