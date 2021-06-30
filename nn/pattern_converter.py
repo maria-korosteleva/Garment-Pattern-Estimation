@@ -323,10 +323,11 @@ class NNSewingPattern(VisPattern):
                     self.__class__.__name__, self.name, total_pairs, len(self.pattern['stitches'])))
 
         # check if total_pairs is no more then total possible edge pairs!
-        if total_pairs is not None and total_pairs > self._num_edges() * (self._num_edges() - 1):
+        unique_pairs = self._num_edges() * (self._num_edges() - 1) / 2.
+        if total_pairs is not None and total_pairs > unique_pairs:
             raise ValueError(
                 '{}::{}::Error::Requested more edge pairs ({}) that there are possible pairs ({})'.format(
-                    self.__class__.__name__, self.name, total_pairs, self._num_edges() * (self._num_edges() - 1)))
+                    self.__class__.__name__, self.name, total_pairs, unique_pairs))
 
         if randomize_edges or randomize_list_order:
             rng = default_rng()  # new Numpy random number generator API
@@ -402,6 +403,7 @@ class NNSewingPattern(VisPattern):
                     pairs.append(np.concatenate([edges_3d[pair_names[0]][pair_edges[0]], edges_3d[pair_names[1]][pair_edges[1]]]))
                     mask.append(False)  # at this point, all pairs are non-stitched!
                     taken.add(pair_id)
+
                     break 
             
         if randomize_list_order:
@@ -421,6 +423,7 @@ class NNSewingPattern(VisPattern):
         """ Total number of edges in a pattern"""
         if not hasattr(self, 'num_edges'):
             self.num_edges = sum([len(self.pattern['panels'][panel]['edges']) for panel in self.pattern['panels']])
+
         return self.num_edges
 
 
