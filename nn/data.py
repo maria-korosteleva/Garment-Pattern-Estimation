@@ -1167,10 +1167,15 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             gt_caching = feature_caching = True  # ensure that both are simulataneously True or False
         
         # data-specific defaults
-        if 'edge_pairs_num' not in start_config:
-            start_config.update(edge_pairs_num=100) 
+        init_config = {
+            'data_folders': [],
+            'edge_pairs_num': 100,
+            'shuffle_pairs': False, 
+            'shuffle_pairs_order': False
+        }
+        init_config.update(start_config)  # values from input
 
-        super().__init__(root_dir, start_config, 
+        super().__init__(root_dir, init_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         self.config.update(
@@ -1229,7 +1234,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
         pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
-        features, ground_truth = pattern.stitches_as_3D_pairs(self.config['edge_pairs_num'], False, False)  # randomization!
+        features, ground_truth = pattern.stitches_as_3D_pairs(self.config['edge_pairs_num'], self.config['shuffle_pairs_order'])
         
         # save elements
         if self.gt_caching and self.feature_caching:

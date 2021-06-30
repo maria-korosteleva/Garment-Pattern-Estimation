@@ -56,7 +56,9 @@ def get_values_from_args():
 
     data_config = {
         'mesh_samples': args.mesh_samples_multiplier * 500,
-        'obj_filetag': args.obj_nametag
+        'obj_filetag': args.obj_nametag,
+        'shuffle_pairs': False, 
+        'shuffle_pairs_order': False
     }
 
     nn_config = {
@@ -169,8 +171,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='Tee-JS-stitches', 
+        project_name='Garments-Reconstruction', 
+        run_name='Tee-JS-stitches-prec-rec', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -181,7 +183,7 @@ if __name__ == "__main__":
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
-    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=False)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
