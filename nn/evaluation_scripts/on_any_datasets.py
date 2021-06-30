@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-att-distribute', 
-    run_id='x51gmmhy')  # finished experiment
+    run_name='Tee-JS-stitches-net-size', 
+    run_id='4ymf9hm7')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -54,7 +54,7 @@ if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
     dataset = data_class(system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
 else:
-    dataset = data.Garment3DPatternFullDataset(
+    dataset = data.GarmentStitchPairsDataset(
         system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
 
 datawrapper = data.DatasetWrapper(dataset, batch_size=batch_size)  # NOTE no split given -- evaluating on the full loaded dataset!!
@@ -81,10 +81,10 @@ experiment.add_statistic('unseen_folders', dataset_list)
 
 # -------- Predict ---------
 # save predictions to file
-prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
-print('Saved to {}'.format(prediction_path))
-# # reflect predictions info in expetiment
-experiment.add_statistic('unseen_pred_folder', prediction_path.name)
+# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
+# print('Saved to {}'.format(prediction_path))
+# # # reflect predictions info in expetiment
+# experiment.add_statistic('unseen_pred_folder', prediction_path.name)
 
-art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
-experiment.add_artifact(prediction_path, art_name, 'result')
+# art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
+# experiment.add_artifact(prediction_path, art_name, 'result')
