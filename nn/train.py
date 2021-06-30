@@ -57,8 +57,8 @@ def get_values_from_args():
     data_config = {
         # 'mesh_samples': args.mesh_samples_multiplier * 500,
         # 'obj_filetag': args.obj_nametag,
-        'edge_pairs_num': 135,
-        'shuffle_pairs': False, 
+        'edge_pairs_num': 100,
+        'shuffle_pairs': True, 
         'shuffle_pairs_order': True
     }
 
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='Tee-JS-stitches-net-size', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 

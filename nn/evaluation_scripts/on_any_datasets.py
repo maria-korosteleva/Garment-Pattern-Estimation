@@ -50,8 +50,12 @@ data_config.update(max_datapoints_per_type=150)
 
 batch_size = 5
 
-dataset = data.Garment3DPatternFullDataset(
-    system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+if 'class' in data_config:
+    data_class = getattr(data, data_config['class'])
+    dataset = data_class(system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+else:
+    dataset = data.Garment3DPatternFullDataset(
+        system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
 
 datawrapper = data.DatasetWrapper(dataset, batch_size=batch_size)  # NOTE no split given -- evaluating on the full loaded dataset!!
 

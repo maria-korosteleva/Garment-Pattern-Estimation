@@ -340,6 +340,7 @@ class BaseDataset(Dataset):
         self.root_path = Path(root_dir)
         self.config = {}
         self.update_config(start_config)
+        self.config['class'] = self.__class__.__name__
 
         self.data_folders = start_config['data_folders']
         self.data_folders_nicknames = dict(zip(self.data_folders, self.data_folders))
