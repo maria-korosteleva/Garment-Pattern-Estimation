@@ -2,6 +2,7 @@ import copy
 import numpy as np
 from numpy.random import default_rng
 import sys
+import torch
 
 if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
@@ -333,32 +334,7 @@ class NNSewingPattern(VisPattern):
             rng = default_rng()  # new Numpy random number generator API
 
         # collect edges representations per panels
-        edges_3d = {}
-        for panel_name in self.panel_order():
-            edges_3d[panel_name] = []
-            panel = self.pattern['panels'][panel_name]
-            vertices = np.array(panel['vertices'])
-
-            # To 3D
-            rot_matrix = rotation_tools.euler_xyz_to_R(panel['rotation'])
-            vertices_3d = np.stack([self._point_in_3D(vertices[i], rot_matrix, panel['translation']) for i in range(len(vertices))])
-
-            # edge feature
-            for edge_dict in panel['edges']:
-                edge_verts = vertices_3d[edge_dict['endpoints']]  # ravel does not copy elements
-                curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
-
-                if randomize_edges and rng.integers(2):
-                    # flip the edge
-                    edge_verts[0], edge_verts[1] = edge_verts[1], edge_verts[0]
-
-                    # print(curvature)
-                    curvature[0] = 1 - curvature[0] if curvature[0] else 0
-                    curvature[1] = -curvature[1]  # TODO double check it's correct!
-
-                    # print(curvature)
-
-                edges_3d[panel_name].append(np.concatenate([edge_verts.ravel(), curvature]))
+        edges_3d = self._3D_edges_per_panel(randomize_edges)
 
         # construct edge pairs (stitched & some random selection of non-stitched)
         pairs = []
@@ -412,6 +388,53 @@ class NNSewingPattern(VisPattern):
         else:
             return np.stack(pairs), np.array(mask, dtype=bool)
 
+    def stitches_from_pair_classifier(self, model, data_stats):
+        """ Update stitches in the pattern by predictions of edge pairs classification model"""
+
+        self.pattern['stitches'] = []
+
+        edges_3D = self._3D_edges_per_panel()
+        num_panels = len(self.panel_order())
+        model.eval()
+
+        # TODO vectorize model inference better?
+        for i in range(num_panels):
+            panel_i = self.panel_order()[i]
+            edges_i = np.array(edges_3D[panel_i])
+            for j in range(i + 1, num_panels):  # assuming panels are not connected to themselves
+                panel_j = self.panel_order()[j]
+                edges_j = np.array(edges_3D[panel_j])
+
+                # print(panel_i, edges_i.shape, panel_j, edges_j.shape)
+
+                rows, cols = np.indices((len(edges_i), len(edges_j)))
+
+                edge_pairs = np.concatenate([edges_i[rows], edges_j[cols]], axis=-1)
+
+                # print(data_stats)                
+
+                # apply appropriate scaling
+                # TODO different naming?
+                edge_pairs = (edge_pairs - data_stats['f_shift']) / data_stats['f_scale']
+
+                # print(edge_pairs)
+
+                edge_pairs = torch.from_numpy(edge_pairs).float()
+
+                preds = model(edge_pairs)
+                preds = torch.round(torch.sigmoid(preds))
+
+                # print(preds.shape)
+
+                stitched_ids = preds.nonzero().cpu().tolist()
+
+                if len(stitched_ids) > 0:  # some stitches found!
+                    # print(stitched_ids)
+                    for stitch_idx in range(len(stitched_ids)):
+                        self.pattern['stitches'].append(self._stitch_entry(
+                            panel_i, stitched_ids[stitch_idx][0], panel_j, stitched_ids[stitch_idx][1]
+                        ))
+
     def _edge_dict(self, vstart, vend, curvature):
         """Convert given info into the proper edge dictionary representation"""
         edge_dict = {'endpoints': [vstart, vend]}
@@ -426,6 +449,55 @@ class NNSewingPattern(VisPattern):
 
         return self.num_edges
 
+    def _3D_edges_per_panel(self, randomize_direction=False):
+        """ 
+            Return all edges in the pattern (grouped by panels)
+            represented as 3D vertex positions and (relative) curvature values.
+
+            * 'randomize_direction' -- request to randomly flip the direction of some edges
+        """
+        if randomize_direction:
+            rng = default_rng()  # new Numpy random number generator API
+
+        # collect edges representations per panels
+        edges_3d = {}
+        for panel_name in self.panel_order():
+            edges_3d[panel_name] = []
+            panel = self.pattern['panels'][panel_name]
+            vertices = np.array(panel['vertices'])
+
+            # To 3D
+            rot_matrix = rotation_tools.euler_xyz_to_R(panel['rotation'])
+            vertices_3d = np.stack([self._point_in_3D(vertices[i], rot_matrix, panel['translation']) for i in range(len(vertices))])
+
+            # edge feature
+            for edge_dict in panel['edges']:
+                edge_verts = vertices_3d[edge_dict['endpoints']]  # ravel does not copy elements
+                curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
+
+                if randomize_direction and rng.integers(2):
+                    # flip the edge
+                    edge_verts[0], edge_verts[1] = edge_verts[1], edge_verts[0]
+
+                    curvature[0] = 1 - curvature[0] if curvature[0] else 0
+                    curvature[1] = -curvature[1] 
+
+                edges_3d[panel_name].append(np.concatenate([edge_verts.ravel(), curvature]))
+
+        return edges_3d
+
+    def _stitch_entry(self, panel_1, edge_1, panel_2, edge_2):
+        """ element of a stitch list with given parameters """
+        return [
+            {
+                'panel': panel_1, 
+                'edge': edge_1
+            },
+            {
+                'panel': panel_2, 
+                'edge': edge_2
+            },
+        ]
 
 # ---------- test -------------
 if __name__ == "__main__":

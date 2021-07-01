@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-cluster-gap-shape_tr', 
-    run_id='3bylw5fn')  # finished experiment
+    run_name='Tee-JS-stitches-all', 
+    run_id='2hfx5dkv')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -35,8 +35,12 @@ split, batch_size, data_config = experiment.data_info()  # note that run is not 
 
 data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
 
-dataset = data.Garment3DPatternFullDataset(
-    system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+if 'class' in data_config:
+    data_class = getattr(data, data_config['class'])
+    dataset = data_class(system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+else:
+    dataset = data.GarmentStitchPairsDataset(
+        system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
@@ -57,7 +61,7 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
-valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
+# valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
 # print('Validation metrics: {}'.format(valid_loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
@@ -76,10 +80,10 @@ valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
 
 # -------- Predict ---------
 # save prediction for validation to file
-# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-# print('Saved to {}'.format(prediction_path))
-# # # reflect predictions info in expetiment
-# experiment.add_statistic('pred_folder', prediction_path.name)
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+print('Saved to {}'.format(prediction_path))
+# # reflect predictions info in expetiment
+experiment.add_statistic('pred_folder', prediction_path.name)
 
-# art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
-# experiment.add_artifact(prediction_path, art_name, 'result')
+art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
+experiment.add_artifact(prediction_path, art_name, 'result')

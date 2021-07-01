@@ -23,21 +23,21 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-stitches-net-size', 
-    run_id='4ymf9hm7')  # finished experiment
+    run_name='Tee-JS-stitches-all', 
+    run_id='2hfx5dkv')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
 dataset_list = [
-    # 'jacket_hood_sleeveless_150',
-    # 'skirt_waistband_150', 
-    # 'tee_hood_150',
-    # 'jacket_sleeveless_150',
-    # 'dress_150',
+    'jacket_hood_sleeveless_150',
+    'skirt_waistband_150', 
+    'tee_hood_150',
+    'jacket_sleeveless_150',
+    'dress_150',
     'jumpsuit_150',
-    # 'wb_jumpsuit_150'
+    'wb_jumpsuit_sleeveless_150'
 ]
 
 # data_config also contains the names of datasets to use
@@ -81,10 +81,10 @@ experiment.add_statistic('unseen_folders', dataset_list)
 
 # -------- Predict ---------
 # save predictions to file
-# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
-# print('Saved to {}'.format(prediction_path))
-# # # reflect predictions info in expetiment
-# experiment.add_statistic('unseen_pred_folder', prediction_path.name)
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
+print('Saved to {}'.format(prediction_path))
+# reflect predictions info in expetiment
+experiment.add_statistic('unseen_pred_folder', prediction_path.name)
 
-# art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
-# experiment.add_artifact(prediction_path, art_name, 'result')
+art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
+experiment.add_artifact(prediction_path, art_name, 'result')

@@ -231,7 +231,8 @@ class DatasetWrapper(object):
                         features_device = batch['features'].to(device)
                         preds = model(features_device)
                         self.dataset.save_prediction_batch(
-                            preds, batch['name'], batch['data_folder'], section_dir, batch['features'].numpy())
+                            preds, batch['name'], batch['data_folder'], section_dir, features=batch['features'].numpy(), 
+                            model=model)
                         
                         if single_batch:  # stop after first iteration
                             break
@@ -590,7 +591,7 @@ class BaseDataset(Dataset):
         )
 
     # -------- Data-specific functions --------
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to):
+    def save_prediction_batch(self, *args, **kwargs):
         """Saves predicted params of the datapoint to the original data folder"""
         print('{}::Warning::No prediction saving is implemented'.format(self.__class__.__name__))
 
@@ -954,7 +955,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None):
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None, **kwargs):
         """ 
             Saving predictions on batched from the current dataset
             Saves predicted params of the datapoint to the requested data folder.
@@ -1216,6 +1217,51 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
 
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
+
+
+    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, model=None, **kwargs):
+        """ 
+            Saving predictions on batch from the current dataset based on given model
+            Saves predicted params of the datapoint to the requested data folder.
+            Returns list of paths to files with prediction visualizations
+        """
+
+        save_to = Path(save_to)
+        prediction_imgs = []
+        for idx, (name, folder) in enumerate(zip(datanames, data_folders)):
+
+            # Load corresponding pattern
+            folder_elements = [file.name for file in (self.root_path / folder / name).glob('*')]  # all files in this directory
+            spec_list = [file for file in folder_elements if 'specification.json' in file]
+            if not spec_list:
+                print('{}::Error::{} serializing skipped: *specification.json not found'.format(
+                    self.__class__.__name__, name))
+                continue
+            
+            pattern = NNSewingPattern(self.root_path / folder / name / spec_list[0])
+
+            # find stitches
+            pattern.stitches_from_pair_classifier(model, self.config['standardize'])
+
+
+            # save prediction
+            # TODO Move to separate fucntion (for all datasets)
+            folder_nick = self.data_folders_nicknames[folder]
+            try: 
+                final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
+            except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+                print('{}::Error::{} serializing skipped: {}'.format(self.__class__.__name__, name, e))
+                continue
+            
+            final_file = pattern.name + '_predicted__pattern.png'
+            prediction_imgs.append(Path(final_dir) / final_file)
+
+            # copy originals for comparison
+            for file in (self.root_path / folder / name).glob('*'):
+                if ('.png' in file.suffix) or ('.json' in file.suffix):
+                    shutil.copy2(str(file), str(final_dir))
+                    
+        return prediction_imgs
 
 
     def _get_sample_info(self, datapoint_name):
