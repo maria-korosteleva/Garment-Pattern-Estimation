@@ -307,31 +307,26 @@ class NNSewingPattern(VisPattern):
 
         return np.array(stitch_tags)
 
-    def stitches_as_3D_pairs(self, total_pairs=None, randomize_edges=False, randomize_list_order=False):
+    def stitches_as_3D_pairs(self, stitch_pairs_num=None, non_stitch_pairs_num=None, randomize_edges=False, randomize_list_order=False):
         """
             Return a collection of edge pairs with each pair marked as stitched or not, with 
             edges represented as 3D vertex positions and (relative) curvature values.
-            All stitched pairs that exist in the pattern are guaranteed to be included
+            All stitched pairs that exist in the pattern are guaranteed to be included. 
+            It's not guaranteed that the pairs would be unique (hence any number of pairs could be requested,
+            regardless of the total number of unique pairs)
 
-            * total_pairs -- total number of edge pairs to return. Should be larger then the number of stitches.
+            * stitch_pairs -- number of edge pairs that are part of a stitch to return. Should be larger then the number of stitches.
+            * non_stitch_pairs -- total number of non-connected edge pairs to return.
             * randomize_edges -- to randomize direction of edges and the order within each pair.
             * randomize_list_order -- to randomize the list of 
         """
 
-        if total_pairs is not None and total_pairs < len(self.pattern['stitches']):
+        if stitch_pairs_num is not None and stitch_pairs_num < len(self.pattern['stitches']):
             raise ValueError(
                 '{}::{}::Error::Requested less edge pairs ({}) that there are stitches ({})'.format(
                     self.__class__.__name__, self.name, total_pairs, len(self.pattern['stitches'])))
 
-        # check if total_pairs is no more then total possible edge pairs!
-        unique_pairs = self._num_edges() * (self._num_edges() - 1) / 2.
-        if total_pairs is not None and total_pairs > unique_pairs:
-            raise ValueError(
-                '{}::{}::Error::Requested more edge pairs ({}) that there are possible pairs ({})'.format(
-                    self.__class__.__name__, self.name, total_pairs, unique_pairs))
-
-        if randomize_edges or randomize_list_order:
-            rng = default_rng()  # new Numpy random number generator API
+        rng = default_rng()  # new Numpy random number generator API
 
         # collect edges representations per panels
         edges_3d = self._3D_edges_per_panel(randomize_edges)
@@ -339,7 +334,9 @@ class NNSewingPattern(VisPattern):
         # construct edge pairs (stitched & some random selection of non-stitched)
         pairs = []
         mask = []
-        taken = set()
+
+        # ---- Stitched ----
+        stitched_pairs_ids = set()
         # stitches
         for stitch in self.pattern['stitches']:
             pair = []
@@ -352,33 +349,37 @@ class NNSewingPattern(VisPattern):
 
             pairs.append(np.concatenate(pair))
             mask.append(True)
-            taken.add((
+            stitched_pairs_ids.add((
                 (stitch[0]['panel'], stitch[0]['edge']),
                 (stitch[1]['panel'], stitch[1]['edge'])
             ))
+        if stitch_pairs_num is not None and stitch_pairs_num > len(self.pattern['stitches']):
+            for _ in range(len(self.pattern['stitches']), stitch_pairs_num):
+                # choose of the existing pairs to duplicate
+                pairs.append(pairs[rng.integers(len(self.pattern['stitches']))])
+                mask.append(True)
         
-        if total_pairs is not None:
+        if non_stitch_pairs_num is not None:
             panel_order = self.panel_order()
-            for _ in range(total_pairs - len(self.pattern['stitches'])):
+            for _ in range(non_stitch_pairs_num):
                 while True:
                     # random pairs
                     pair_names, pair_edges = [], []
                     for _ in [0, 1]:
-                        pair_names.append(panel_order[np.random.randint(len(panel_order))])
-                        pair_edges.append(np.random.randint(len(self.pattern['panels'][pair_names[-1]]['edges'])))
+                        pair_names.append(panel_order[rng.integers(len(panel_order))])
+                        pair_edges.append(rng.integers(len(self.pattern['panels'][pair_names[-1]]['edges'])))
 
                     if pair_names[0] == pair_names[1] and pair_edges[0] == pair_edges[1]:
                         continue  # try again
 
                     # check if pair is already used
                     pair_id = ((pair_names[0], pair_edges[0]), (pair_names[1], pair_edges[1]))
-                    if pair_id in taken or (pair_id[1], pair_id[0]) in taken:
-                        continue  # try again
+                    if pair_id in stitched_pairs_ids or (pair_id[1], pair_id[0]) in stitched_pairs_ids:
+                        continue  # try again -- accudentially came up with a stitch
 
                     # success! Use it
                     pairs.append(np.concatenate([edges_3d[pair_names[0]][pair_edges[0]], edges_3d[pair_names[1]][pair_edges[1]]]))
                     mask.append(False)  # at this point, all pairs are non-stitched!
-                    taken.add(pair_id)
 
                     break 
             
@@ -426,7 +427,7 @@ class NNSewingPattern(VisPattern):
 
                 # print(preds.shape)
 
-                stitched_ids = preds.nonzero().cpu().tolist()
+                stitched_ids = preds.nonzero(as_tuple=False).cpu().tolist()
 
                 if len(stitched_ids) > 0:  # some stitches found!
                     # print(stitched_ids)

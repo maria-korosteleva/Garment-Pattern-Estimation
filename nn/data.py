@@ -1171,7 +1171,8 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         # data-specific defaults
         init_config = {
             'data_folders': [],
-            'edge_pairs_num': 100,
+            'stitched_edge_pairs_num': 100,
+            'non_stitched_edge_pairs_num': 100,
             'shuffle_pairs': False, 
             'shuffle_pairs_order': False
         }
@@ -1282,7 +1283,8 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         
         pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
         features, ground_truth = pattern.stitches_as_3D_pairs(
-            self.config['edge_pairs_num'], self.config['shuffle_pairs'], self.config['shuffle_pairs_order'])
+            self.config['stitched_edge_pairs_num'], self.config['non_stitched_edge_pairs_num'],
+            self.config['shuffle_pairs'], self.config['shuffle_pairs_order'])
         
         # save elements
         if self.gt_caching and self.feature_caching:
