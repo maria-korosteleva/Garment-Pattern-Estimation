@@ -37,10 +37,10 @@ data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
 
 if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
-    dataset = data_class(system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+    dataset = data_class(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 else:
     dataset = data.GarmentStitchPairsDataset(
-        system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+        system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
