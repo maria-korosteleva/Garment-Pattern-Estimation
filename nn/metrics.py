@@ -1081,7 +1081,8 @@ class ComposedPatternLoss():
         if len(multiple_classes) and len(empty_att_slots):
             # sort according to distortion power to separate most obvious cases first
             # https://stackoverflow.com/a/10695158
-            sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+            # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+            sorted_multi_classes = multiple_classes   # leave sorted by ID
 
             print(sorted_multi_classes)
 
@@ -1089,7 +1090,7 @@ class ComposedPatternLoss():
                 if len(empty_att_slots) == 0: 
                     # no more empty slots to use 
                     break
-                empty_slot = empty_att_slots.pop()  # use empty slot
+                empty_slot = empty_att_slots.pop(0)  # use first available empty slot
                 print('Using Empty ', empty_slot)
                 
                 # Choose labels that is used the least 
