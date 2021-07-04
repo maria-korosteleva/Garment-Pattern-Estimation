@@ -1066,11 +1066,11 @@ class ComposedPatternLoss():
 
             # reduction in quality with number of classes increase -- or no differences in elements at all
             print('Gaps: ', gaps, ' STDS: ', stds)
-            threshold = self.config['gap_cluster_threshold']  # or stds[1]?
+            threshold = stds[1] + self.config['gap_cluster_threshold']  # or stds[1]?
             if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - threshold):  # the last comes from gap stats formula
                 single_class.append(panel_id)
             else:
-                multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
+                multiple_classes.append((panel_id, gaps[1] - gaps[0], gaps[1] - threshold - gaps[0], labels_2_class))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(
             single_class, [el[0] for el in multiple_classes], empty_att_slots))
@@ -1086,7 +1086,7 @@ class ComposedPatternLoss():
 
             print(sorted_multi_classes)
 
-            for current_slot, curr_quality, labels in sorted_multi_classes:
+            for current_slot, curr_quality, _, labels in sorted_multi_classes:
                 if len(empty_att_slots) == 0: 
                     # no more empty slots to use 
                     break
@@ -1116,6 +1116,7 @@ class ComposedPatternLoss():
             'order_collision_swaps': num_swaps, 
             'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0,
             'multi-class-diffs': sum([el[1] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
+            'multi-class-threshold-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1]
         }
 
