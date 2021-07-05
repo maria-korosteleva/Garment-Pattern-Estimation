@@ -98,7 +98,7 @@ def get_values_from_args():
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 1000,  # turn off stitches
         'epoch_with_order_matching': 0,
-        'epoch_with_cluster_checks': 80,
+        'epoch_with_cluster_checks': 130,
         'gap_cluster_threshold': 0.6,
         'cluster_gap_nrefs': 5,
         'att_distribution_saturation': 0.03,
