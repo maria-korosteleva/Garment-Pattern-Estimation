@@ -1270,26 +1270,25 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             Get features and Ground truth prediction for requested data example
         """
         if datapoint_name in self.gt_cached:  # autpmatically means that features are cashed too
-            ground_truth = self.gt_cached[datapoint_name]
-            features = self.feature_cached[datapoint_name]
+            pattern = self.gt_cached[datapoint_name]
 
-            return features, ground_truth
-
-        # Get stitch pairs & mask from spec
-        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-        spec_list = [file for file in folder_elements if 'specification.json' in file]
-        if not spec_list:
-            raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+        else:  # load from files
+            # Get stitch pairs & mask from spec
+            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+            spec_list = [file for file in folder_elements if 'specification.json' in file]
+            if not spec_list:
+                raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+            
+            pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
         
-        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
+        # sample anew even if patterns were cashed
         features, ground_truth = pattern.stitches_as_3D_pairs(
             self.config['stitched_edge_pairs_num'], self.config['non_stitched_edge_pairs_num'],
             self.config['shuffle_pairs'], self.config['shuffle_pairs_order'])
         
         # save elements
         if self.gt_caching and self.feature_caching:
-            self.gt_cached[datapoint_name] = ground_truth
-            self.feature_cached[datapoint_name] = features
+            self.gt_cached[datapoint_name] = pattern
         
         return features, ground_truth
 
