@@ -1,16 +1,15 @@
 # gap.py
-# (c) 2013 Mikael Vejdemo-Johansson  
+# (c) 2013 Mikael Vejdemo-Johansson for the code structure
+# (c) 2021 Maria Korosteleva for PyTorch adaptation and the rest of the changes
 # BSD License
 #
-# SciPy function to compute the gap statistic for evaluating k-means clustering.
+# PyTorch-based function to compute the gap statistic and standard error for evaluating k-means clustering.
 # Gap statistic defined in
 # Tibshirani, Walther, Hastie:
 #  Estimating the number of clusters in a data set via the gap statistic
 #  J. R. Statist. Soc. B (2001) 63, Part 2, pp 411-423  (http://web.stanford.edu/~hastie/Papers/gap.pdf)
-# Available here: https://gist.github.com/michiexile/5635273
 
-# Maria Korosteleva: Re-written for PyTorch allowing GPU-only operations
-# PyTorch & GPU friendliness 
+
 import torch 
 from kmeans_pytorch import kmeans  # https://github.com/subhadarship/kmeans_pytorch
 
@@ -41,15 +40,15 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         # uniform distribution
         rands = torch.rand((nrefs, shape[0], shape[1]), device=data.device)
         rands = rands * dists + bots
-
     else:
         rands = refs
+        nrefs = refs.shape[0]
 
     gaps = [None] * len(ks)  # lists allow for None values
     std_errors = [None] * len(ks)
-    zero = torch.zeros(1, device=data.device)
     labels_per_k = []
     for (i, k) in enumerate(ks):   
+        # Step 1 -- clustering
         # on the data
         if k == 1:
             labels, cluster_centers = _single_cluster_kmeans(data)
@@ -71,13 +70,13 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
 
             refdisps[j] = sum([torch.dist(rands[j, m], cluster_centers[labels[m]]) for m in range(shape[0])])
 
-        # Step 2 in original paper
+        # Step 2 -- gaps
         # flipped mean & log https://gist.github.com/michiexile/5635273#gistcomment-2324237
         reflogs = torch.log(refdisps)
         refmean = torch.mean(reflogs)
         gaps[i] = refmean - torch.log(disp)
         
-        # Step 3 in the original paper
+        # Step 3 -- standard errors
         std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
 
     return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None
