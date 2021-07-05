@@ -1203,7 +1203,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             loader = DataLoader(training, batch_size=len(training), shuffle=False)
             for batch in loader:
                 # TODO decide on the type of stats needed
-                feature_shift, feature_scale = self._get_distribution_stats(batch['features'], padded=False)
+                feature_shift, feature_scale = self._get_norm_stats(batch['features'], padded=False)
                 break  # only one batch out there anyway
 
             self.config['standardize'] = {
