@@ -324,7 +324,7 @@ class NNSewingPattern(VisPattern):
         if stitch_pairs_num is not None and stitch_pairs_num < len(self.pattern['stitches']):
             raise ValueError(
                 '{}::{}::Error::Requested less edge pairs ({}) that there are stitches ({})'.format(
-                    self.__class__.__name__, self.name, total_pairs, len(self.pattern['stitches'])))
+                    self.__class__.__name__, self.name, stitch_pairs_num, len(self.pattern['stitches'])))
 
         rng = default_rng()  # new Numpy random number generator API
 
@@ -406,19 +406,24 @@ class NNSewingPattern(VisPattern):
                 panel_j = self.panel_order()[j]
                 edges_j = np.array(edges_3D[panel_j])
 
-                # print(panel_i, edges_i.shape, panel_j, edges_j.shape)
-
                 rows, cols = np.indices((len(edges_i), len(edges_j)))
-
                 edge_pairs = np.concatenate([edges_i[rows], edges_j[cols]], axis=-1)
+                # edge_pairs = np.concatenate([edges_j[cols], edges_i[rows]], axis=-1)
 
-                # print(data_stats)                
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(panel_i, panel_j)
+                    print(edge_pairs)
 
                 # apply appropriate scaling
-                # TODO different naming?
+                # TODO different naming of std?
                 edge_pairs = (edge_pairs - data_stats['f_shift']) / data_stats['f_scale']
 
-                # print(edge_pairs)
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(edge_pairs)
 
                 edge_pairs = torch.from_numpy(edge_pairs).float()
 
@@ -426,9 +431,12 @@ class NNSewingPattern(VisPattern):
                 preds_probability = torch.sigmoid(preds)
                 preds = torch.round(preds_probability)
 
-                # print(preds.shape)
-
                 stitched_ids = preds.nonzero(as_tuple=False).cpu().tolist()
+
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(preds_probability, preds, stitched_ids)
 
                 if len(stitched_ids) > 0:  # some stitches found!
                     # print(stitched_ids)
@@ -481,7 +489,7 @@ class NNSewingPattern(VisPattern):
 
                 if randomize_direction and rng.integers(2):
                     # flip the edge
-                    edge_verts[0], edge_verts[1] = edge_verts[1], edge_verts[0]
+                    edge_verts[[0, 1], :] = edge_verts[[1, 0], :]
 
                     curvature[0] = 1 - curvature[0] if curvature[0] else 0
                     curvature[1] = -curvature[1] 
