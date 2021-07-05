@@ -423,8 +423,7 @@ class NNSewingPattern(VisPattern):
                 edge_pairs = torch.from_numpy(edge_pairs).float()
 
                 preds = model(edge_pairs)
-                preds_probability = torch.sigmoid(preds)
-                preds = torch.round(preds_probability)
+                preds = torch.round(torch.sigmoid(preds))
 
                 # print(preds.shape)
 
@@ -434,9 +433,7 @@ class NNSewingPattern(VisPattern):
                     # print(stitched_ids)
                     for stitch_idx in range(len(stitched_ids)):
                         self.pattern['stitches'].append(self._stitch_entry(
-                            panel_i, stitched_ids[stitch_idx][0], 
-                            panel_j, stitched_ids[stitch_idx][1], 
-                            score=preds_probability[stitched_ids[stitch_idx][0], stitched_ids[stitch_idx][1]].cpu().tolist()
+                            panel_i, stitched_ids[stitch_idx][0], panel_j, stitched_ids[stitch_idx][1]
                         ))
 
     def _edge_dict(self, vstart, vend, curvature):
@@ -490,21 +487,18 @@ class NNSewingPattern(VisPattern):
 
         return edges_3d
 
-    def _stitch_entry(self, panel_1, edge_1, panel_2, edge_2, score=None):
-        """ element of a stitch list with given parameters (all need to be json-serializible)"""
+    def _stitch_entry(self, panel_1, edge_1, panel_2, edge_2):
+        """ element of a stitch list with given parameters """
         return [
             {
                 'panel': panel_1, 
-                'edge': edge_1, 
-                'score': score
+                'edge': edge_1
             },
             {
                 'panel': panel_2, 
-                'edge': edge_2, 
-                'score': score
+                'edge': edge_2
             },
         ]
-
 
 # ---------- test -------------
 if __name__ == "__main__":
