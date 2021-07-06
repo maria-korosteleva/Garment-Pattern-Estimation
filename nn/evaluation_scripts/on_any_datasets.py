@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-stitches-all-no-caching', 
-    run_id='xjumuen9')  # finished experiment
+    run_name='Tee-JS-stitches-edge-order-fix', 
+    run_id='147004g5')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -68,16 +68,16 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
-# loss = metrics.eval_metrics(model, datawrapper, 'full')
-# print('Full metrics on unseen set: {}'.format(loss))
-# breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
-# print('Metrics per dataset: {}'.format(breakdown))
+loss = metrics.eval_metrics(model, datawrapper, 'full')
+print('Full metrics on unseen set: {}'.format(loss))
+breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
+print('Metrics per dataset: {}'.format(breakdown))
 
-# # # ---------- Log to the experiment -----------
+# # ---------- Log to the experiment -----------
 
-# experiment.add_statistic('unseen_full', loss)
-# experiment.add_statistic('unseen', breakdown)
-# experiment.add_statistic('unseen_folders', dataset_list)
+experiment.add_statistic('unseen_full', loss)
+experiment.add_statistic('unseen', breakdown)
+experiment.add_statistic('unseen_folders', dataset_list)
 
 # -------- Predict ---------
 # save predictions to file
