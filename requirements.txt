@@ -1,9 +1,15 @@
 matplotlib==3.3.2
 sparsemax==0.1.9
-torch_geometric==1.7.2
 numpy~=1.19.4
 requests==2.24.0
 scipy==1.6.2
 wandb==0.10.33
 svglib==1.1.0
 svgwrite==1.4.1
+
+# torch-geometric group
+torch-cluster -f https://pytorch-geometric.com/whl/torch-1.9.0+cu102.html &&
+torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.9.0+cu102.html &&
+torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cu102.html &&
+torch-sparse -f https://pytorch-geometric.com/whl/torch-1.9.0+cu102.html
+torch_geometric==1.7.2
