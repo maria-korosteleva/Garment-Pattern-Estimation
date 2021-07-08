@@ -98,7 +98,7 @@ def get_values_from_args():
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 1000,  # turn off stitches
         'epoch_with_order_matching': 0,
-        'epoch_with_cluster_checks': 90,
+        'epoch_with_cluster_checks': 40,
         'gap_cluster_threshold': 0.6,
         'cluster_gap_nrefs': 5,
         'att_distribution_saturation': 0.03,
@@ -155,12 +155,12 @@ if __name__ == "__main__":
         # 'jumpsuit_sleeveless_2000',
         # 'skirt_8_panels_1000',
         'wb_pants_straight_1500',
-        # 'skirt_2_panels_1200',
+        'skirt_2_panels_1200',
         # 'jacket_2200',
         # 'tee_sleeveless_1800',
         'wb_dress_sleeveless_2600',
         # 'jacket_hood_2700',
-        # 'pants_straight_sides_1000',
+        'pants_straight_sides_1000',
         # 'tee_2300',
         # 'skirt_4_panels_1600'
     ]
