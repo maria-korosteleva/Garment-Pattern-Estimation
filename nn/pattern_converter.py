@@ -1,5 +1,6 @@
 import copy
 import numpy as np
+from numpy.lib.function_base import append
 from numpy.random import default_rng
 import sys
 import torch
@@ -429,14 +430,14 @@ class NNSewingPattern(VisPattern):
 
                 preds = model(edge_pairs)
                 preds_probability = torch.sigmoid(preds)
-                preds = torch.round(preds_probability)
+                preds_class = torch.round(preds_probability)
 
-                stitched_ids = preds.nonzero(as_tuple=False).cpu().tolist()
+                stitched_ids = preds_class.nonzero(as_tuple=False).cpu().tolist()
 
                 if ('skirt_waistband' in self.name and (
                         'wb_back' in panel_i or 'wb_back' in panel_j
                         or 'wb_front' in panel_i or 'wb_front' in panel_j)):
-                    print(preds_probability, preds, stitched_ids)
+                    print(preds_class, preds_probability, preds, stitched_ids)
 
                 if len(stitched_ids) > 0:  # some stitches found!
                     # print(stitched_ids)
@@ -444,8 +445,27 @@ class NNSewingPattern(VisPattern):
                         self.pattern['stitches'].append(self._stitch_entry(
                             panel_i, stitched_ids[stitch_idx][0], 
                             panel_j, stitched_ids[stitch_idx][1], 
-                            score=preds_probability[stitched_ids[stitch_idx][0], stitched_ids[stitch_idx][1]].cpu().tolist()
+                            score=preds[stitched_ids[stitch_idx][0], stitched_ids[stitch_idx][1]].cpu().tolist()
                         ))
+
+        # Post-analysis: check if any of the edges parttake in multiple stitches & only leave the stronger ones
+        to_remove = set()
+        for base_stitch_id in range(len(self.pattern['stitches'])):
+            base_stitch = self.pattern['stitches'][base_stitch_id]
+            for side in [0, 1]:
+                base_edge = base_stitch[side]
+                for other_stitch_id in range(base_stitch_id + 1, len(self.pattern['stitches'])):
+                    curr_stitch = self.pattern['stitches'][other_stitch_id]
+                    if (base_edge['panel'] == curr_stitch[0]['panel'] and base_edge['edge'] == curr_stitch[0]['edge']
+                            or base_edge['panel'] == curr_stitch[1]['panel'] and base_edge['edge'] == curr_stitch[1]['edge']):
+                        # same edge, multiple stitches!
+                        # score is the same for both sides, so it doesn't matter which one to take
+                        to_remove.add(
+                            base_stitch_id if base_stitch[0]['score'] < curr_stitch[0]['score'] else other_stitch_id)
+
+        if len(to_remove):
+            self.pattern['stitches'] = [value for i, value in enumerate(self.pattern['stitches']) if i not in to_remove]
+
 
     def _edge_dict(self, vstart, vend, curvature):
         """Convert given info into the proper edge dictionary representation"""
