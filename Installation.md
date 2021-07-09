@@ -24,7 +24,7 @@ conda install pytorch cudatoolkit=10.2 -c pytorch
 
 conda install -c conda-forge igl=2.2.1
 
-git clone https://github.com/subhadarship/kmeans_pytorch && cd kmeans_pytorch && git checkout v0.3 && pip install --editable .
+git clone https://github.com/subhadarship/kmeans_pytorch && cd kmeans_pytorch && git checkout a65871651e9b38f89fa2bf0b02c0170bf40b52bf && pip install --editable .
 
 # The rest are in requirements.txt
 pip install -r requirements.txt
