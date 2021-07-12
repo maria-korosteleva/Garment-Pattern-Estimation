@@ -1,5 +1,4 @@
 # Training loop func
-import numpy as np
 from pathlib import Path
 import time
 import traceback
@@ -128,7 +127,7 @@ class Trainer():
             model.eval()
             with torch.no_grad():
                 losses = [model.module.loss(model(batch['features'].to(self.device)), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
-                valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
+                valid_loss = sum(losses) / len(losses)  # Each loss element is already a mean for its batch
 
             # Checkpoints: & compare with previous best
             if loss_structure_update or best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
