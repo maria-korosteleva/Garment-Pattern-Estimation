@@ -97,10 +97,13 @@ def get_values_from_args():
         'loop_loss_weight': 1.,
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 1000,  # turn off stitches
+
         'epoch_with_order_matching': 0,
-        'epoch_with_cluster_checks': 40,
+        'epoch_with_cluster_checks': 0,
         'gap_cluster_threshold': 0.6,
         'cluster_gap_nrefs': 5,
+        'cluster_with_singles': True,
+
         'att_distribution_saturation': 0.03,
         'att_empty_weight': 10,
         'epoch_with_att_saturation': 40,
@@ -133,7 +136,7 @@ def get_data_config(in_config, old_stats=False):
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
-            'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
+            'max_datapoints_per_type': 500,  # upper limit of how much data to grab from each type
             'max_pattern_len': 14,  # 30,  # > then the total number of panel classes
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24  # jumpsuit (with sleeves)
@@ -151,26 +154,26 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        # 'dress_sleeveless_2550',
-        # 'jumpsuit_sleeveless_2000',
-        # 'skirt_8_panels_1000',
+        'dress_sleeveless_2550',
+        'jumpsuit_sleeveless_2000',
+        'skirt_8_panels_1000',
         'wb_pants_straight_1500',
         'skirt_2_panels_1200',
-        # 'jacket_2200',
-        # 'tee_sleeveless_1800',
+        'jacket_2200',
+        'tee_sleeveless_1800',
         'wb_dress_sleeveless_2600',
-        # 'jacket_hood_2700',
+        'jacket_hood_2700',
         'pants_straight_sides_1000',
-        # 'tee_2300',
-        # 'skirt_4_panels_1600'
+        'tee_2300',
+        'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='WB-order', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='All-Cluster-singles', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples

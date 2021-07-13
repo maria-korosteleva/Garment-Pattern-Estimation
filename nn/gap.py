@@ -34,8 +34,8 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         dists = tops - bots 
 
         if torch.allclose(tops, bots, atol=0.1):  # degenerate case, no need for further processing
-            labels, _ = _single_cluster_kmeans(data)
-            return [None] * len(ks), [None] * len(ks), labels
+            labels, cluster_center = _single_cluster_kmeans(data)
+            return [None] * len(ks), [None] * len(ks), labels, [cluster_center]
 
         # uniform distribution
         rands = torch.rand((nrefs, shape[0], shape[1]), device=data.device)
@@ -47,6 +47,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
     gaps = [None] * len(ks)  # lists allow for None values
     std_errors = [None] * len(ks)
     labels_per_k = []
+    ccs_per_k = []
     for (i, k) in enumerate(ks):   
         # Step 1 -- clustering
         # on the data
@@ -56,6 +57,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
             labels, cluster_centers = kmeans(X=data, num_clusters=k, device=data.device, tqdm_flag=False)
             labels, cluster_centers = labels.to(data.device), cluster_centers.to(data.device)
         labels_per_k.append(labels)  # save labels to return
+        ccs_per_k.append(cluster_centers)
 
         disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])])
 
@@ -79,7 +81,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
         # Step 3 -- standard errors
         std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
 
-    return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None
+    return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None, ccs_per_k
 
 
 def _single_cluster_kmeans(data):

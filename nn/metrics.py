@@ -25,7 +25,11 @@ def eval_metrics(model, data_wrapper, section='test'):
     loss = model.module.loss if hasattr(model, 'module') else model.loss  # distinguish case of multi-gpu training
 
     if hasattr(loss, 'with_quality_eval'):
-        loss.with_quality_eval = True  # force quality evaluation for losses that support it
+        # loss.with_quality_eval = True  # force quality evaluation for losses that support it
+        
+        # DEBUG!!
+        loss.with_quality_eval = False  # force quality evaluation for losses that support it
+        loss.training = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
@@ -592,14 +596,18 @@ class ComposedPatternLoss():
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
             'stitch_hardnet_version': False,
+
             'panel_origin_invariant_loss': True,
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0,
+
             'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
             'gap_cluster_threshold': 0.,  # differentiating single\multi class cases 
             'cluster_gap_nrefs': 20,   # reducing will speed up training
+            'cluster_with_singles': False, 
+
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
             'epoch_with_att_saturation': 0
@@ -950,13 +958,6 @@ class ComposedPatternLoss():
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
 
             gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
-            empty_att_slots = []
-            for panel_id in range(gt_updated['empty_panels_mask'].shape[-1]):
-                if gt_updated['empty_panels_mask'][:, panel_id].all():  
-                    # all panels at this place are empty
-                    empty_att_slots.append(panel_id)
-            print('Empty panels after swaps: ', empty_att_slots)
-
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
@@ -1054,13 +1055,13 @@ class ComposedPatternLoss():
                 continue
 
             if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
-                single_class.append(panel_id)
+                single_class.append((panel_id, features[non_empty_ids[0], panel_id, :]))
                 continue
             
             # Differentiate single cluster from multi-cluster cases based on gap statistic            
             K = range(1, 3)  # enough to compare 1 cluster and 2 cluster cases
 
-            gaps, stds, labels_2_class = gap_statistic(
+            gaps, stds, labels_2_class, cluster_centers = gap_statistic(
                 features[non_empty_ids, panel_id, :],
                 nrefs=self.config['cluster_gap_nrefs'], ks=K)
 
@@ -1068,48 +1069,71 @@ class ComposedPatternLoss():
             print(panel_id, ' -- Gaps: ', gaps, ' STDS: ', stds)
             threshold = stds[1] + self.config['gap_cluster_threshold'] if stds[1] is not None else self.config['gap_cluster_threshold']
             if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - threshold):  # the last comes from gap stats formula
-                single_class.append(panel_id)
+                single_class.append((panel_id, cluster_centers[0]))
             else:
-                multiple_classes.append((panel_id, gaps[1] - gaps[0], gaps[1] - threshold - gaps[0], labels_2_class))  
+                multiple_classes.append((panel_id, gaps[1] - gaps[0], gaps[1] - threshold - gaps[0], labels_2_class, cluster_centers[-1]))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(
-            single_class, [el[0] for el in multiple_classes], empty_att_slots))
+            [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
 
         # Update permutation if some multi-class assignment was detected and there is space to move
         num_swaps = 0
         swapped_quality_levels = []
-        if len(multiple_classes) and len(empty_att_slots):
+        if len(multiple_classes):
             # sort according to distortion power to separate most obvious cases first
             # https://stackoverflow.com/a/10695158
             # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
             sorted_multi_classes = multiple_classes   # leave sorted by ID
 
-            print(sorted_multi_classes)
+            print([(el[0], el[1], el[-1]) for el in multiple_classes])
+            if self.config['cluster_with_singles']:
+                print(single_class)
 
-            for current_slot, curr_quality, _, labels in sorted_multi_classes:
-                if len(empty_att_slots) == 0: 
-                    # no more empty slots to use 
-                    break
-                empty_slot = empty_att_slots.pop(0)  # use first available empty slot
-                print('Using Empty ', empty_slot)
-                
+            for current_slot, curr_quality, _, labels, m_cluster_centers in sorted_multi_classes:
                 # Choose labels that is used the least 
                 indices_0 = (labels == 0).nonzero(as_tuple=False).squeeze(-1)
                 indices_1 = (labels == 1).nonzero(as_tuple=False).squeeze(-1)
 
                 min_len = min(len(indices_0), len(indices_1)) 
                 # these are ids among non-empty features only
+                label_id = 0 if len(indices_0) == min_len else 1
                 indices = indices_0 if len(indices_0) == min_len else indices_1
 
                 # convert to ids in batch 
                 indices = non_empty_ids_per_slot[current_slot][indices]
 
+                # Where to put?
+                new_slot = None
+                if self.config['cluster_with_singles']:
+                    print('Trying singles')
+                    # TODO vectorize?
+                    for single_slot, single_center in single_class:
+                        if torch.allclose(m_cluster_centers[label_id], single_center[0], atol=0.1):
+                            # assuming it's in the same cluster
+                            new_slot = single_slot
+                            # TODO Am I sure that I'm moving to the empty slots??
+                            print('Using single ', new_slot)
+                if new_slot is None:
+                    if not len(empty_att_slots):  # no options
+                        if self.config['cluster_with_singles']:
+                            continue
+                        else:
+                            break
+
+                    new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                    print('Using Empty ', new_slot)
+                    single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
+            
+
                 # move some of the panels from current_slot to empty_slot in permutation
-                permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
+                permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
                 
                 # Logging Info
                 num_swaps += 1
                 swapped_quality_levels.append(curr_quality)
+        
+        print('After upds: Single class: {}; Multi-class: {}; Empty: {};'.format(
+            [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
 
         # updated permutation & logging info
         return permutation, {
