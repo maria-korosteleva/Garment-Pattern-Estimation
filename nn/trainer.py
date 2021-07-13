@@ -24,7 +24,7 @@ class Trainer():
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=300,
-            batch_size=30,
+            batch_size=30,  # 90
             learning_rate=0.001,
             optimizer='Adam',
             weight_decay=0,
@@ -174,7 +174,7 @@ class Trainer():
         elif self.setup['optimizer'] == 'Adam':
             # future 'else'
             print('Trainer::Using Adam optimizer')
-            model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
+            model.to(self.device)  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'], weight_decay=self.setup['weight_decay'])
 
     def _add_scheduler(self, steps_per_epoch):
