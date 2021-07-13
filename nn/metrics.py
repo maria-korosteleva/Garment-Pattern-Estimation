@@ -25,11 +25,7 @@ def eval_metrics(model, data_wrapper, section='test'):
     loss = model.module.loss if hasattr(model, 'module') else model.loss  # distinguish case of multi-gpu training
 
     if hasattr(loss, 'with_quality_eval'):
-        # loss.with_quality_eval = True  # force quality evaluation for losses that support it
-        
-        # DEBUG!!
-        loss.with_quality_eval = False  # force quality evaluation for losses that support it
-        loss.training = True  # force quality evaluation for losses that support it
+        loss.with_quality_eval = True  # force quality evaluation for losses that support it
 
     with torch.no_grad():
         loader = data_wrapper.get_loader(section)
@@ -1110,9 +1106,13 @@ class ComposedPatternLoss():
                     for single_slot, single_center in single_class:
                         if torch.allclose(m_cluster_centers[label_id], single_center[0], atol=0.1):
                             # assuming it's in the same cluster
+                            # TODO try this too
+                            # if not all(empty_mask[indices, single_slot]):  # there is a place to move to
+                            #     print('Almost moved to single, but non-empty')
                             new_slot = single_slot
-                            # TODO Am I sure that I'm moving to the empty slots??
                             print('Using single ', new_slot)
+                            break
+                                
                 if new_slot is None:
                     if not len(empty_att_slots):  # no options
                         if self.config['cluster_with_singles']:
@@ -1124,7 +1124,6 @@ class ComposedPatternLoss():
                     print('Using Empty ', new_slot)
                     single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
             
-
                 # move some of the panels from current_slot to empty_slot in permutation
                 permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
                 

@@ -99,7 +99,7 @@ def get_values_from_args():
         'epoch_with_stitches': 1000,  # turn off stitches
 
         'epoch_with_order_matching': 0,
-        'epoch_with_cluster_checks': 0,
+        'epoch_with_cluster_checks': 80,
         'gap_cluster_threshold': 0.6,
         'cluster_gap_nrefs': 5,
         'cluster_with_singles': True,
@@ -119,8 +119,8 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='Tee-JS-cluster-all-data-90', run_id='dopgr0ik'  # all data 800
+            project_name='Test-Garments-Reconstruction', 
+            run_name='All-Cluster-singles', run_id='2kalqbtf'  # all data 800
             # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -172,12 +172,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='All-Cluster-singles', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)
+    split, data_config = get_data_config(in_data_config, old_stats=True)
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
