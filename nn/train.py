@@ -99,7 +99,7 @@ def get_values_from_args():
         'panel_order_inariant_loss': True,
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
-        'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature', 'translation'
+        'cluster_by': 'panel_encodings',  # 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 80,
         'gap_cluster_threshold': 0.1,
         'cluster_gap_nrefs': 5,
