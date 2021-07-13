@@ -88,10 +88,6 @@ def get_values_from_args():
 
     loss_config = {
         # Extra loss parameters
-        'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': True,
-        'order_by': 'translation',   # placement, translation, stitches, shape_translation
-        'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature'
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
@@ -99,8 +95,13 @@ def get_values_from_args():
         'epoch_with_stitches': 1000,  # turn off stitches
 
         'epoch_with_order_matching': 0,
+        'panel_origin_invariant_loss': False,
+        'panel_order_inariant_loss': True,
+        'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
+
+        'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 80,
-        'gap_cluster_threshold': 0.6,
+        'gap_cluster_threshold': 0.1,
         'cluster_gap_nrefs': 5,
         'cluster_with_singles': True,
 

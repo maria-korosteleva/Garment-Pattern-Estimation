@@ -941,6 +941,8 @@ class ComposedPatternLoss():
 
                 if self.config['cluster_by'] == 'panel_encodings':
                     cluster_feature = preds['panel_encodings']
+                elif self.config['cluster_by'] == 'translation':
+                    cluster_feature = self._feature_permute(ground_truth['translations'], gt_permutation)  # !!
                 else:  # order_feature -- default by the same feature as ordering
                     cluster_feature = self._feature_permute(gt_feature, gt_permutation)  # !!
 
