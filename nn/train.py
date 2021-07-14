@@ -99,7 +99,7 @@ def get_values_from_args():
         'panel_order_inariant_loss': True,
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
-        'cluster_by': 'translation',  # 'panel_encodings', 'order_feature', 'translation'
+        'cluster_by': 'panel_encodings',  # 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 80,
         'gap_cluster_threshold': 0.1,
         'cluster_gap_nrefs': 5,
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-Cluster-singles-transl', 
+        run_name='All-Cluster-singles', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model)  # , device_ids=['cuda:2', 'cuda:3'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:2', 'cuda:3'])  # , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
