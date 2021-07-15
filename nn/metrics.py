@@ -1045,6 +1045,8 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
+        avg_clusters = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+
         # update permulation for multi-class cases
         num_swaps = 0
         swapped_quality = None
@@ -1057,7 +1059,7 @@ class ComposedPatternLoss():
             'order_collision_swaps': num_swaps, 
             'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
-            'avg_clusters': float(sum([el[2] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+            'avg_clusters': avg_clusters,
             'avg-cluster-diffs-updated': swapped_quality
         }
 
