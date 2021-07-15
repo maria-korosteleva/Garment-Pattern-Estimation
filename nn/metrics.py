@@ -935,7 +935,7 @@ class ComposedPatternLoss():
             gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
 
             collision_swaps_stats = {}
-            if (self.training and epoch >= self.config['epoch_with_cluster_checks']):
+            if epoch >= self.config['epoch_with_cluster_checks']:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
@@ -1049,11 +1049,11 @@ class ComposedPatternLoss():
         num_swaps = 0
         swapped_quality = None
         if len(multiple_classes):
-            permutation, num_swaps, swapped_quality = self._distribute_clusters(
+            new_permutation, num_swaps, swapped_quality = self._distribute_clusters(
                 single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
         
-        # updated permutation & logging info
-        return permutation, {
+        # updated permutation (if in training mode!!) & logging info
+        return new_permutation if self.training else permutation, {
             'order_collision_swaps': num_swaps, 
             'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
@@ -1110,35 +1110,36 @@ class ComposedPatternLoss():
         # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
         sorted_multi_classes = multiple_classes   # leave sorted by ID
 
-        print([(el[0], el[1], el[2]) for el in multiple_classes])
-        if self.config['cluster_with_singles']:
-            print(single_class)
+        # FORDEBUG
+        # print([(el[0], el[1], el[2]) for el in multiple_classes])
+        # if self.config['cluster_with_singles']:
+        #    print(single_class)
          
         # TODO find main classes in multi-class case and allow to transfer to them to -- account for a chain reaction?
 
         for current_slot, k, curr_quality, labels, m_cluster_centers in sorted_multi_classes:
-            # Choose elements to move -- those that are used the least 
-            histogram = torch.histc(labels, bins=k, max=k - 1)
-            min_label_id = histogram.argmin()
-
-            indices = (labels == min_label_id).nonzero(as_tuple=False).squeeze(-1)
-            indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
-
             # Where to put?
             new_slot = None
             if self.config['cluster_with_singles']:
-                print('Trying singles')
-                # TODO vectorize?
+                # To a similar slot with single class
+                # TODO vectorize more?
                 for single_slot, single_center in single_class:
-                    if torch.allclose(m_cluster_centers[min_label_id], single_center[0], atol=0.01):
+                    similarities = torch.all(torch.isclose(m_cluster_centers, single_center[0], atol=0.01), dim=1)
+                    if torch.any(similarities):  
+                        # one of the clusters is similar to the cluster in single_slot
+
                         # assuming it's in the same cluster
                         # TODO try this too
                         # if not all(empty_mask[indices, single_slot]):  # there is a place to move to
                         #     print('Almost moved to single, but it's not empty')
                         new_slot = single_slot
-                        print('Using single ', new_slot)
+
+                        label_id = similarities.nonzero(as_tuple=False)[0][0]
+
+                        print('Using single', new_slot, ' with label ', label_id)
                         break
-                            
+
+            # OR to an empty slot   
             if new_slot is None:
                 if not len(empty_att_slots):  # no options
                     if self.config['cluster_with_singles']:
@@ -1147,10 +1148,18 @@ class ComposedPatternLoss():
                         break
 
                 new_slot = empty_att_slots.pop(0)  # use first available empty slot
-                print('Using Empty ', new_slot)
-                single_class.append((new_slot, m_cluster_centers[min_label_id]))  # allow to use as single-class slot
+
+                # Choose elements to move -- those that are used the least 
+                histogram = torch.histc(labels, bins=k, max=k - 1)
+                label_id = histogram.argmin()
+
+                print('Using Empty ', new_slot, ' with label ', label_id)
+
+                single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
         
             # move some of the panels from current_slot to empty_slot in permutation
+            indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
+            indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
             permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
             
             # Logging Info

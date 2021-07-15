@@ -381,7 +381,7 @@ class BaseDataset(Dataset):
         if 'standardize' in self.config:
             self.standardize()
 
-        # DEBUG -- access all the datapoints to pre-populate the cache of the data
+        # FORDEBUG -- access all the datapoints to pre-populate the cache of the data
         # self._renew_cache()
 
         # in\out sizes
