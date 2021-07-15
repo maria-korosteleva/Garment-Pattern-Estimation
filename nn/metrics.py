@@ -1055,7 +1055,7 @@ class ComposedPatternLoss():
                 single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
         
         # updated permutation (if in training mode!!) & logging info
-        return new_permutation if self.training else permutation, {
+        return new_permutation if self.training and len(multiple_classes) else permutation, {
             'order_collision_swaps': num_swaps, 
             'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
