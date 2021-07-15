@@ -9,7 +9,7 @@ import time
 
 from operator import itemgetter
 
-from gap import gap_torch as gap_statistic
+import gap
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
@@ -1042,10 +1042,33 @@ class ComposedPatternLoss():
             non_empty_ids_per_slot.append(torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1))
 
         # evaluate clustering
+        single_class, multiple_classes, empty_att_slots = self._eval_clusters(
+            features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
+
+        # update permulation for multi-class cases
+        num_swaps = 0
+        swapped_quality = None
+        if len(multiple_classes):
+            permutation, num_swaps, swapped_quality = self._distribute_clusters(
+                single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
+        
+        # updated permutation & logging info
+        return permutation, {
+            'order_collision_swaps': num_swaps, 
+            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
+            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
+            'avg_clusters': float(sum([el[2] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+            'avg-cluster-diffs-updated': swapped_quality
+        }
+
+    def _eval_clusters(self, features, non_empty_ids_per_slot, max_k=2):
+        """
+            Evaluate clustering property of given feature distribution for each panel id
+        """
         empty_att_slots = []
         single_class = []
         multiple_classes = []
-        for panel_id in range(empty_mask.shape[-1]):
+        for panel_id in range(features.shape[1]):
             non_empty_ids = non_empty_ids_per_slot[panel_id]
             if len(non_empty_ids) == 0:  
                 # all panels at this place are empty
@@ -1057,93 +1080,88 @@ class ComposedPatternLoss():
                 continue
             
             # Differentiate single cluster from multi-cluster cases based on gap statistic            
-            K = range(1, 3)  # enough to compare 1 cluster and 2 cluster cases
-
-            gaps, stds, labels_2_class, cluster_centers = gap_statistic(
+            k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
                 features[non_empty_ids, panel_id, :],
-                nrefs=self.config['cluster_gap_nrefs'], ks=K)
+                nrefs=self.config['cluster_gap_nrefs'], 
+                max_k=max_k, 
+                extra_sencitivity_threshold=self.config['gap_cluster_threshold']
+            )
 
-            # reduction in quality with number of classes increase -- or no differences in elements at all
-            print(panel_id, ' -- Gaps: ', gaps, ' STDS: ', stds)
-            threshold = stds[1] + self.config['gap_cluster_threshold'] if stds[1] is not None else self.config['gap_cluster_threshold']
-            if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - threshold):  # the last comes from gap stats formula
+            print(panel_id, ' -- ', k_optimal, ' ', diff)
+
+            if k_optimal == 1:  # the last comes from gap stats formula
                 single_class.append((panel_id, cluster_centers[0]))
             else:
-                multiple_classes.append((panel_id, gaps[1] - gaps[0], gaps[1] - threshold - gaps[0], labels_2_class, cluster_centers[-1]))  
+                multiple_classes.append((panel_id, k_optimal, diff, labels, cluster_centers))  
 
         print('Single class: {}; Multi-class: {}; Empty: {};'.format(
             [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
 
-        # Update permutation if some multi-class assignment was detected and there is space to move
-        num_swaps = 0
+        return single_class, multiple_classes, empty_att_slots
+
+    def _distribute_clusters(self, single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation):
+        """
+            Re-Distribute clusters of features in the dicovered multi-clustering cases
+        """
         swapped_quality_levels = []
-        if len(multiple_classes):
-            # sort according to distortion power to separate most obvious cases first
-            # https://stackoverflow.com/a/10695158
-            # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
-            sorted_multi_classes = multiple_classes   # leave sorted by ID
+        
+        # sort according to distortion power to separate most obvious cases first
+        # https://stackoverflow.com/a/10695158
+        # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+        sorted_multi_classes = multiple_classes   # leave sorted by ID
 
-            print([(el[0], el[1], el[-1]) for el in multiple_classes])
+        print([(el[0], el[1], el[2]) for el in multiple_classes])
+        if self.config['cluster_with_singles']:
+            print(single_class)
+         
+        # TODO find main classes in multi-class case and allow to transfer to them to -- account for a chain reaction?
+
+        for current_slot, k, curr_quality, labels, m_cluster_centers in sorted_multi_classes:
+            # Choose elements to move -- those that are used the least 
+            histogram = torch.histc(labels, bins=k, max=k - 1)
+            min_label_id = histogram.argmin()
+
+            indices = (labels == min_label_id).nonzero(as_tuple=False).squeeze(-1)
+            indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
+
+            # Where to put?
+            new_slot = None
             if self.config['cluster_with_singles']:
-                print(single_class)
+                print('Trying singles')
+                # TODO vectorize?
+                for single_slot, single_center in single_class:
+                    if torch.allclose(m_cluster_centers[min_label_id], single_center[0], atol=0.01):
+                        # assuming it's in the same cluster
+                        # TODO try this too
+                        # if not all(empty_mask[indices, single_slot]):  # there is a place to move to
+                        #     print('Almost moved to single, but it's not empty')
+                        new_slot = single_slot
+                        print('Using single ', new_slot)
+                        break
+                            
+            if new_slot is None:
+                if not len(empty_att_slots):  # no options
+                    if self.config['cluster_with_singles']:
+                        continue
+                    else:
+                        break
 
-            for current_slot, curr_quality, _, labels, m_cluster_centers in sorted_multi_classes:
-                # Choose labels that is used the least 
-                indices_0 = (labels == 0).nonzero(as_tuple=False).squeeze(-1)
-                indices_1 = (labels == 1).nonzero(as_tuple=False).squeeze(-1)
-
-                min_len = min(len(indices_0), len(indices_1)) 
-                # these are ids among non-empty features only
-                label_id = 0 if len(indices_0) == min_len else 1
-                indices = indices_0 if len(indices_0) == min_len else indices_1
-
-                # convert to ids in batch 
-                indices = non_empty_ids_per_slot[current_slot][indices]
-
-                # Where to put?
-                new_slot = None
-                if self.config['cluster_with_singles']:
-                    print('Trying singles')
-                    # TODO vectorize?
-                    for single_slot, single_center in single_class:
-                        if torch.allclose(m_cluster_centers[label_id], single_center[0], atol=0.1):
-                            # assuming it's in the same cluster
-                            # TODO try this too
-                            # if not all(empty_mask[indices, single_slot]):  # there is a place to move to
-                            #     print('Almost moved to single, but non-empty')
-                            new_slot = single_slot
-                            print('Using single ', new_slot)
-                            break
-                                
-                if new_slot is None:
-                    if not len(empty_att_slots):  # no options
-                        if self.config['cluster_with_singles']:
-                            continue
-                        else:
-                            break
-
-                    new_slot = empty_att_slots.pop(0)  # use first available empty slot
-                    print('Using Empty ', new_slot)
-                    single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
+                new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                print('Using Empty ', new_slot)
+                single_class.append((new_slot, m_cluster_centers[min_label_id]))  # allow to use as single-class slot
+        
+            # move some of the panels from current_slot to empty_slot in permutation
+            permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
             
-                # move some of the panels from current_slot to empty_slot in permutation
-                permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
-                
-                # Logging Info
-                num_swaps += 1
-                swapped_quality_levels.append(curr_quality)
+            # Logging Info
+            swapped_quality_levels.append(curr_quality)
         
         print('After upds: Single class: {}; Multi-class: {}; Empty: {};'.format(
             [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
-
-        # updated permutation & logging info
-        return permutation, {
-            'order_collision_swaps': num_swaps, 
-            'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0,
-            'multi-class-diffs': sum([el[1] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
-            'multi-class-threshold-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
-            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1]
-        }
+        
+        return (permutation, 
+                len(swapped_quality_levels), 
+                sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0.0)
 
     @staticmethod
     def _feature_permute(pattern_features, permutation):
