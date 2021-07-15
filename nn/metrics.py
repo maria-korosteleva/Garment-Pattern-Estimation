@@ -18,7 +18,7 @@ from data import Garment3DPatternFullDataset as PatternDataset
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = model.module.config['device_ids'][0] if hasattr(model, 'module') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
 
@@ -1045,7 +1045,7 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
-        avg_clusters = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
 
         # update permulation for multi-class cases
         num_swaps = 0
@@ -1059,7 +1059,7 @@ class ComposedPatternLoss():
             'order_collision_swaps': num_swaps, 
             'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
-            'avg_clusters': avg_clusters,
+            'avg_clusters': avg_classes,
             'avg-cluster-diffs-updated': swapped_quality
         }
 
