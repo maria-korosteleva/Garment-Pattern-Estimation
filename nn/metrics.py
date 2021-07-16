@@ -1045,11 +1045,11 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
-        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class))
 
         # update permulation for multi-class cases
         num_swaps = 0
-        swapped_quality = None
+        swapped_quality = 0.0
         if len(multiple_classes):
             new_permutation, num_swaps, swapped_quality = self._distribute_clusters(
                 single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
