@@ -1057,7 +1057,8 @@ class ComposedPatternLoss():
         # updated permutation (if in training mode!!) & logging info
         return new_permutation if self.training and len(multiple_classes) else permutation, {
             'order_collision_swaps': num_swaps, 
-            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
+            # Average "baddness" of the multi cluster cases, including zeros for single classes. 
+            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
             'avg_clusters': avg_classes,
             'avg-cluster-diffs-updated': swapped_quality
