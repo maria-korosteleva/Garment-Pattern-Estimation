@@ -23,21 +23,21 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-all-90-sorting-net-size-thr', 
-    run_id='igbll813')  # finished experiment
+    run_name='Tee-JS-many-Clusters-singles', 
+    run_id='24ax7tpp')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
 dataset_list = [
-    'jacket_hood_sleeveless_150',
-    'skirt_waistband_150', 
-    'tee_hood_150',
-    'jacket_sleeveless_150',
-    'dress_150',
+    # 'jacket_hood_sleeveless_150',
+    # 'skirt_waistband_150', 
+    # 'tee_hood_150',
+    # 'jacket_sleeveless_150',
+    # 'dress_150',
     'jumpsuit_150',
-    'wb_jumpsuit_sleeveless_150'
+    # 'wb_jumpsuit_sleeveless_150'
 ]
 
 # data_config also contains the names of datasets to use
