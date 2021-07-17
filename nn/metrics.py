@@ -1045,11 +1045,11 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
-        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class)),
+        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class))
 
         # update permulation for multi-class cases
         num_swaps = 0
-        swapped_quality = None
+        swapped_quality = 0.0
         if len(multiple_classes):
             new_permutation, num_swaps, swapped_quality = self._distribute_clusters(
                 single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
@@ -1057,7 +1057,8 @@ class ComposedPatternLoss():
         # updated permutation (if in training mode!!) & logging info
         return new_permutation if self.training and len(multiple_classes) else permutation, {
             'order_collision_swaps': num_swaps, 
-            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
+            # Average "baddness" of the multi cluster cases, including zeros for single classes. 
+            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
             'avg_clusters': avg_classes,
             'avg-cluster-diffs-updated': swapped_quality
