@@ -101,7 +101,7 @@ def get_values_from_args():
 
         'cluster_by': 'translation',  # DEBUG 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 80,
-        'gap_cluster_threshold': 0.1,
+        'gap_cluster_threshold': 0.5,
         'cluster_gap_nrefs': 5,
         'cluster_with_singles': True,
 
