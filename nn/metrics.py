@@ -18,7 +18,7 @@ from data import Garment3DPatternFullDataset as PatternDataset
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""
-    device = model.module.device_ids[0] if hasattr(model, 'module') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = model.device_ids[0] if hasattr(model, 'device_ids') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     model.to(device)
     model.eval()
