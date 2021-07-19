@@ -123,6 +123,10 @@ class Trainer():
                 loss_dict.update({'epoch': epoch, 'batch': i, 'loss': loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
                 wb.log(loss_dict, step=log_step)
 
+            # DEBUG
+            if hasattr(model.module.loss, 'cluster_resolution_mapping'):
+                print(model.module.loss.cluster_resolution_mapping)
+
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():

@@ -626,11 +626,13 @@ class ComposedPatternLoss():
             'scale': data_stats['gt_scale']['outlines']
         }
 
+        # store moving-around-clusters info
+        self.cluster_resolution_mapping = {}
+
         #  ----- Defining loss objects --------
         # NOTE I have to make a lot of 'ifs' as all losses have different function signatures
         # So, I couldn't come up with more consize defitions
         
-
         if 'shape' in self.l_components or 'rotation' in self.l_components or 'translation' in self.l_components:
             self.regression_loss = nn.MSELoss()  
         
@@ -688,6 +690,7 @@ class ComposedPatternLoss():
             * Function returns True in third parameter at the moment of the loss stucture update
         """
         self.device = preds['outlines'].device
+        self.epoch = epoch
         loss_dict = {}
         full_loss = 0.
 
@@ -697,7 +700,7 @@ class ComposedPatternLoss():
 
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
-            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth, epoch) 
+            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth) 
             loss_dict.update(order_metrics)
         else:  # keep original
             gt_rotated = ground_truth
@@ -708,7 +711,7 @@ class ComposedPatternLoss():
             gt_rotated = self._rotate_gt(preds, gt_rotated, gt_num_edges, epoch)
 
         # ---- Losses ------
-        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges, epoch)
+        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
         full_loss += main_losses
         loss_dict.update(main_dict)
 
@@ -745,7 +748,7 @@ class ComposedPatternLoss():
         self.training = mode
 
     # ------- evaluation breakdown -------
-    def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
+    def _main_losses(self, preds, ground_truth, gt_num_edges):
         """
             Main loss components. Evaluated in the same way regardless of the training stage
         """
@@ -774,7 +777,7 @@ class ComposedPatternLoss():
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
 
-        if 'att_distribution' in self.l_components and epoch >= self.config['epoch_with_att_saturation']:
+        if 'att_distribution' in self.l_components and self.epoch >= self.config['epoch_with_att_saturation']:
             att_loss = self.att_distribution(preds['att_weights'])
             full_loss += att_loss
             loss_dict.update(att_distribution_loss=att_loss)
@@ -867,7 +870,7 @@ class ComposedPatternLoss():
         return loss_dict
 
     # ------ Ground truth panel order match -----
-    def _gt_order_match(self, preds, ground_truth, epoch):
+    def _gt_order_match(self, preds, ground_truth):
         """
             Find the permutation of panel in GT that is best matched with the prediction (by geometry)
             and return the GT object with all properties updated according to this permutation 
@@ -932,10 +935,10 @@ class ComposedPatternLoss():
                 ))
 
             # run the optimal permutation eval
-            gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
+            gt_permutation = self._panel_order_match(pred_feature, gt_feature)
 
             collision_swaps_stats = {}
-            if epoch >= self.config['epoch_with_cluster_checks']:
+            if self.epoch >= self.config['epoch_with_cluster_checks']:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
@@ -963,7 +966,7 @@ class ComposedPatternLoss():
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
             # if 'min_empty_att' in self.l_components:
                 
-            if epoch >= self.config['epoch_with_stitches'] and (
+            if self.epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
                     or 'stitch_supervised' in self.l_components
                     or 'free_class' in self.l_components):  # if there is any stitch-related evaluation
@@ -984,7 +987,7 @@ class ComposedPatternLoss():
 
         return gt_updated, collision_swaps_stats
 
-    def _panel_order_match(self, pred_features, gt_features, epoch):
+    def _panel_order_match(self, pred_features, gt_features):
         """
             Find the best-matching permutation of gt panels to the predicted panels (in panel order)
             based on the provided panel features
@@ -993,7 +996,7 @@ class ComposedPatternLoss():
             batch_size = pred_features.shape[0]
             pat_len = gt_features.shape[1]
 
-            if epoch < self.config['epoch_with_order_matching']:
+            if self.epoch < self.config['epoch_with_order_matching']:
                 # assign ordering randomly -- all the panel in the NN output have some non-zero signals at some point
                 per_pattern_permutation = torch.stack(
                     [torch.randperm(pat_len, dtype=torch.long, device=pred_features.device) for _ in range(batch_size)]
@@ -1110,8 +1113,8 @@ class ComposedPatternLoss():
         
         # sort according to distortion power to separate most obvious cases first
         # https://stackoverflow.com/a/10695158
-        # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
-        sorted_multi_classes = multiple_classes   # leave sorted by ID
+        sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+        # sorted_multi_classes = multiple_classes   # leave sorted by ID
 
         # FORDEBUG
         # print([(el[0], el[1], el[2]) for el in multiple_classes])
@@ -1123,8 +1126,8 @@ class ComposedPatternLoss():
         for current_slot, k, curr_quality, labels, m_cluster_centers in sorted_multi_classes:
             # Where to put?
             new_slot = None
-            if self.config['cluster_with_singles']:
-                # To a similar slot with single class
+
+            if self.config['cluster_with_singles']: # To a similar slot with single class
                 # TODO vectorize more?
                 for single_slot, single_center in single_class:
                     similarities = torch.all(torch.isclose(m_cluster_centers, single_center[0], atol=0.01), dim=1)
@@ -1142,24 +1145,41 @@ class ComposedPatternLoss():
                         print('Using single', new_slot, ' with label ', label_id)
                         break
 
-            # OR to an empty slot   
-            if new_slot is None:
-                if not len(empty_att_slots):  # no options
-                    if self.config['cluster_with_singles']:
-                        continue
-                    else:
-                        break
+            if new_slot is None:  # to an empty slot
+                # already have a decision for this epoch
+                potential_slot = None  # TODO beautify this code
+                if (self.training 
+                        and self.epoch in self.cluster_resolution_mapping 
+                        and current_slot in self.cluster_resolution_mapping[self.epoch]):
+                    potential_slot = self.cluster_resolution_mapping[self.epoch][current_slot]
 
-                new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                    # only re-use if it's empty and available this time too
+                if potential_slot is not None and potential_slot in empty_att_slots: 
+                    new_slot = potential_slot
+                    empty_att_slots.remove(potential_slot)
+                    print('Reusing Empty ', new_slot)
+  
+                else:  # re-evaluate the slot 
+                    if not len(empty_att_slots):  # no options
+                        if self.config['cluster_with_singles']:
+                            continue
+                        else:
+                            break
+
+                    new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                    print('Using Empty ', new_slot)
+
+                    # record for re-use
+                    if self.epoch not in self.cluster_resolution_mapping:
+                        self.cluster_resolution_mapping[self.epoch] = {}
+                    self.cluster_resolution_mapping[self.epoch][current_slot] = new_slot
 
                 # Choose elements to move -- those that are used the least 
                 histogram = torch.histc(labels, bins=k, max=k - 1)
                 label_id = histogram.argmin()
 
-                print('Using Empty ', new_slot, ' with label ', label_id)
-
                 single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
-        
+
             # move some of the panels from current_slot to empty_slot in permutation
             indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
             indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
