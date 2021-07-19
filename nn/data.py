@@ -84,7 +84,7 @@ class DatasetWrapper(object):
             _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
             batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
             self.loader_train = DataLoader(self.training, batch_sampler=batch_sampler)
-        except NotImplementedError as e:  # cannot create balanced batches
+        except (AttributeError,NotImplementedError) as e:  # cannot create balanced batches
             print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
             self.dataset.config['balanced_batch_sampling'] = False
             self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
