@@ -1113,7 +1113,7 @@ class ComposedPatternLoss():
         
         # sort according to distortion power to separate most obvious cases first
         # https://stackoverflow.com/a/10695158
-        sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
+        sorted_multi_classes = sorted(multiple_classes, key=itemgetter(2), reverse=True)
         # sorted_multi_classes = multiple_classes   # leave sorted by ID
 
         # FORDEBUG
