@@ -375,10 +375,6 @@ class BalancedBatchSampler():
         if sum(self.batch_len_per_type.values()) > self.batch_size:
             raise('BalancedBatchSampler::Error:: Failed to evaluate per-type length correctly')
 
-        # DEBUG  
-        print('!! Num Batches!! ', len(self), self.num_full_batches, last_batch_len)
-        print(self.batch_len_per_type)
-
 
     def __iter__(self):
         ids_by_type = copy.deepcopy(self.data_ids_by_type)
