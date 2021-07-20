@@ -201,6 +201,7 @@ if __name__ == "__main__":
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
+    model.module.loss.debug_prints = True  # False to avoid extra prints
     if hasattr(model.module, 'config'):
         trainer.update_config(NN=model.module.config)  # save NN configuration
 

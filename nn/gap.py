@@ -14,7 +14,7 @@ import torch
 from kmeans_pytorch import kmeans  # https://github.com/subhadarship/kmeans_pytorch
 
 
-def optimal_clusters(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0):
+def optimal_clusters(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, logs=False):
     """
         Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
         Gap statistic
@@ -88,8 +88,8 @@ def optimal_clusters(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0):
             # optimal class found!
             return k - 1, max(-1 * (gaps[1] - (gaps[k - 1] - std_errors[k - 1])), 0.), labels_per_k[-2], ccs_per_k[-2]
 
-    print('Gaps::Warning::Optimal K not found, returning the last one')
-    print(gaps)
+    if logs:
+        print('Gaps::Warning::Optimal K not found, returning the last one, for gaps {}'.format(gaps))
     return max_k, max(-1 * (gaps[1] - (gaps[max_k] - std_errors[max_k])), 0.), labels_per_k[-1], ccs_per_k[-1]
 
 

@@ -613,6 +613,7 @@ class ComposedPatternLoss():
 
         self.with_quality_eval = True  # quality evaluation switch -- may allow to speed up the loss evaluation if False
         self.training = False  # training\evaluation state
+        self.debug_prints = False
 
         # Convenience properties
         self.l_components = self.config['loss_components']
@@ -1091,18 +1092,21 @@ class ComposedPatternLoss():
                 features[non_empty_ids, panel_id, :],
                 nrefs=self.config['cluster_gap_nrefs'], 
                 max_k=max_k, 
-                extra_sencitivity_threshold=self.config['gap_cluster_threshold']
+                extra_sencitivity_threshold=self.config['gap_cluster_threshold'], 
+                logs=self.debug_prints
             )
 
-            print(panel_id, ' -- ', k_optimal, ' ', diff)
+            if self.debug_prints:
+                print(panel_id, ' -- ', k_optimal, ' ', diff)
 
             if k_optimal == 1:  # the last comes from gap stats formula
                 single_class.append((panel_id, cluster_centers[0]))
             else:
                 multiple_classes.append((panel_id, k_optimal, diff, labels, cluster_centers))  
 
-        print('Single class: {}; Multi-class: {}; Empty: {};'.format(
-            [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
+        if self.debug_prints:
+            print('Single class: {}; Multi-class: {}; Empty: {};'.format(
+                [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
 
         return single_class, multiple_classes, empty_att_slots
 
@@ -1158,7 +1162,8 @@ class ComposedPatternLoss():
                 if potential_slot is not None and potential_slot in empty_att_slots: 
                     new_slot = potential_slot
                     empty_att_slots.remove(potential_slot)
-                    print('Reusing Empty ', new_slot)
+                    if self.debug_prints:
+                        print('Reusing Empty ', new_slot)
   
                 else:  # re-evaluate the slot 
                     if not len(empty_att_slots):  # no options
@@ -1168,7 +1173,8 @@ class ComposedPatternLoss():
                             break
 
                     new_slot = empty_att_slots.pop(0)  # use first available empty slot
-                    print('Using Empty ', new_slot)
+                    if self.debug_prints:
+                        print('Using Empty ', new_slot)
 
                     # record for re-use
                     if self.epoch not in self.cluster_resolution_mapping:
@@ -1189,8 +1195,9 @@ class ComposedPatternLoss():
             # Logging Info
             swapped_quality_levels.append(curr_quality)
         
-        print('After upds: Single class: {}; Multi-class: {}; Empty: {};'.format(
-            [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
+        if self.debug_prints:
+            print('After upds: Single class: {}; Multi-class: {}; Empty: {};'.format(
+                [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
         
         return (permutation, 
                 len(swapped_quality_levels), 
