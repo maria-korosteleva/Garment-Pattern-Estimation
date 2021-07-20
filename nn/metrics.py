@@ -1146,8 +1146,9 @@ class ComposedPatternLoss():
                         new_slot = single_slot
 
                         label_id = similarities.nonzero(as_tuple=False)[0][0]
-
-                        print('Using single', new_slot, ' with label ', label_id)
+                        
+                        if self.debug_prints:
+                            print('Using single', new_slot, ' with label ', label_id)
                         break
 
             if new_slot is None:  # to an empty slot
