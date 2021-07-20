@@ -2,7 +2,6 @@
     List of metrics to evalute on a model and a dataset, along with pre-processing methods needed for such evaluation
 """
 
-import numpy as np
 import torch
 import torch.nn as nn
 import time
@@ -1050,7 +1049,7 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
-        avg_classes = float(sum([el[1] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class))
+        avg_classes = float(sum([multiple_classes[el][0] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class))
 
         # update permulation for multi-class cases
         num_swaps = 0
@@ -1063,7 +1062,7 @@ class ComposedPatternLoss():
         return new_permutation if self.training and len(multiple_classes) else permutation, {
             'order_collision_swaps': num_swaps, 
             # Average "baddness" of the multi cluster cases, including zeros for single classes. 
-            'multi-class-diffs': sum([el[2] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
+            'multi-class-diffs': sum([multiple_classes[el][1] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
             'avg_clusters': avg_classes,
             'avg-cluster-diffs-updated': swapped_quality
@@ -1074,8 +1073,8 @@ class ComposedPatternLoss():
             Evaluate clustering property of given feature distribution for each panel id
         """
         empty_att_slots = []
-        single_class = []
-        multiple_classes = []
+        single_class = []  # TODO Single classes as dict too
+        multiple_classes = {}
         for panel_id in range(features.shape[1]):
             non_empty_ids = non_empty_ids_per_slot[panel_id]
             if len(non_empty_ids) == 0:  
@@ -1102,11 +1101,11 @@ class ComposedPatternLoss():
             if k_optimal == 1:  # the last comes from gap stats formula
                 single_class.append((panel_id, cluster_centers[0]))
             else:
-                multiple_classes.append((panel_id, k_optimal, diff, labels, cluster_centers))  
+                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
 
         if self.debug_prints:
             print('Single class: {}; Multi-class: {}; Empty: {};'.format(
-                [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
+                [el[0] for el in single_class], multiple_classes.keys(), empty_att_slots))
 
         return single_class, multiple_classes, empty_att_slots
 
@@ -1114,95 +1113,109 @@ class ComposedPatternLoss():
         """
             Re-Distribute clusters of features in the dicovered multi-clustering cases
         """
-        swapped_quality_levels = []
-        
-        # sort according to distortion power to separate most obvious cases first
-        # https://stackoverflow.com/a/10695158
-        sorted_multi_classes = sorted(multiple_classes, key=itemgetter(2), reverse=True)
-        # sorted_multi_classes = multiple_classes   # leave sorted by ID
-
-        # FORDEBUG
-        # print([(el[0], el[1], el[2]) for el in multiple_classes])
-        # if self.config['cluster_with_singles']:
-        #    print(single_class)
-         
+        # sort according to distortion power to separate most obvious cases first https://stackoverflow.com/a/10695158
+        # TODO Sorting on dictionaries??
+        # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(2), reverse=True)
+        # sorted_multi_classes = multiple_classes   # leave sorted by ID   
         # TODO find main classes in multi-class case and allow to transfer to them to -- account for a chain reaction?
 
-        for current_slot, k, curr_quality, labels, m_cluster_centers in sorted_multi_classes:
-            # Where to put?
-            new_slot = None
+        # Check if assignment could be reused 
+        assigned = set()
 
-            if self.config['cluster_with_singles']: # To a similar slot with single class
+        # Logging
+        swapped_quality_levels = []
+
+        # check all elements for singles
+        # TODO it will not re-use freshly moved things
+        if self.config['cluster_with_singles']: # To a similar slot with single class
+            for current_slot in multiple_classes:
+                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
+
                 # TODO vectorize more?
                 for single_slot, single_center in single_class:
                     similarities = torch.all(torch.isclose(m_cluster_centers, single_center[0], atol=0.01), dim=1)
                     if torch.any(similarities):  
-                        # one of the clusters is similar to the cluster in single_slot
-
-                        # assuming it's in the same cluster
-                        # TODO try this too
-                        # if not all(empty_mask[indices, single_slot]):  # there is a place to move to
-                        #     print('Almost moved to single, but it's not empty')
-                        new_slot = single_slot
-
+                        new_slot = single_slot   # TODO check if there is a plce to move to
                         label_id = similarities.nonzero(as_tuple=False)[0][0]
                         
                         if self.debug_prints:
                             print('Using single', new_slot, ' with label ', label_id)
+        
+                        # Update
+                        permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                        
+                        # Logging Info
+                        swapped_quality_levels.append(curr_quality)
+                        assigned.add(current_slot)
                         break
-
-            if new_slot is None:  # to an empty slot
-                # already have a decision for this epoch
-                potential_slot = None  # TODO beautify this code
+        
+        # check if others could be assigned to the same class as earlier
+        for current_slot in multiple_classes:
+            if current_slot not in assigned:
+                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
                 if (self.training 
                         and self.epoch in self.cluster_resolution_mapping 
                         and current_slot in self.cluster_resolution_mapping[self.epoch]):
                     potential_slot = self.cluster_resolution_mapping[self.epoch][current_slot]
 
                     # only re-use if it's empty and available this time too
-                if potential_slot is not None and potential_slot in empty_att_slots: 
-                    new_slot = potential_slot
-                    empty_att_slots.remove(potential_slot)
-                    if self.debug_prints:
-                        print('Reusing Empty ', new_slot)
-  
-                else:  # re-evaluate the slot 
-                    if not len(empty_att_slots):  # no options
-                        if self.config['cluster_with_singles']:
-                            continue
-                        else:
-                            break
+                    if potential_slot in empty_att_slots: 
+                        empty_att_slots.remove(potential_slot)
+                        assigned.add(current_slot)
+                        if self.debug_prints:
+                            print('Reusing Empty ', potential_slot)
+                        
+                        # move least used label
+                        histogram = torch.histc(labels, bins=k, max=k - 1)
+                        label_id = histogram.argmin()
 
-                    new_slot = empty_att_slots.pop(0)  # use first available empty slot
-                    if self.debug_prints:
-                        print('Using Empty ', new_slot)
+                        # Update
+                        permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, potential_slot)
+                        
+                        # Logging Info
+                        swapped_quality_levels.append(curr_quality)
 
-                    # record for re-use
-                    if self.epoch not in self.cluster_resolution_mapping:
-                        self.cluster_resolution_mapping[self.epoch] = {}
-                    self.cluster_resolution_mapping[self.epoch][current_slot] = new_slot
+        # All the others are put to the new slots
+        for  current_slot in multiple_classes:
+            if current_slot not in assigned and len(empty_att_slots):  # have options
+                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
+
+                new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                assigned.add(current_slot)
+                if self.debug_prints:
+                    print('Using Empty ', new_slot)
+
+                # record for re-use
+                if self.epoch not in self.cluster_resolution_mapping:
+                    self.cluster_resolution_mapping[self.epoch] = {}
+                self.cluster_resolution_mapping[self.epoch][current_slot] = new_slot
 
                 # Choose elements to move -- those that are used the least 
                 histogram = torch.histc(labels, bins=k, max=k - 1)
                 label_id = histogram.argmin()
 
-                single_class.append((new_slot, m_cluster_centers[label_id]))  # allow to use as single-class slot
+                # Update
+                permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
 
-            # move some of the panels from current_slot to empty_slot in permutation
-            indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
-            indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
-            permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
-            
-            # Logging Info
-            swapped_quality_levels.append(curr_quality)
+                # Logging Info
+                swapped_quality_levels.append(curr_quality)
         
         if self.debug_prints:
-            print('After upds: Single class: {}; Multi-class: {}; Empty: {};'.format(
-                [el[0] for el in single_class], [el[0] for el in multiple_classes], empty_att_slots))
+            print('After upds: Single class: {}; Multi-class: {}; Assigned: {}, Empty: {};'.format(
+                [el[0] for el in single_class], multiple_classes.keys(), assigned, empty_att_slots))
         
         return (permutation, 
                 len(swapped_quality_levels), 
                 sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0.0)
+
+    @staticmethod
+    def _swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot):
+        # move non-empy panels from current_slot to empty_slot in permutation
+        indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
+        indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
+        permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
+
+        return permutation
 
     @staticmethod
     def _feature_permute(pattern_features, permutation):
