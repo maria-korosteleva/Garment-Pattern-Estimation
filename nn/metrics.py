@@ -1154,9 +1154,8 @@ class ComposedPatternLoss():
             if current_slot not in assigned:
                 k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
                 if (self.training 
-                        and self.epoch in self.cluster_resolution_mapping 
-                        and current_slot in self.cluster_resolution_mapping[self.epoch]):
-                    potential_slot = self.cluster_resolution_mapping[self.epoch][current_slot]
+                        and current_slot in self.cluster_resolution_mapping):
+                    potential_slot = self.cluster_resolution_mapping[current_slot]
 
                     # only re-use if it's empty and available this time too
                     if potential_slot in empty_att_slots: 
@@ -1186,9 +1185,7 @@ class ComposedPatternLoss():
                     print('Using Empty ', new_slot)
 
                 # record for re-use
-                if self.epoch not in self.cluster_resolution_mapping:
-                    self.cluster_resolution_mapping[self.epoch] = {}
-                self.cluster_resolution_mapping[self.epoch][current_slot] = new_slot
+                self.cluster_resolution_mapping[current_slot] = new_slot
 
                 # Choose elements to move -- those that are used the least 
                 histogram = torch.histc(labels, bins=k, max=k - 1)
