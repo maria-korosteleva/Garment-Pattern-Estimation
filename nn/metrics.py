@@ -1153,9 +1153,8 @@ class ComposedPatternLoss():
         for current_slot in multiple_classes:
             if current_slot not in assigned:
                 k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
-                if (self.training 
-                        and current_slot in self.cluster_resolution_mapping):
-                    potential_slot = self.cluster_resolution_mapping[current_slot]
+                if (self.training and current_slot in self.cluster_resolution_mapping):
+                    potential_slot, used_cluster_center = self.cluster_resolution_mapping[current_slot]
 
                     # only re-use if it's empty and available this time too
                     if potential_slot in empty_att_slots: 
@@ -1164,9 +1163,13 @@ class ComposedPatternLoss():
                         if self.debug_prints:
                             print('Reusing Empty ', potential_slot)
                         
-                        # move least used label
-                        histogram = torch.histc(labels, bins=k, max=k - 1)
-                        label_id = histogram.argmin()
+                        # move the label that is most similar to the one used before
+                        # TODO check if distance is actually small enough??
+                        dists = ((m_cluster_centers - used_cluster_center) ** 2).sum(dim=-1)
+                        label_id = dists.argmin()
+
+                        if self.debug_prints:
+                            print(m_cluster_centers[label_id], used_cluster_center)
 
                         # Update
                         permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, potential_slot)
@@ -1184,12 +1187,12 @@ class ComposedPatternLoss():
                 if self.debug_prints:
                     print('Using Empty ', new_slot)
 
-                # record for re-use
-                self.cluster_resolution_mapping[current_slot] = new_slot
-
                 # Choose elements to move -- those that are used the least 
                 histogram = torch.histc(labels, bins=k, max=k - 1)
                 label_id = histogram.argmin()
+
+                # record for re-use
+                self.cluster_resolution_mapping[current_slot] = (new_slot, m_cluster_centers[label_id])
 
                 # Update
                 permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
