@@ -84,7 +84,7 @@ class DatasetWrapper(object):
             _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
             batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
             self.loader_train = DataLoader(self.training, batch_sampler=batch_sampler)
-        except (AttributeError,NotImplementedError) as e:  # cannot create balanced batches
+        except (AttributeError, NotImplementedError) as e:  # cannot create balanced batches
             print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
             self.dataset.config['balanced_batch_sampling'] = False
             self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
@@ -341,9 +341,10 @@ class GTtandartization():
 class BalancedBatchSampler():
     """ Sampler creates batches that have the same class distribution as in given subset"""
     # https://stackoverflow.com/questions/66065272/customizing-the-batch-with-specific-elements
-    def __init__(self, ids_by_type, batch_size=10, drop_last=False):
+    def __init__(self, ids_by_type, batch_size=10, drop_last=True):
         """
             * ids_by_type provided as dictionary of torch.Subset() objects
+            * drop_last is True by default to better guarantee that all batches are well-balanced
         """
         if len(ids_by_type) > batch_size:
             raise NotImplementedError('{}::Error::Creating batches that are smaller then total number of data classes is not implemented!'.format(
