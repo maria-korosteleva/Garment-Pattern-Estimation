@@ -601,6 +601,7 @@ class ComposedPatternLoss():
             'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
             'gap_cluster_threshold': 0.,  # differentiating single\multi class cases 
+            'diff_cluster_threshold': 0.,  # differentiating single\multi class cases 
             'cluster_gap_nrefs': 20,   # reducing will speed up training
             'cluster_with_singles': False, 
 
@@ -1086,7 +1087,8 @@ class ComposedPatternLoss():
                 single_class.append((panel_id, features[non_empty_ids[0], panel_id, :]))
                 continue
             
-            # Differentiate single cluster from multi-cluster cases based on gap statistic            
+            # Differentiate single cluster from multi-cluster cases based on gap statistic   
+            # TODO No need to return diff now??         
             k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
                 features[non_empty_ids, panel_id, :],
                 nrefs=self.config['cluster_gap_nrefs'], 
@@ -1095,13 +1097,21 @@ class ComposedPatternLoss():
                 logs=self.debug_prints
             )
 
-            if self.debug_prints:
-                print(panel_id, ' -- ', k_optimal, ' ', diff)
-
             if k_optimal == 1:  # the last comes from gap stats formula
                 single_class.append((panel_id, cluster_centers[0]))
             else:
-                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
+                # TODO don't caculate this cdist twice!
+                # TODO Quality threshold to consider multiple clusters as one!
+                # TODO Just max dist between features??
+                diff = torch.cdist(cluster_centers, cluster_centers).max()
+                if diff < self.config['diff_cluster_threshold']:
+                    k_optimal = 1
+                    single_class.append((panel_id, cluster_centers[0]))
+                else:
+                    multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
+            
+            if self.debug_prints:
+                print(panel_id, ' -- ', k_optimal, ' ', diff)
 
         if self.debug_prints:
             print('Single class: {}; Multi-class: {}; Empty: {};'.format(
