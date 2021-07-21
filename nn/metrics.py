@@ -1178,7 +1178,7 @@ class ComposedPatternLoss():
                         swapped_quality_levels.append(curr_quality)
 
         # All the others are put to the new slots
-        for  current_slot in multiple_classes:
+        for current_slot in multiple_classes:
             if current_slot not in assigned and len(empty_att_slots):  # have options
                 k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
 
@@ -1187,9 +1187,14 @@ class ComposedPatternLoss():
                 if self.debug_prints:
                     print('Using Empty ', new_slot)
 
-                # Choose elements to move -- those that are used the least 
-                histogram = torch.histc(labels, bins=k, max=k - 1)
-                label_id = histogram.argmin()
+                # Choose elements to move
+                if k > 2:  # the cluster that is further away from others
+                    dists = torch.cdist(m_cluster_centers, m_cluster_centers).sum(dim=-1)
+                    label_id = dists.argmax()
+                    print(dists.shape, label_id)
+                else:  # or the one used the least -- in case of 2 classes
+                    histogram = torch.histc(labels, bins=k, max=(k - 1))
+                    label_id = histogram.argmin()
 
                 # record for re-use
                 self.cluster_resolution_mapping[current_slot] = (new_slot, m_cluster_centers[label_id])
