@@ -1160,8 +1160,6 @@ class ComposedPatternLoss():
                     if potential_slot in empty_att_slots: 
                         empty_att_slots.remove(potential_slot)
                         assigned.add(current_slot)
-                        if self.debug_prints:
-                            print('Reusing Empty ', potential_slot)
                         
                         # move the label that is most similar to the one used before
                         # TODO check if distance is actually small enough??
@@ -1169,7 +1167,9 @@ class ComposedPatternLoss():
                         label_id = dists.argmin()
 
                         if self.debug_prints:
-                            print(m_cluster_centers[label_id], used_cluster_center)
+                            print(f'Reusing Empty {current_slot}->{potential_slot} '
+                                  f' by cc {m_cluster_centers[label_id]} with '
+                                  f'original cc {used_cluster_center}')
 
                         # Update
                         permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, potential_slot)
@@ -1185,7 +1185,7 @@ class ComposedPatternLoss():
                 new_slot = empty_att_slots.pop(0)  # use first available empty slot
                 assigned.add(current_slot)
                 if self.debug_prints:
-                    print('Using Empty ', new_slot)
+                    print(f'Using Empty {current_slot}->{new_slot}')  # Trying string interpolation
 
                 # Choose elements to move
                 if k > 2:  # the cluster that is further away from others
