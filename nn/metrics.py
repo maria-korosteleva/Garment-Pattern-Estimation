@@ -1191,7 +1191,6 @@ class ComposedPatternLoss():
                 if k > 2:  # the cluster that is further away from others
                     dists = torch.cdist(m_cluster_centers, m_cluster_centers).sum(dim=-1)
                     label_id = dists.argmax()
-                    print(dists.shape, label_id)
                 else:  # or the one used the least -- in case of 2 classes
                     histogram = torch.histc(labels, bins=k, max=(k - 1))
                     label_id = histogram.argmin()
