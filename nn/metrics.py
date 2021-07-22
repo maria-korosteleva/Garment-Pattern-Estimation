@@ -1089,7 +1089,7 @@ class ComposedPatternLoss():
             
             # Differentiate single cluster from multi-cluster cases based on gap statistic   
             # TODO No need to return diff now??         
-            k_optimal, diff, labels, cluster_centers = gap.optimal_clusters()(
+            k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
                 features[non_empty_ids, panel_id, :],
                 max_k=max_k, 
                 sencitivity_threshold=self.config['diff_cluster_threshold'], 
