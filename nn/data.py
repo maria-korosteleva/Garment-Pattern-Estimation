@@ -90,7 +90,8 @@ class DatasetWrapper(object):
             self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
         # no need for breakdown per datafolder for training -- for now
 
-        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        # DEBUG shuffles
+        self.loader_validation = DataLoader(self.validation, self.batch_size, shuffle=True) if self.validation else None
         self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
         # loader with per-data folder examples for visualization
         if self.validation:
