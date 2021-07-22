@@ -28,6 +28,7 @@ def get_values_from_args():
     # basic
     parser.add_argument('--cluster_by', '-cb', help='', type=str, default='translation')
     parser.add_argument('--diff_cluster_threshold', '-d', help='', type=float, default=0.1)
+    parser.add_argument('--version', '-v', help='Checkpoint version to request', type=int, default=-1)
 
     args = parser.parse_args()
     print(args)
@@ -50,7 +51,7 @@ def get_values_from_args():
         'quality_components': ['shape'],  #, 'discrete', 'rotation', 'translation'],
     }
 
-    return loss_config
+    return loss_config, args.version
 
 
 # --------------- from experimnet ---------
@@ -58,8 +59,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='WB-cluster-furthest-proper-diff', 
-    run_id='75hpxkj6')  # finished experiment
+    run_name='Tee-JS-cluster-dec-freezing', 
+    run_id='2p0fhfgd')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -80,9 +81,11 @@ print('Batch: {}, Split: {}'.format(batch_size, split))
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
+# From input
+args_loss_config, checkpoint_version = get_values_from_args()
+
 # DEBUG Loss config
 loss_config = experiment.NN_config()['loss']
-args_loss_config = get_values_from_args()
 print(args_loss_config)
 loss_config.update(args_loss_config)
 
@@ -95,8 +98,11 @@ model = model_class(dataset.config, experiment.NN_config(), loss_config)
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
     model = nn.DataParallel(model, device_ids=['cuda:0'])
 
-# state_dict = experiment.load_best_model(device='cuda:0')['model_state_dict']
-state_dict = experiment.load_checkpoint_file(version=64, device='cuda:0')['model_state_dict']
+# state_dict = 
+if checkpoint_version >= 0: 
+    state_dict = experiment.load_checkpoint_file(version=checkpoint_version, device='cuda:0')['model_state_dict'] 
+else:
+    experiment.load_best_model(device='cuda:0')['model_state_dict']
 
 model.load_state_dict(state_dict)
 
