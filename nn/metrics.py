@@ -1091,9 +1091,8 @@ class ComposedPatternLoss():
             # TODO No need to return diff now??         
             k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
                 features[non_empty_ids, panel_id, :],
-                nrefs=self.config['cluster_gap_nrefs'], 
                 max_k=max_k, 
-                extra_sencitivity_threshold=self.config['gap_cluster_threshold'], 
+                sencitivity_threshold=self.config['diff_cluster_threshold'], 
                 logs=self.debug_prints
             )
 
