@@ -14,7 +14,7 @@ import torch
 from kmeans_pytorch import kmeans  # https://github.com/subhadarship/kmeans_pytorch
 
 
-def optimal_clusters(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, logs=False):
+def gaps(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, logs=False):
     """
         Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
         Gap statistic
@@ -91,6 +91,60 @@ def optimal_clusters(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, 
     if logs:
         print('Gaps::Warning::Optimal K not found, returning the last one, for gaps {}'.format(gaps))
     return max_k, max(-1 * (gaps[1] - (gaps[max_k] - std_errors[max_k])), 0.), labels_per_k[-1], ccs_per_k[-1]
+
+
+def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
+    """
+        Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
+        cluster compactness. Optimal K is the minimum K wich wich cluster member are `sencitivity_threshold`
+        away from the center on average
+
+        * Give the list of k-values for which you want to compute the statistic in ks.
+        * 'sencitivity_threshold' -- Target compactness
+
+        Returns: 
+            optimal class_numbers, 
+            optimal compactness, 
+            labels for optimal class, 
+            cluster_centers for optimal class
+
+        Devices note: all computations are performed on the device where the *data* is located. 
+        Both CPU and GPU are supported.
+    """
+    shape = data.shape
+
+    max_k = min(max_k, len(data))  # cannot be more then number of datapoints
+
+    # Optimal class number
+    labels_per_k = []
+    ccs_per_k = []
+    disp = 0.0
+    for k in range(1, max_k + 1):   
+        # Step 1 -- clustering
+        # on the data
+        if k == 1:
+            labels, cluster_centers = _single_cluster_kmeans(data)
+        else:
+            labels, cluster_centers = kmeans(X=data, num_clusters=k, device=data.device, tqdm_flag=False)
+            labels, cluster_centers = labels.to(data.device), cluster_centers.to(data.device)
+        labels_per_k.append(labels)  # save labels to return
+        ccs_per_k.append(cluster_centers)
+
+        # average distance to cluster centers
+        # TODO with log?
+        disp = torch.mean([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])])
+
+        if logs:
+            print(f'Distance to cluster centers {disp} for k={k}')
+
+        if disp <= sencitivity_threshold:
+            # optimal class found! Clustering is compact enough
+            return k, disp, labels_per_k[-1], ccs_per_k[-1]
+
+    if logs:
+        print('Optimal_clusters::Warning::Optimal K not found, returning the last one, for disp {}'.format(disp))
+    return max_k, disp, labels_per_k[-1], ccs_per_k[-1]
+
 
 
 def _single_cluster_kmeans(data):
