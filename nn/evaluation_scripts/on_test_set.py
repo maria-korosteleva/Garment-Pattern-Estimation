@@ -102,7 +102,7 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 if checkpoint_version >= 0: 
     state_dict = experiment.load_checkpoint_file(version=checkpoint_version, device='cuda:0')['model_state_dict'] 
 else:
-    experiment.load_best_model(device='cuda:0')['model_state_dict']
+    state_dict = experiment.load_best_model(device='cuda:0')['model_state_dict']
 
 model.load_state_dict(state_dict)
 
