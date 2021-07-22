@@ -118,7 +118,7 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
     # Optimal class number
     labels_per_k = []
     ccs_per_k = []
-    disp = 0.0
+    disp_list = []
     for k in range(1, max_k + 1):   
         # Step 1 -- clustering
         # on the data
@@ -132,7 +132,8 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
 
         # average distance to cluster centers
         # TODO with log?
-        disp = torch.mean([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])])
+        disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])]) / shape[0]
+        disp_list.append(disp)
 
         if logs:
             print(f'Distance to cluster centers {disp} for k={k}')
@@ -140,6 +141,9 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
         if disp <= sencitivity_threshold:
             # optimal class found! Clustering is compact enough
             return k, disp, labels_per_k[-1], ccs_per_k[-1]
+        elif disp > (disp_list[-2] + sencitivity_threshold):
+            # It's growing!! Lask one was optimal
+            return k - 1, disp_list[-2], labels_per_k[-2], ccs_per_k[-2]
 
     if logs:
         print('Optimal_clusters::Warning::Optimal K not found, returning the last one, for disp {}'.format(disp))
