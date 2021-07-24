@@ -1100,14 +1100,9 @@ class ComposedPatternLoss():
                 single_class.append((panel_id, cluster_centers[0]))
             else:
                 # TODO don't caculate this cdist twice!
-                # TODO Quality threshold to consider multiple clusters as one!
                 # TODO Just max dist between features??
                 diff = torch.cdist(cluster_centers, cluster_centers).max()
-                if diff < self.config['diff_cluster_threshold']:
-                    k_optimal = 1
-                    single_class.append((panel_id, cluster_centers[0]))
-                else:
-                    multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
+                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
             
             if self.debug_prints:
                 print(panel_id, ' -- ', k_optimal, ' ', diff)

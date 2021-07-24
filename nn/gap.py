@@ -144,7 +144,7 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
         if disp <= sencitivity_threshold:
             # optimal class found! Clustering is compact enough
             return k, disp, labels_per_k[-1], ccs_per_k[-1]
-        elif k > 1 and (abs(disp - disp_list[-2]) < sencitivity_threshold or disp > disp_list[-2]):
+        elif k > 1 and (abs(disp - disp_list[-2]) < 0.02 * disp or disp > disp_list[-2]):
             # Improvement is too small or metric started growing (!)
             return k - 1, disp_list[-2], labels_per_k[-2], ccs_per_k[-2]
 
