@@ -1137,13 +1137,14 @@ class ComposedPatternLoss():
 
                 # TODO vectorize more?
                 for single_slot, single_center in single_class:
-                    similarities = torch.all(torch.isclose(m_cluster_centers, single_center[0], atol=0.01), dim=1)
-                    if torch.any(similarities):  
+                    dists = ((m_cluster_centers - single_center) ** 2).sum(dim=-1)
+
+                    if torch.any(dists < (self.config['diff_cluster_threshold'] * 0.5)):  
                         new_slot = single_slot   # TODO check if there is a plce to move to
-                        label_id = similarities.nonzero(as_tuple=False)[0][0]
+                        label_id = dists.argmin()
                         
                         if self.debug_prints:
-                            print('Using single', new_slot, ' with label ', label_id)
+                            print(f'Using single {new_slot} with dist {dists[label_id]}')
         
                         # Update
                         permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
@@ -1162,13 +1163,18 @@ class ComposedPatternLoss():
 
                     # only re-use if it's empty and available this time too
                     if potential_slot in empty_att_slots: 
-                        empty_att_slots.remove(potential_slot)
-                        assigned.add(current_slot)
-                        
                         # move the label that is most similar to the one used before
                         # TODO check if distance is actually small enough??
                         dists = ((m_cluster_centers - used_cluster_center) ** 2).sum(dim=-1)
                         label_id = dists.argmin()
+
+                        # TODO Is it needed?
+                        if dists[label_id] > self.config['diff_cluster_threshold'] * 0.5:
+                            # even the closest cluster is too far -- skip this re-use
+                            continue
+
+                        empty_att_slots.remove(potential_slot)
+                        assigned.add(current_slot)
 
                         if self.debug_prints:
                             print(f'Reusing Empty {current_slot}->{potential_slot} '
