@@ -1144,7 +1144,10 @@ class ComposedPatternLoss():
                         label_id = dists.argmin()
                         
                         if self.debug_prints:
-                            print(f'Using single {new_slot} with dist {dists[label_id]}')
+                            print(
+                                f'Using single {current_slot}->{new_slot} with dist {dists[label_id]}'
+                                f' by cc {m_cluster_centers[label_id]} with '
+                                f'original cc {single_center}')
         
                         # Update
                         permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
