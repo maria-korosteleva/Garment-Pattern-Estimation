@@ -105,7 +105,7 @@ def get_values_from_args():
         'cluster_by': 'translation',  # 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 100,
         'gap_cluster_threshold': 0.0,
-        'diff_cluster_threshold': 0.1,  # testing New!!
+        'diff_cluster_threshold': 0.2,  # testing New!!
         'cluster_gap_nrefs': 5,
         'cluster_with_singles': True,
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction',  
-        run_name='WB-cluster-proximity-fixes-lr', 
+        run_name='WB-cluster-proximity-fixes', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
