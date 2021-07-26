@@ -445,7 +445,6 @@ class GarmentAttentivePattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
         super().__init__(data_config, config, in_loss_config)
 
-        # TODO is it a good way to do dynamic configuration?
         # set to true to get attention weights with prediction -- for visualization
         # Keep false in all unnecessary cases to save memory!
         self.save_att_weights = False 
@@ -558,7 +557,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         super().__init__(data_config, config, in_loss_config)
 
-        # TODO is it a good way to do dynamic configuration?
         # set to true to get attention weights with prediction -- for visualization or loss evaluation
         # Keep false in all unnecessary cases to save memory!
         self.save_att_weights = 'att_distribution' in self.loss.config['loss_components'] or 'min_empty_att' in self.loss.config['loss_components']

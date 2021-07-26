@@ -1087,8 +1087,7 @@ class ComposedPatternLoss():
                 single_class.append((panel_id, features[non_empty_ids[0], panel_id, :]))
                 continue
             
-            # Differentiate single cluster from multi-cluster cases based on gap statistic   
-            # TODO No need to return diff now??         
+            # Differentiate single cluster from multi-cluster cases based on gap statistic         
             k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
                 features[non_empty_ids, panel_id, :],
                 max_k=max_k, 
@@ -1117,50 +1116,49 @@ class ComposedPatternLoss():
         """
             Re-Distribute clusters of features in the dicovered multi-clustering cases
         """
-        # sort according to distortion power to separate most obvious cases first https://stackoverflow.com/a/10695158
-        # TODO Sorting on dictionaries??
-        # sorted_multi_classes = sorted(multiple_classes, key=itemgetter(2), reverse=True)
-        # sorted_multi_classes = multiple_classes   # leave sorted by ID   
-        # TODO find main classes in multi-class case and allow to transfer to them to -- account for a chain reaction?
+        # TODO sort according to distortion power to separate most obvious cases first https://stackoverflow.com/a/10695158 
 
         # Check if assignment could be reused 
         assigned = set()
 
         # Logging
         swapped_quality_levels = []
+        single_slots = [elem[0] for elem in single_class]
+        single_centers = (elem[1] for elem in single_class)
+        single_centers = torch.stack(tuple(single_centers)) if len(single_class) else []
 
         # check all elements for singles
-        # TODO it will not re-use freshly moved things
-        if self.config['cluster_with_singles']:  # To a similar slot with single class
+        # NOTE: using single-cluster slots as predicted, not as 
+        if self.config['cluster_with_singles'] and len(single_class):  # To a similar slot with single class
             for current_slot in multiple_classes:
                 k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
 
-                # TODO vectorize more?
-                for single_slot, single_center in single_class:
-                    dists = ((m_cluster_centers - single_center) ** 2).sum(dim=-1)
-
-                    if (torch.any(dists < (self.config['diff_cluster_threshold'] * 0.5))):  
-                        new_slot = single_slot   # TODO check if there is a place to move to
-                        label_id = dists.argmin()
+                # vectorized comparison of current slot clusters to single-cluster slots
+                dists = torch.cdist(m_cluster_centers, single_centers)
+                if dists.min() < self.config['diff_cluster_threshold'] * 0.5:
+                    flat_idx = dists.argmin()
+                    label_id = flat_idx // dists.shape[1]
+                    single_slot_list_id = flat_idx - label_id * dists.shape[1]
+                    new_slot = single_slots[single_slot_list_id]
         
-                        # Update
-                        try:
-                            permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
-                        except ValueError as e:
-                            if self.debug_prints:
-                                print(e)
-                            continue
-
+                    # Update
+                    try:
+                        permutation = self._swap_slots(
+                            permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                    except ValueError as e:
                         if self.debug_prints:
-                            print(
-                                f'Using single {current_slot}->{new_slot} with dist {dists[label_id]:.2f}'
-                                f' by cc {m_cluster_centers[label_id]} with '
-                                f'original cc {single_center}')
-                        
-                        # Logging Info
-                        swapped_quality_levels.append(curr_quality)
-                        assigned.add(current_slot)
-                        break
+                            print(e)
+                        continue
+
+                    if self.debug_prints:
+                        print(
+                            f'Using single {current_slot}->{new_slot} with dist {dists[label_id][single_slot_list_id]:.4f}'
+                            f' by cc {m_cluster_centers[label_id]} with '
+                            f'original cc {single_centers[single_slot_list_id]}')
+                    
+                    # Logging Info
+                    swapped_quality_levels.append(curr_quality)
+                    assigned.add(current_slot)
         
         # check if others could be assigned to the same class as earlier
         for current_slot in multiple_classes:
@@ -1172,13 +1170,15 @@ class ComposedPatternLoss():
                     # only re-use if it's empty and available this time too
                     if potential_slot in empty_att_slots: 
                         # move the label that is most similar to the one used before
-                        # TODO check if distance is actually small enough??
                         dists = ((m_cluster_centers - used_cluster_center) ** 2).sum(dim=-1)
                         label_id = dists.argmin()
 
-                        # TODO Is it needed?
+                        # Check if distance is small enough
                         if dists[label_id] > self.config['diff_cluster_threshold'] * 0.5:
                             # even the closest cluster is too far -- skip this re-use
+                            if self.debug_prints:
+                                print(f'Tried to reuse empty {current_slot}->{potential_slot} '
+                                      f'but clusters are too far {dists[label_id]}')
                             continue
 
                         empty_att_slots.remove(potential_slot)
@@ -1238,7 +1238,7 @@ class ComposedPatternLoss():
 
         target_overlap = [idx for idx in indices if idx in non_empty_ids_per_slot[new_slot]]
         if len(target_overlap) > 0:
-            raise ValueError(f'Tryed to swap {current_slot}->{new_slot} with non-empty elements in {new_slot}: {target_overlap}. ')
+            raise ValueError(f'Tried to swap {current_slot}->{new_slot} with non-empty elements in {new_slot}: {target_overlap}. ')
 
         permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
 
