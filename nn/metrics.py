@@ -1131,7 +1131,7 @@ class ComposedPatternLoss():
 
         # check all elements for singles
         # TODO it will not re-use freshly moved things
-        if self.config['cluster_with_singles']: # To a similar slot with single class
+        if self.config['cluster_with_singles']:  # To a similar slot with single class
             for current_slot in multiple_classes:
                 k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
 
@@ -1139,18 +1139,23 @@ class ComposedPatternLoss():
                 for single_slot, single_center in single_class:
                     dists = ((m_cluster_centers - single_center) ** 2).sum(dim=-1)
 
-                    if torch.any(dists < (self.config['diff_cluster_threshold'] * 0.5)):  
-                        new_slot = single_slot   # TODO check if there is a plce to move to
+                    if (torch.any(dists < (self.config['diff_cluster_threshold'] * 0.5))):  
+                        new_slot = single_slot   # TODO check if there is a place to move to
                         label_id = dists.argmin()
-                        
-                        if self.debug_prints:
-                            print(
-                                f'Using single {current_slot}->{new_slot} with dist {dists[label_id]}'
-                                f' by cc {m_cluster_centers[label_id]} with '
-                                f'original cc {single_center}')
         
                         # Update
-                        permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                        try:
+                            permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                        except ValueError as e:
+                            if self.debug_prints:
+                                print(e)
+                            continue
+
+                        if self.debug_prints:
+                            print(
+                                f'Using single {current_slot}->{new_slot} with dist {dists[label_id]:.2f}'
+                                f' by cc {m_cluster_centers[label_id]} with '
+                                f'original cc {single_center}')
                         
                         # Logging Info
                         swapped_quality_levels.append(curr_quality)
@@ -1230,6 +1235,11 @@ class ComposedPatternLoss():
         # move non-empy panels from current_slot to empty_slot in permutation
         indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
         indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
+
+        target_overlap = [idx for idx in indices if idx in non_empty_ids_per_slot[new_slot]]
+        if len(target_overlap) > 0:
+            raise ValueError(f'Tryed to swap {current_slot}->{new_slot} with non-empty elements in {new_slot}: {target_overlap}. ')
+
         permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
 
         return permutation

@@ -105,7 +105,7 @@ def get_values_from_args():
         'cluster_by': 'translation',  # 'panel_encodings', 'order_feature', 'translation'
         'epoch_with_cluster_checks': 100,
         'gap_cluster_threshold': 0.0,
-        'diff_cluster_threshold': 0.2,  # testing New!!
+        'diff_cluster_threshold': 0.1,  # testing New!!
         'cluster_gap_nrefs': 5,
         'cluster_with_singles': True,
 
@@ -141,7 +141,7 @@ def get_data_config(in_config, old_stats=False):
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
-            'max_datapoints_per_type': 500,  # upper limit of how much data to grab from each type
+            'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
             'max_pattern_len': 15,  # DEBUG 30 > then the total number of panel classes  
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24  # jumpsuit (with sleeves)
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction',  
-        run_name='WB-cluster-proximity-fixes', 
+        run_name='WB-cluster-singles-fixes-size', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model)  # , device_ids=['cuda:2', 'cuda:3'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:2', 'cuda:3'])  # , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
