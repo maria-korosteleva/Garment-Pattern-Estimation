@@ -1190,7 +1190,7 @@ class ComposedPatternLoss():
                 k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                 # comparison of current slot clusters to single-cluster slots
-                bb_comparion = torch.zeros((k, len(single_class)), device=m_bboxes[0].device)
+                bb_comparion = torch.zeros((k, len(single_class)), device=single_bboxes.device)
                 for label_id, m_box in enumerate(m_bboxes):
                     if m_box is None:  # skip
                         continue
@@ -1236,7 +1236,7 @@ class ComposedPatternLoss():
                     k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                     # comparison of current slot clusters to single-cluster slots
-                    bb_comparion = torch.zeros((k, len(memory_slots)), device=m_bboxes[0].device)
+                    bb_comparion = torch.zeros((k, len(memory_slots)), device=single_bboxes.device)
                     for label_id, m_box in enumerate(m_bboxes):
                         if m_box is None:  # skip
                             continue
@@ -1288,7 +1288,7 @@ class ComposedPatternLoss():
                     histogram = torch.histc(labels, bins=k, max=(k - 1))
                     label_id = histogram.argmin()
 
-                # record for re-use
+                # record for re-use. The m_bbox should not be None here..
                 self.cluster_resolution_mapping[new_slot] = m_bboxes[label_id]
 
                 # Update
