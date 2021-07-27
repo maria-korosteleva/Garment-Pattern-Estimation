@@ -1100,13 +1100,13 @@ class ComposedPatternLoss():
         single_class, multiple_classes, empty_att_slots = self._eval_clusters(
             features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
 
-        avg_classes = float(sum([multiple_classes[el][0] for el in multiple_classes]) + len(single_class)) / (len(multiple_classes) + len(single_class))
+        avg_classes = float(sum([multiple_classes[el][0] for el in multiple_classes]) + len(single_class)) \
+                      / (len(multiple_classes) + len(single_class))
 
         # update permulation for multi-class cases
         num_swaps = 0
-        swapped_quality = 0.0
         if len(multiple_classes):
-            new_permutation, num_swaps, swapped_quality = self._distribute_clusters(
+            new_permutation, num_swaps = self._distribute_clusters(
                 single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
         
         # updated permutation (if in training mode!!) & logging info
@@ -1115,8 +1115,7 @@ class ComposedPatternLoss():
             # Average "baddness" of the multi cluster cases, including zeros for single classes. 
             'multi-class-diffs': sum([multiple_classes[el][1] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
             'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
-            'avg_clusters': avg_classes,
-            'avg-cluster-diffs-updated': swapped_quality
+            'avg_clusters': avg_classes
         }
 
     def _eval_clusters(self, features, non_empty_ids_per_slot, max_k=2):
@@ -1154,9 +1153,12 @@ class ComposedPatternLoss():
                 diff = torch.cdist(cluster_centers, cluster_centers).max()
                 bboxes = []
                 for label_id in range(k_optimal):
-                    bboxes.append(
-                        self._bbox(slot_features[labels == label_id])
-                    )
+                    if len(slot_features[labels == label_id]) == 0:  # happens, but rarely
+                        bboxes.append(None)
+                    else:
+                        bboxes.append(
+                            self._bbox(slot_features[labels == label_id])
+                        )
                 multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers, bboxes)
             
             if self.debug_prints:
@@ -1172,8 +1174,6 @@ class ComposedPatternLoss():
         """
             Re-Distribute clusters of features in the dicovered multi-clustering cases
         """
-        # TODO sort according to distortion power to separate most obvious cases first https://stackoverflow.com/a/10695158 
-
         # Check if assignment could be reused 
         assigned = set()
 
@@ -1190,14 +1190,13 @@ class ComposedPatternLoss():
                 k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                 # comparison of current slot clusters to single-cluster slots
-                bb_comparion = torch.empty((k, len(single_class)), device=m_bboxes[0].device)
+                bb_comparion = torch.zeros((k, len(single_class)), device=m_bboxes[0].device)
                 for label_id, m_box in enumerate(m_bboxes):
+                    if m_box is None:  # skip
+                        continue
                     for single_idx in range(len(single_class)):
                         bbox_iou = self._bbox_iou(m_box, single_bboxes[single_idx])  # with single mox
                         bb_comparion[label_id, single_idx] = bbox_iou
-
-                if self.debug_prints:
-                    print(f'IOU: {bb_comparion}')
 
                 if bb_comparion.max() > 0.8:  # TODO parameter??
                     flat_idx = bb_comparion.argmax()
@@ -1221,43 +1220,53 @@ class ComposedPatternLoss():
                             f'original cc {single_centers[single_slot_list_id]}')
                     
                     # Logging Info
-                    swapped_quality_levels.append(curr_quality)
                     assigned.add(current_slot)
         
         # check if others could be assigned to the same class as earlier
-        for current_slot in multiple_classes:
-            if current_slot not in assigned:
-                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
-                if (self.training and current_slot in self.cluster_resolution_mapping):
-                    potential_slot, used_cluster_center = self.cluster_resolution_mapping[current_slot]
+        # TODO remove duplicate code
+        memory_slots = []
+        memory_bboxes = []
+        for k in self.cluster_resolution_mapping:
+            if k in empty_att_slots:
+                memory_slots.append(k)
+                memory_bboxes.append(self.cluster_resolution_mapping[k])
+        if len(memory_slots):
+            for current_slot in multiple_classes:
+                if current_slot not in assigned:
+                    k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
-                    # only re-use if it's empty and available this time too
-                    if potential_slot in empty_att_slots: 
-                        # move the label that is most similar to the one used before
-                        dists = ((m_cluster_centers - used_cluster_center) ** 2).sum(dim=-1)
-                        label_id = dists.argmin()
+                    # comparison of current slot clusters to single-cluster slots
+                    bb_comparion = torch.zeros((k, len(memory_slots)), device=m_bboxes[0].device)
+                    for label_id, m_box in enumerate(m_bboxes):
+                        for slot_idx in range(len(memory_slots)):
+                            bbox_iou = self._bbox_iou(m_box, memory_bboxes[slot_idx])  # with single mox
+                            bb_comparion[label_id, slot_idx] = bbox_iou
 
-                        # Check if distance is small enough
-                        if dists[label_id] > self.config['diff_cluster_threshold'] * 0.5:
-                            # even the closest cluster is too far -- skip this re-use
-                            if self.debug_prints:
-                                print(f'Tried to reuse empty {current_slot}->{potential_slot} '
-                                      f'but clusters are too far {dists[label_id]}')
-                            continue
-
-                        empty_att_slots.remove(potential_slot)
-                        assigned.add(current_slot)
-
-                        if self.debug_prints:
-                            print(f'Reusing Empty {current_slot}->{potential_slot} '
-                                  f' by cc {m_cluster_centers[label_id]} with '
-                                  f'original cc {used_cluster_center}')
+                    if bb_comparion.max() > 0.8:  # TODO parameter??
+                        flat_idx = bb_comparion.argmax()
+                        label_id = flat_idx // bb_comparion.shape[1]
+                        single_slot_list_id = flat_idx - label_id * bb_comparion.shape[1]
+                        new_slot = memory_slots[single_slot_list_id]
 
                         # Update
-                        permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, potential_slot)
+                        try:
+                            permutation = self._swap_slots(
+                                permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                        except ValueError as e:
+                            if self.debug_prints:
+                                print(e)
+                            continue
+
+                        if self.debug_prints:
+                            print(
+                                f'Re-Using {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
+                                f' by cc {m_bboxes[label_id]} with '
+                                f'original cc {memory_bboxes[single_slot_list_id]}')
                         
                         # Logging Info
-                        swapped_quality_levels.append(curr_quality)
+                        if new_slot in empty_att_slots:
+                            empty_att_slots.remove(new_slot)
+                        assigned.add(current_slot)
 
         # All the others are put to the new slots
         for current_slot in multiple_classes:
@@ -1278,21 +1287,16 @@ class ComposedPatternLoss():
                     label_id = histogram.argmin()
 
                 # record for re-use
-                self.cluster_resolution_mapping[current_slot] = (new_slot, m_cluster_centers[label_id])
+                self.cluster_resolution_mapping[new_slot] = m_bboxes[label_id]
 
                 # Update
                 permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
-
-                # Logging Info
-                swapped_quality_levels.append(curr_quality)
         
         if self.debug_prints:
             print('After upds: Single class: {}; Multi-class: {}; Assigned: {}, Empty: {};'.format(
                 [el[0] for el in single_class], multiple_classes.keys(), assigned, empty_att_slots))
         
-        return (permutation, 
-                len(swapped_quality_levels), 
-                sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0.0)
+        return (permutation, len(assigned))
 
     @staticmethod
     def _swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot):
