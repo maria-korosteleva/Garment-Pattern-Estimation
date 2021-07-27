@@ -547,9 +547,11 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
 
         if 'loss_components' not in in_loss_config:
-            # with\wihtout attention losses!   , 'att_distribution', 'min_empty_att'
-            in_loss_config.update(loss_components=[
-                'shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'])
+            # with\wihtout attention losses!   , 'att_distribution', 'min_empty_att', 'stitch', 'free_class'
+            in_loss_config.update(
+                loss_components=['shape', 'loop', 'rotation', 'translation'], 
+                quality_components=['shape', 'discrete', 'rotation', 'translation']
+                )
 
         # training control defaults
         if 'freeze_on_clustering' not in config:
