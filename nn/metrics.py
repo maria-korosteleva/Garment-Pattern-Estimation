@@ -1147,6 +1147,12 @@ class ComposedPatternLoss():
 
             if k_optimal == 1:  # the last comes from gap stats formula
                 single_class.append((panel_id, cluster_centers[0], self._bbox(slot_features)))
+
+                if self.config['cluster_with_singles'] or panel_id in self.cluster_resolution_mapping:  
+                    # allow to map to this panel_id is singles are in use
+                    # AND make sure that this mapping is up-to-date when slot starts to be used
+                    self.cluster_resolution_mapping[panel_id] = single_class[-1][2]
+
             else:
                 # TODO don't caculate this cdist twice!
                 # TODO Just max dist between features??
@@ -1178,52 +1184,9 @@ class ComposedPatternLoss():
         assigned = set()
 
         # Logging
-        swapped_quality_levels = []
         single_slots = [elem[0] for elem in single_class]
-        single_centers = torch.stack(tuple((elem[1] for elem in single_class))) if len(single_class) else []
-        single_bboxes = torch.stack(tuple((elem[2] for elem in single_class))) if len(single_class) else []
-
-        # check all elements for singles
-        # NOTE: using single-cluster slots as predicted, not as 
-        if self.config['cluster_with_singles'] and len(single_class):  # To a similar slot with single class
-            for current_slot in multiple_classes:
-                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
-
-                # comparison of current slot clusters to single-cluster slots
-                bb_comparion = torch.zeros((k, len(single_class)), device=permutation.device)
-                for label_id, m_box in enumerate(m_bboxes):
-                    if m_box is None:  # skip
-                        continue
-                    for single_idx in range(len(single_class)):
-                        bbox_iou = self._bbox_iou(m_box, single_bboxes[single_idx])  # with single mox
-                        bb_comparion[label_id, single_idx] = bbox_iou
-
-                if bb_comparion.max() > 0.8:  # TODO parameter??
-                    flat_idx = bb_comparion.argmax()
-                    label_id = flat_idx // bb_comparion.shape[1]
-                    single_slot_list_id = flat_idx - label_id * bb_comparion.shape[1]
-                    new_slot = single_slots[single_slot_list_id]
-
-                    # Update
-                    try:
-                        permutation = self._swap_slots(
-                            permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
-                    except ValueError as e:
-                        if self.debug_prints:
-                            print(e)
-                        continue
-
-                    if self.debug_prints:
-                        print(
-                            f'Using single {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
-                            f' by {m_cluster_centers[label_id]} with '
-                            f'original {single_centers[single_slot_list_id]}')
-                    
-                    # Logging Info
-                    assigned.add(current_slot)
-        
-        # check if others could be assigned to the same class as earlier
-        # TODO remove duplicate code
+ 
+        # check if multi-class could be assigned to the same slot \ used single slot as earlier
         memory_slots = []
         memory_bboxes = []
         for k in self.cluster_resolution_mapping:
@@ -1260,8 +1223,9 @@ class ComposedPatternLoss():
                             continue
 
                         if self.debug_prints:
+                            tag = 'Using single' if new_slot in single_slots else 'Re-using'
                             print(
-                                f'Re-Using {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
+                                f'{tag} {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
                                 f' by {m_bboxes[label_id]} with '
                                 f'original {memory_bboxes[single_slot_list_id]}')
                         
