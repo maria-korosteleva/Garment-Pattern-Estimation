@@ -1216,8 +1216,8 @@ class ComposedPatternLoss():
                     if self.debug_prints:
                         print(
                             f'Using single {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
-                            f' by cc {m_cluster_centers[label_id]} with '
-                            f'original cc {single_centers[single_slot_list_id]}')
+                            f' by {m_cluster_centers[label_id]} with '
+                            f'original {single_centers[single_slot_list_id]}')
                     
                     # Logging Info
                     assigned.add(current_slot)
@@ -1260,8 +1260,8 @@ class ComposedPatternLoss():
                         if self.debug_prints:
                             print(
                                 f'Re-Using {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
-                                f' by cc {m_bboxes[label_id]} with '
-                                f'original cc {memory_bboxes[single_slot_list_id]}')
+                                f' by {m_bboxes[label_id]} with '
+                                f'original {memory_bboxes[single_slot_list_id]}')
                         
                         # Logging Info
                         if new_slot in empty_att_slots:
