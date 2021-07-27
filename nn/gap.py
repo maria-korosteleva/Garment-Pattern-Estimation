@@ -137,9 +137,6 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
         disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])]) / shape[0]
         disp_list.append(disp)
 
-        if logs:
-            print(f'Distance to cluster centers {disp:.4f} for k={k}')
-
         if disp <= sencitivity_threshold:
             # optimal class found! Clustering is compact enough
             return k, disp, labels_per_k[-1], ccs_per_k[-1]
