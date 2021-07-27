@@ -1190,7 +1190,7 @@ class ComposedPatternLoss():
                 k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                 # comparison of current slot clusters to single-cluster slots
-                bb_comparion = torch.zeros((k, len(single_class)), device=single_bboxes.device)
+                bb_comparion = torch.zeros((k, len(single_class)), device=permutation.device)
                 for label_id, m_box in enumerate(m_bboxes):
                     if m_box is None:  # skip
                         continue
@@ -1236,7 +1236,7 @@ class ComposedPatternLoss():
                     k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                     # comparison of current slot clusters to single-cluster slots
-                    bb_comparion = torch.zeros((k, len(memory_slots)), device=single_bboxes.device)
+                    bb_comparion = torch.zeros((k, len(memory_slots)), device=permutation.device)
                     for label_id, m_box in enumerate(m_bboxes):
                         if m_box is None:  # skip
                             continue
