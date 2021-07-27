@@ -1031,6 +1031,56 @@ class ComposedPatternLoss():
         
         return per_pattern_permutation
 
+    @staticmethod
+    def _feature_permute(pattern_features, permutation):
+        """
+            Permute all given features (in the batch) according to given panel order permutation
+        """
+        with torch.no_grad():
+            extended_permutation = permutation
+            # match indexing with feature size
+            if len(permutation.shape) < len(pattern_features.shape):
+                for _ in range(len(pattern_features.shape) - len(permutation.shape)):
+                    extended_permutation = extended_permutation.unsqueeze(-1)
+                # expand just creates a new view without extra copies
+                extended_permutation = extended_permutation.expand(pattern_features.shape)
+
+            # collect features with correct permutation in pattern dimention
+            indexed_features = torch.gather(pattern_features, dim=1, index=extended_permutation)
+        
+        return indexed_features
+
+    @staticmethod
+    def _stitch_after_permute(stitches, stitches_num, permutation, max_panel_len):
+        """
+            Update edges ids in stitch info after panel order permutation
+        """
+        with torch.no_grad():  # GT updates don't require gradient compute
+            # add pattern dimention
+            for pattern_id in range(len(stitches)):
+                
+                # inverse permutation for this pattern for faster access
+                new_panel_ids_list = [-1] * permutation.shape[1]
+                for i in range(permutation.shape[1]):
+                    new_panel_ids_list[permutation[pattern_id][i]] = i
+
+                # re-assign GT edge ids according to shift
+                for side in (0, 1):
+                    for i in range(stitches_num[pattern_id]):
+                        edge_id = stitches[pattern_id][side][i]
+                        panel_id = edge_id // max_panel_len
+                        in_panel_edge_id = edge_id - (panel_id * max_panel_len)
+
+                        # where is this panel placed
+                        new_panel_id = new_panel_ids_list[panel_id]
+
+                        # update with pattern-level edge id
+                        stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
+                
+        return stitches
+
+    # ------ Cluster analysis -------
+
     def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
         """ (try) to find and resolve cases when multiple panel clusters 
             were assigned to the same panel id (hence attention slot)
@@ -1083,25 +1133,31 @@ class ComposedPatternLoss():
                 empty_att_slots.append(panel_id)
                 continue
 
+            slot_features = features[non_empty_ids, panel_id, :]
             if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
-                single_class.append((panel_id, features[non_empty_ids[0], panel_id, :]))
+                single_class.append((panel_id, slot_features[0], torch.cat((slot_features, slot_features))))
                 continue
             
             # Differentiate single cluster from multi-cluster cases based on gap statistic         
             k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
-                features[non_empty_ids, panel_id, :],
+                slot_features,
                 max_k=max_k, 
                 sencitivity_threshold=self.config['diff_cluster_threshold'], 
                 logs=self.debug_prints
             )
 
             if k_optimal == 1:  # the last comes from gap stats formula
-                single_class.append((panel_id, cluster_centers[0]))
+                single_class.append((panel_id, cluster_centers[0], self._bbox(slot_features)))
             else:
                 # TODO don't caculate this cdist twice!
                 # TODO Just max dist between features??
                 diff = torch.cdist(cluster_centers, cluster_centers).max()
-                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers)
+                bboxes = []
+                for label_id in range(k_optimal):
+                    bboxes.append(
+                        self._bbox(slot_features[labels == label_id])
+                    )
+                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers, bboxes)
             
             if self.debug_prints:
                 print(panel_id, ' -- ', k_optimal, ' ', diff)
@@ -1124,23 +1180,31 @@ class ComposedPatternLoss():
         # Logging
         swapped_quality_levels = []
         single_slots = [elem[0] for elem in single_class]
-        single_centers = (elem[1] for elem in single_class)
-        single_centers = torch.stack(tuple(single_centers)) if len(single_class) else []
+        single_centers = torch.stack(tuple((elem[1] for elem in single_class))) if len(single_class) else []
+        single_bboxes = torch.stack(tuple((elem[2] for elem in single_class))) if len(single_class) else []
 
         # check all elements for singles
         # NOTE: using single-cluster slots as predicted, not as 
         if self.config['cluster_with_singles'] and len(single_class):  # To a similar slot with single class
             for current_slot in multiple_classes:
-                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
+                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
-                # vectorized comparison of current slot clusters to single-cluster slots
-                dists = torch.cdist(m_cluster_centers, single_centers)
-                if dists.min() < self.config['diff_cluster_threshold'] * 0.5:
-                    flat_idx = dists.argmin()
-                    label_id = flat_idx // dists.shape[1]
-                    single_slot_list_id = flat_idx - label_id * dists.shape[1]
+                # comparison of current slot clusters to single-cluster slots
+                bb_comparion = torch.empty((k, len(single_class)), device=m_bboxes[0].device)
+                for label_id, m_box in enumerate(m_bboxes):
+                    for single_idx in range(len(single_class)):
+                        bbox_iou = self._bbox_iou(m_box, single_bboxes[single_idx])  # with single mox
+                        bb_comparion[label_id, single_idx] = bbox_iou
+
+                if self.debug_prints:
+                    print(f'IOU: {bb_comparion}')
+
+                if bb_comparion.max() > 0.8:  # TODO parameter??
+                    flat_idx = bb_comparion.argmax()
+                    label_id = flat_idx // bb_comparion.shape[1]
+                    single_slot_list_id = flat_idx - label_id * bb_comparion.shape[1]
                     new_slot = single_slots[single_slot_list_id]
-        
+
                     # Update
                     try:
                         permutation = self._swap_slots(
@@ -1152,7 +1216,7 @@ class ComposedPatternLoss():
 
                     if self.debug_prints:
                         print(
-                            f'Using single {current_slot}->{new_slot} with dist {dists[label_id][single_slot_list_id]:.4f}'
+                            f'Using single {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
                             f' by cc {m_cluster_centers[label_id]} with '
                             f'original cc {single_centers[single_slot_list_id]}')
                     
@@ -1163,7 +1227,7 @@ class ComposedPatternLoss():
         # check if others could be assigned to the same class as earlier
         for current_slot in multiple_classes:
             if current_slot not in assigned:
-                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
+                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
                 if (self.training and current_slot in self.cluster_resolution_mapping):
                     potential_slot, used_cluster_center = self.cluster_resolution_mapping[current_slot]
 
@@ -1198,7 +1262,7 @@ class ComposedPatternLoss():
         # All the others are put to the new slots
         for current_slot in multiple_classes:
             if current_slot not in assigned and len(empty_att_slots):  # have options
-                k, curr_quality, labels, m_cluster_centers = multiple_classes[current_slot]
+                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
 
                 new_slot = empty_att_slots.pop(0)  # use first available empty slot
                 assigned.add(current_slot)
@@ -1245,52 +1309,34 @@ class ComposedPatternLoss():
         return permutation
 
     @staticmethod
-    def _feature_permute(pattern_features, permutation):
-        """
-            Permute all given features (in the batch) according to given panel order permutation
-        """
-        with torch.no_grad():
-            extended_permutation = permutation
-            # match indexing with feature size
-            if len(permutation.shape) < len(pattern_features.shape):
-                for _ in range(len(pattern_features.shape) - len(permutation.shape)):
-                    extended_permutation = extended_permutation.unsqueeze(-1)
-                # expand just creates a new view without extra copies
-                extended_permutation = extended_permutation.expand(pattern_features.shape)
-
-            # collect features with correct permutation in pattern dimention
-            indexed_features = torch.gather(pattern_features, dim=1, index=extended_permutation)
-        
-        return indexed_features
+    def _bbox(features):
+        """Evalyate bbox for given features"""
+        return torch.stack((features.min(dim=0)[0], features.max(dim=0)[0]))
 
     @staticmethod
-    def _stitch_after_permute(stitches, stitches_num, permutation, max_panel_len):
+    def _bbox_iou(bbox_1, bbox_2, tol=0.001):
+        """ 
+            Compute IOU for 2 n-dimentional BBoxes (assuming they are aligned with coordinate frame)
+            bbox[0] -- min, bbox[1] -- max
         """
-            Update edges ids in stitch info after panel order permutation
-        """
-        with torch.no_grad():  # GT updates don't require gradient compute
-            # add pattern dimention
-            for pattern_id in range(len(stitches)):
-                
-                # inverse permutation for this pattern for faster access
-                new_panel_ids_list = [-1] * permutation.shape[1]
-                for i in range(permutation.shape[1]):
-                    new_panel_ids_list[permutation[pattern_id][i]] = i
+        min_max_tols = torch.tensor([-tol, tol], device=bbox_1.device).unsqueeze(1).expand(-1, bbox_1.shape[-1])
 
-                # re-assign GT edge ids according to shift
-                for side in (0, 1):
-                    for i in range(stitches_num[pattern_id]):
-                        edge_id = stitches[pattern_id][side][i]
-                        panel_id = edge_id // max_panel_len
-                        in_panel_edge_id = edge_id - (panel_id * max_panel_len)
+        bbox_intersect = [torch.max(bbox_1[0], bbox_2[0]) - tol, torch.min(bbox_1[0], bbox_2[0]) + tol]
+        intersect_volume = ComposedPatternLoss._bbox_volume(bbox_intersect)
 
-                        # where is this panel placed
-                        new_panel_id = new_panel_ids_list[panel_id]
+        union_volume = (ComposedPatternLoss._bbox_volume(bbox_1 + min_max_tols)
+                        + ComposedPatternLoss._bbox_volume(bbox_2 + min_max_tols)
+                        - intersect_volume)
+        
+        return intersect_volume / union_volume
 
-                        # update with pattern-level edge id
-                        stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
-                
-        return stitches
+    @staticmethod
+    def _bbox_volume(bboxs):
+        diffs = bboxs[1] - bboxs[0]
+        if (diffs < 0).any():  # inverted bbox
+            return 0.
+
+        return diffs.prod()
 
     # ------ Ground truth panel edge loop origin shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):
