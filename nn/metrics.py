@@ -1238,6 +1238,8 @@ class ComposedPatternLoss():
                     # comparison of current slot clusters to single-cluster slots
                     bb_comparion = torch.zeros((k, len(memory_slots)), device=m_bboxes[0].device)
                     for label_id, m_box in enumerate(m_bboxes):
+                        if m_box is None:  # skip
+                            continue
                         for slot_idx in range(len(memory_slots)):
                             bbox_iou = self._bbox_iou(m_box, memory_bboxes[slot_idx])  # with single mox
                             bb_comparion[label_id, slot_idx] = bbox_iou
