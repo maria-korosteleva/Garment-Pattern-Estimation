@@ -25,7 +25,7 @@ class Trainer():
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=350,
             batch_size=90,
-            learning_rate=0.0006,
+            learning_rate=0.002,
             optimizer='Adam',
             weight_decay=0,
             lr_scheduling={ 'mode': '1cyclic' },
