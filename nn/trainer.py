@@ -16,7 +16,7 @@ class Trainer():
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
         self.datawraper = None
-        self.standardize_data = True
+        self.standardize_data = with_norm
         self.log_with_visualization = with_visualization
         
         # default training setup
