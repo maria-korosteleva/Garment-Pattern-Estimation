@@ -14,7 +14,7 @@ import torch
 from kmeans_pytorch import kmeans  # https://github.com/subhadarship/kmeans_pytorch
 
 
-def gaps(data, nrefs=20, max_k=10, sencitivity_threshold=0.0, logs=False):
+def gaps(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, logs=False):
     """
         Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
         Gap statistic
@@ -22,7 +22,7 @@ def gaps(data, nrefs=20, max_k=10, sencitivity_threshold=0.0, logs=False):
         * State the number *nrefs* of reference distributions for automatic generation with a
         uniformed distribution within the bounding box of data.
         * Give the list of k-values for which you want to compute the statistic in ks.
-        * 'sencitivity_threshold' reduce sencitivity for improvement of adding more classes 
+        * 'extra_sencitivity_threshold' reduce sencitivity for improvement of adding more classes 
             (creates additional bias towards smaller number of classes)
 
         Returns: 
@@ -81,14 +81,11 @@ def gaps(data, nrefs=20, max_k=10, sencitivity_threshold=0.0, logs=False):
 
         # Step 3 -- standard errors
         std_errors[k] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
-        std_errors[k] += sencitivity_threshold  # with some adjustment
+        std_errors[k] += extra_sencitivity_threshold  # with some adjustment
 
         # Check optimality criteria 
         if k > 1 and gaps[k - 1] >= gaps[k] - std_errors[k]:
             # optimal class found!
-            if logs:
-                print(f'Gaps::final gaps: {gaps}')
-                print(f'Gaps::final errors: {std_errors}')
             return k - 1, max(-1 * (gaps[1] - (gaps[k - 1] - std_errors[k - 1])), 0.), labels_per_k[-2], ccs_per_k[-2]
 
     if logs:
@@ -139,9 +136,6 @@ def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
         # average distance to cluster centers
         disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])]) / shape[0]
         disp_list.append(disp)
-
-        if logs:
-            print(f'{k} -- displacement {disp:.4f}')
 
         if disp <= sencitivity_threshold:
             # optimal class found! Clustering is compact enough
