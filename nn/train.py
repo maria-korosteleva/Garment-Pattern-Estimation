@@ -185,6 +185,7 @@ if __name__ == "__main__":
     split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
+    data_config.update(panel_classification='./nn/panel_classes.json')  # DEBUG Just for now!
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
