@@ -72,13 +72,11 @@ class NNSewingPattern(VisPattern):
         for panel_name in panel_order:
             if panel_name is not None:
                 edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
-                panel_seqs.append(edges)
-                panel_translations.append(transl)
-                panel_rotations.append(rot)
             else:  # empty panel
-                panel_seqs.append(np.zeros_like(panel_seqs[0]))
-                panel_translations.append(np.zeros_like(panel_translations[0]))
-                panel_rotations.append(np.zeros_like(panel_rotations[0]))
+                edges, rot, transl = self._empty_panel(max_len)
+            panel_seqs.append(edges)
+            panel_translations.append(transl)
+            panel_rotations.append(rot)
 
         # Stitches info. Order of stitches doesn't matter
         stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
@@ -319,6 +317,11 @@ class NNSewingPattern(VisPattern):
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
 
+    def _empty_panel(self, max_edge_num):
+        """ Shape, rotation, and translation for empty panels"""
+        # edge is 4-elem vector, 4 rotation element for quaternion, 3 element for world translation
+        return np.zeros((max_edge_num, 4)), np.zeros(4), np.zeros(3)
+
     # ordering of panels according to classification
     def panel_order(self, force_update=False, pad_to_len=None):
         """
@@ -364,11 +367,13 @@ class PanelClasses():
     """ Interface to access panel classification by role """
     def __init__(self, classes_file):
 
+        self.filename = classes_file
+
         with open(classes_file, 'r') as f:
             # preserve the order of classes names
             self.classes = json.load(f, object_pairs_hook=OrderedDict)
 
-        self.class_names = list(self.classes.keys())
+        self.names = list(self.classes.keys())
         
         self.panel_to_idx = {}
         for idx, class_name in enumerate(self.classes):
@@ -387,7 +392,7 @@ class PanelClasses():
         return self.panel_to_idx[(template, panel)]
 
     def class_name(self, idx):
-        return self.class_names[idx]
+        return self.names[idx]
 
 
 # ---------- test -------------

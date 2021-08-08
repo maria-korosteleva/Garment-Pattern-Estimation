@@ -15,7 +15,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
+from pattern_converter import NNSewingPattern, InvalidPatternDefError, PanelClasses
 
 
 # ---------------------- Main Wrapper ------------------
@@ -769,6 +769,10 @@ class GarmentBaseDataset(BaseDataset):
         if 'obj_filetag' not in start_config:
             start_config['obj_filetag'] = 'sim'  # look for objects with this tag in filename when loading 3D models
 
+        if 'panel_classification' not in start_config:
+            start_config['panel_classification'] = None
+        self.panel_classifier = None
+
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         # To make sure the datafolder names are unique after updates
@@ -779,7 +783,13 @@ class GarmentBaseDataset(BaseDataset):
             ))
             self.data_folders_nicknames = dict(zip(self.data_folders, self.data_folders))
 
+        # Load panel classifier
+        if self.config['panel_classification'] is not None:
+            self.panel_classifier = PanelClasses(self.config['panel_classification'])
+            self.config.update(max_pattern_len=len(self.panel_classifier))
+
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
+        # NOTE: max_pattern_len is influcened by presence or abcense of self.panel_classifier
         if not pattern_size_initialized:
             num_panels = []
             num_edges_in_panel = []
@@ -812,6 +822,11 @@ class GarmentBaseDataset(BaseDataset):
             shutil.copy(
                 self.root_path / dataset_folder / 'dataset_properties.json', 
                 experiment.local_path() / (dataset_folder + '_properties.json'))
+        
+        if self.panel_classifier is not None:
+            shutil.copy(
+                self.panel_classifier.filename, 
+                experiment.local_path() / ('panel_classes.json'))
     
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
@@ -870,7 +885,10 @@ class GarmentBaseDataset(BaseDataset):
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
-        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
+        pattern = NNSewingPattern(
+            self.root_path / datapoint_name / spec_list[0], 
+            panel_classifier=self.panel_classifier, 
+            template_name=self.data_folders_nicknames[datapoint_name.split('/')[0]])
         return pattern.pattern_as_tensors(
             pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
@@ -884,7 +902,7 @@ class GarmentBaseDataset(BaseDataset):
         if std_config and 'standardize' in std_config:
             tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
 
-        pattern = NNSewingPattern(view_ids=False)
+        pattern = NNSewingPattern(view_ids=False, panel_classifier=self.panel_classifier)
         pattern.name = dataname
         try: 
             pattern.pattern_from_tensors(

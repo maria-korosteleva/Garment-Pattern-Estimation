@@ -71,7 +71,7 @@ def get_values_from_args():
         'local_attention': True,
 
         # training control
-        'freeze_on_clustering': True,  # DEBUG default is flase
+        'freeze_on_clustering': False,  # default is flase
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
@@ -99,10 +99,10 @@ def get_values_from_args():
 
         'epoch_with_order_matching': 0,
         'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': True,
+        'panel_order_inariant_loss': False,  # False to use original order
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
-        'cluster_by': 'translation',  # 'panel_encodings', 'order_feature', 'translation'
+        'cluster_by': None,  # 'panel_encodings', 'order_feature', 'translation', None
         'epoch_with_cluster_checks': 0,  # 100,
         'gap_cluster_threshold': 0.0,
         'diff_cluster_threshold': 0.1,  # testing New!!
@@ -142,9 +142,10 @@ def get_data_config(in_config, old_stats=False):
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
             'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
-            'max_pattern_len': 15,  # DEBUG 30 > then the total number of panel classes  
+            'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
             'max_panel_len': 14,  # (jumpsuit front)
-            'max_num_stitches': 24  # jumpsuit (with sleeves)
+            'max_num_stitches': 24,  # jumpsuit (with sleeves)
+            'panel_classification': './nn/panel_classes.json'
         }  
 
     # update with freshly configured values
@@ -159,17 +160,17 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        # 'dress_sleeveless_2550',
-        # 'jumpsuit_sleeveless_2000',
-        # 'skirt_8_panels_1000',
+        'dress_sleeveless_2550',
+        'jumpsuit_sleeveless_2000',
+        'skirt_8_panels_1000',
         'wb_pants_straight_1500',
         'skirt_2_panels_1200',
-        # 'jacket_2200',
-        # 'tee_sleeveless_1800',
+        'jacket_2200',
+        'tee_sleeveless_1800',
         'wb_dress_sleeveless_2600',
-        # 'jacket_hood_2700',
+        'jacket_hood_2700',
         'pants_straight_sides_1000',
-        # 'tee_2300',
+        'tee_2300',
         'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
@@ -178,11 +179,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction',  
-        run_name='WB-cluster-bboxes-memory-0-lr', 
+        run_name='All-predefined-order', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
