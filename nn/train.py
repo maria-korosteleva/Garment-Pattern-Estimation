@@ -124,9 +124,8 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='WB-cluster-bboxes-memory-100', run_id='1cjhlaa1'  # all data 800
-            # run_name='multi-all-split-data-stats', run_id='2m2w6uns'
+            project_name='Test-Garments-Reconstruction', 
+            run_name='Tee-JS-predefined-order', run_id='1y4ygdl4'  # all data 800
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -179,7 +178,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction',  
-        run_name='All-predefined-order', 
+        run_name='All-predefined-order-rnn', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -196,13 +195,13 @@ if __name__ == "__main__":
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model)  # , device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time

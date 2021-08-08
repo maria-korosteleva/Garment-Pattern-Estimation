@@ -252,8 +252,8 @@ class GarmentFullPattern3D(BaseModule):
 
         # ---- losses configuration ----
         self.config['loss'] = {
-            'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],
-            'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
+            'loss_components': ['shape', 'loop', 'rotation', 'translation'],  # , 'stitch', 'free_class'],
+            'quality_components': ['shape', 'discrete', 'rotation', 'translation'],  #, 'stitch', 'free_class'],
             'panel_origin_invariant_loss': True,
             'loop_loss_weight': 1.,
             'stitch_tags_margin': 0.3,
