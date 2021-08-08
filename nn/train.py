@@ -125,7 +125,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='All-PanelVAE-5-one-liner', run_id='396gv9xp'  # all data 800
+            run_name='All-cluster-strategy-furthest-fix', run_id='3fwyhuny'  # all data 800
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
