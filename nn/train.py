@@ -177,7 +177,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction',  
+        project_name='Test-Garments-Reconstruction',  
         run_name='All-predefined-order-rnn', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model)  # , device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time

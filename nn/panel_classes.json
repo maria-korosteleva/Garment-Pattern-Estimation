@@ -34,8 +34,8 @@
         ["dress_sleeveless", "top_back"],
         ["jumpsuit", "up_back"],
         ["jumpsuit_sleeveless", "up_back"], 
-        ["wb_dress_sleeveless", "top_front"],
-        ["wb_jumpsuit_sleeveless", "top_front"]
+        ["wb_dress_sleeveless", "top_back"],
+        ["wb_jumpsuit_sleeveless", "top_back"]
     ], 
 
     "sleeve_lf": [
