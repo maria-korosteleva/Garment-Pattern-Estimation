@@ -915,7 +915,7 @@ class ComposedPatternLoss():
                 pred_feature = torch.cat([preds['translations'], preds['rotations']], dim=-1)
                 gt_feature = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
-                if epoch >= self.config['epoch_with_stitches']: 
+                if self.epoch >= self.config['epoch_with_stitches']: 
                     # add free mask as feature
                     # flatten per-edge info into single vector
                     # push preficted mask score to 0-to-1 range
@@ -940,7 +940,7 @@ class ComposedPatternLoss():
             gt_permutation = self._panel_order_match(pred_feature, gt_feature)
 
             collision_swaps_stats = {}
-            if self.epoch >= self.config['epoch_with_cluster_checks']:
+            if self.epoch >= self.config['epoch_with_cluster_checks'] and self.config['cluster_by'] is not None:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
