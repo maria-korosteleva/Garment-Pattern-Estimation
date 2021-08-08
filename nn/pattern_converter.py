@@ -330,11 +330,14 @@ class NNSewingPattern(VisPattern):
             Reloading 'panel_order' instead of 'define_panel_order' to preserve order from file 
                 if self.panel_classifier is not defined and 'force_update' is false
         """
-        # TODO post-routines should allow to insert empty panels in-between and overall handle None panels
         if self.panel_classifier is None or self.template_name is None:
+            # preserves the order is given in pattern spec!
             order = super().panel_order(force_update=force_update)
             
-        else:  # NOTE: re-evaluate even if `force_update` flag is false
+        else:  
+            # NOTE: re-evaluate even if `force_update` flag is false
+            # as we need update even if the pattern spec already contains some order
+
             # construct the order according to class indices
             # -None- represents empty panels-placeholders
             order = [None] * len(self.panel_classifier)
@@ -351,7 +354,6 @@ class NNSewingPattern(VisPattern):
             order += [None] * (pad_to_len - len(order))
 
         # Remember the order for future reference
-        # TODO maybe not needed
         self.pattern['panel_order'] = order
 
         return order
