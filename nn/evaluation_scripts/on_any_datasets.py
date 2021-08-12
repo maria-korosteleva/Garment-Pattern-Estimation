@@ -23,21 +23,21 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-balanced-batches', 
-    run_id='1oi8ks7y')  # finished experiment
+    run_name='All-predefined-order-att-max', 
+    run_id='s8fj6bqz')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
 dataset_list = [
-    # 'jacket_hood_sleeveless_150',
-    # 'skirt_waistband_150', 
-    # 'tee_hood_150',
-    # 'jacket_sleeveless_150',
-    # 'dress_150',
+    'jacket_hood_sleeveless_150',
+    'skirt_waistband_150', 
+    'tee_hood_150',
+    'jacket_sleeveless_150',
+    'dress_150',
     'jumpsuit_150',
-    # 'wb_jumpsuit_sleeveless_150'
+    'wb_jumpsuit_sleeveless_150'
 ]
 
 # data_config also contains the names of datasets to use
@@ -64,23 +64,23 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
-loss = metrics.eval_metrics(model, datawrapper, 'full')
-print('Full metrics on unseen set: {}'.format(loss))
-breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
-print('Metrics per dataset: {}'.format(breakdown))
+# loss = metrics.eval_metrics(model, datawrapper, 'full')
+# print('Full metrics on unseen set: {}'.format(loss))
+# breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
+# print('Metrics per dataset: {}'.format(breakdown))
 
 # # ---------- Log to the experiment -----------
 
-experiment.add_statistic('unseen_full', loss)
-experiment.add_statistic('unseen', breakdown)
-experiment.add_statistic('unseen_folders', dataset_list)
+# experiment.add_statistic('unseen_full', loss)
+# experiment.add_statistic('unseen', breakdown)
+# experiment.add_statistic('unseen_folders', dataset_list)
 
 # -------- Predict ---------
 # save predictions to file
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
 print('Saved to {}'.format(prediction_path))
 # # reflect predictions info in expetiment
-experiment.add_statistic('unseen_pred_folder', prediction_path.name)
+# experiment.add_statistic('unseen_pred_folder', prediction_path.name)
 
-art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
-experiment.add_artifact(prediction_path, art_name, 'result')
+# art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
+# experiment.add_artifact(prediction_path, art_name, 'result')
