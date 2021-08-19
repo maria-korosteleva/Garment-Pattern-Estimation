@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='All-predefined-order-att-max', 
-    run_id='s8fj6bqz')  # finished experiment
+    run_name='Tee-JS-stitches-edge-order-fix', 
+    run_id='147004g5')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -50,8 +50,12 @@ data_config.update(max_datapoints_per_type=150)
 
 batch_size = 5
 
-dataset = data.Garment3DPatternFullDataset(
-    system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+if 'class' in data_config:
+    data_class = getattr(data, data_config['class'])
+    dataset = data_class(system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
+else:
+    dataset = data.GarmentStitchPairsDataset(
+        system_info['datasets_path'] + '/test', data_config, gt_caching=True, feature_caching=True)
 
 datawrapper = data.DatasetWrapper(dataset, batch_size=batch_size)  # NOTE no split given -- evaluating on the full loaded dataset!!
 

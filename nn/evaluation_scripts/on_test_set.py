@@ -59,8 +59,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-cluster-dec-freezing', 
-    run_id='2p0fhfgd')  # finished experiment
+    run_name='Tee-JS-stitches-all', 
+    run_id='2hfx5dkv')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -71,8 +71,12 @@ split, batch_size, data_config = experiment.data_info()  # note that run is not 
 
 data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
 
-dataset = data.Garment3DPatternFullDataset(
-    system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+if 'class' in data_config:
+    data_class = getattr(data, data_config['class'])
+    dataset = data_class(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+else:
+    dataset = data.GarmentStitchPairsDataset(
+        system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))

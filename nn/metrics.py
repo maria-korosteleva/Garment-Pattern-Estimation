@@ -571,6 +571,123 @@ class UniversalL2():
 
 # ---------- Composition loss class -------------
 
+class ComposedLoss():
+    """Base interface for compound loss objects"""
+
+    def __init__(self, data_config, in_config={}):
+        """
+            Initialize loss components
+            Accepts (in in_config):
+            * Requested list of components
+            * Additional configurations for losses (e.g. edge-origin agnostic evaluation)
+            * data_stats -- for correct definition of losses
+        """
+        self.config = {  # defults
+            'loss_components': [], 
+            'quality_components': [],
+        }
+        self.config.update(in_config)  # override with requested settings
+
+        self.with_quality_eval = True  # quality evaluation switch -- may allow to speed up the loss evaluation if False
+        self.training = False  # training\evaluation state
+
+        # Convenience properties
+        self.l_components = self.config['loss_components']
+        self.q_components = self.config['quality_components'] 
+
+        if 'edge_pair_class' in self.l_components:
+            self.bce_logits_loss = nn.BCEWithLogitsLoss()  # binary classification loss
+        
+
+    def __call__(self, preds, ground_truth, names=None, epoch=1000):
+        """Evalute loss when predicting patterns.
+            * Predictions are expected to follow the default GT structure, 
+                but don't have to have all components -- as long as provided prediction is sufficient for
+                evaluation of requested losses
+            * default epoch is some large value to trigger stitch evaluation
+            * Function returns True in third parameter at the moment of the loss stucture update
+        """
+        self.device = preds.device
+        loss_dict = {}
+        full_loss = 0.
+
+        # match devices with prediction
+        ground_truth = ground_truth.to(self.device)
+
+        # ---- Losses ------
+        main_losses, main_dict = self._main_losses(preds, ground_truth, None, epoch)
+        full_loss += main_losses
+        loss_dict.update(main_dict)
+
+        # ---- Quality metrics  ----
+        if self.with_quality_eval:
+            with torch.no_grad():
+                quality_breakdown = self._main_quality_metrics(preds, ground_truth, None, names)
+                loss_dict.update(quality_breakdown)
+
+        # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
+        return full_loss, loss_dict, False
+
+
+    def eval(self):
+        """ Loss to evaluation mode """
+        self.training = False
+
+    def train(self, mode=True):
+        self.training = mode
+
+    def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
+        """
+            Main loss components. Evaluated in the same way regardless of the training stage
+        """
+        full_loss = 0.
+        loss_dict = {}
+
+        if 'edge_pair_class' in self.l_components:
+            # flatten for correct computation
+            pair_loss = self.bce_logits_loss(
+                preds.view(-1), ground_truth.view(-1).type(torch.FloatTensor).to(self.device))
+            loss_dict.update(edge_pair_class_loss=pair_loss)
+            full_loss += pair_loss
+
+        return full_loss, loss_dict
+
+    def _main_quality_metrics(self, preds, ground_truth, gt_num_edges, names):
+        """
+            Evaluate quality components -- these are evaluated in the same way regardless of the training stage
+        """
+        loss_dict = {}
+    
+        if 'edge_pair_class' in self.q_components or 'edge_pair_stitch_recall' in self.q_components:
+            edge_pair_class = torch.round(torch.sigmoid(preds))
+            gt_mask = ground_truth.to(preds.device)
+
+        if 'edge_pair_class' in self.q_components:
+            acc = (edge_pair_class == gt_mask).sum().float() / gt_mask.numel()
+            loss_dict.update(edge_pair_class_acc=acc)
+        
+        if 'edge_pair_stitch_recall' in self.q_components:
+            prec, rec = self._prec_recall(edge_pair_class, gt_mask, target_label=1)
+            loss_dict.update(stitch_precision=prec, stitch_recall=rec)
+
+        return loss_dict
+
+    def _prec_recall(self, preds, ground_truth, target_label):
+        """ Evaluate precision/recall for given label in predictions """
+
+        # correctly labeled as target label
+        target_label_ids = (ground_truth == target_label).nonzero(as_tuple=True)
+        correct_count = torch.count_nonzero(preds[target_label_ids] == target_label).float()
+
+        # total number of labeled as target label
+        pred_as_target_count = torch.count_nonzero(preds == target_label).float()
+
+        precision = correct_count / pred_as_target_count
+        recall = correct_count / len(target_label_ids[0])  
+
+        return precision, recall
+
+
 class ComposedPatternLoss():
     """
         Main (callable) class to define a loss on pattern prediction as composition of components
@@ -649,7 +766,7 @@ class ComposedPatternLoss():
             self.stitch_loss_supervised = nn.MSELoss()
 
         if 'free_class' in self.l_components:
-            self.free_edge_class_loss = nn.BCEWithLogitsLoss()  # binary classification loss
+            self.bce_logits_loss = nn.BCEWithLogitsLoss()  # binary classification loss
         
         if 'att_distribution' in self.l_components:
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
@@ -813,7 +930,7 @@ class ComposedPatternLoss():
 
         if 'free_class' in self.l_components:
             # free\stitches edges classification
-            free_edges_loss = self.free_edge_class_loss(
+            free_edges_loss = self.bce_logits_loss(
                 preds['free_edges_mask'], ground_truth['free_edges_mask'].type(torch.FloatTensor).to(self.device))
             loss_dict.update(free_edges_loss=free_edges_loss)
             full_loss += free_edges_loss

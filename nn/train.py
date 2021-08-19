@@ -55,11 +55,19 @@ def get_values_from_args():
     print(args)
 
     data_config = {
-        'mesh_samples': args.mesh_samples_multiplier * 500,
-        'obj_filetag': args.obj_nametag
+        # 'mesh_samples': args.mesh_samples_multiplier * 500,
+        # 'obj_filetag': args.obj_nametag,
+        'stitched_edge_pairs_num': 200,
+        'non_stitched_edge_pairs_num': 200,
+        'shuffle_pairs': True, 
+        'shuffle_pairs_order': True
     }
 
     nn_config = {
+        # indep stitch config
+        'stitch_hidden_size': 200, 
+        'stitch_mlp_n_layers': 3,
+
         # pattern decoders
         'panel_encoding_size': args.panel_encoding_multiplier * 10,
         'panel_n_layers': args.panel_n_layers,
@@ -177,8 +185,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction',  
-        run_name='All-predefined-order-att-max-5000', 
+        project_name='Garments-Reconstruction', 
+        run_name='Tee-JS-stitches-samples-num', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -188,18 +196,15 @@ if __name__ == "__main__":
     data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(system_info['datasets_path'], 
-                                               data_config, gt_caching=True, feature_caching=True)
+    dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
-    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=False)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentPatternAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3DDisentangle(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentAttentivePattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
     model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
@@ -237,20 +242,3 @@ if __name__ == "__main__":
     final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test', final_metrics)
-
-    # save TSNE plot
-    garment_enc, garment_classes, panel_enc, panel_classes = tsne_plot.get_encodings(model, datawrapper.get_loader('test'), dataset)
-
-    tsne_plot.tsne_plot(garment_enc, garment_classes, 2, experiment.local_path(), 'garments', dpi=150)
-    tsne_plot.tsne_plot(panel_enc, panel_classes, 2, experiment.local_path(), 'panels', dpi=150)
-    tsne_plot.tsne_plot(garment_enc, garment_classes, 3, experiment.local_path(), 'garments', dpi=150)
-    tsne_plot.tsne_plot(panel_enc, panel_classes, 3, experiment.local_path(), 'panels', dpi=150)
-
-    # save predictions
-    prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-    print('Predictions saved to {}'.format(prediction_path))
-    # reflect predictions info in expetiment
-    experiment.add_statistic('predictions_folder', prediction_path.name)
-    art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
-
-    experiment.add_artifact(prediction_path, art_name, 'result')

@@ -3,8 +3,11 @@ from collections import OrderedDict
 from datetime import datetime
 import json
 import numpy as np
+from numpy.lib.function_base import append
+from numpy.random import default_rng
 from pathlib import Path
 import sys
+import torch
 
 if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
@@ -12,6 +15,7 @@ if sys.version_info[0] >= 3:
 # My modules
 from pattern.core import panel_spec_template
 from pattern.wrappers import VisPattern
+from pattern import rotation as rotation_tools
 
 
 # ------- Custom Errors --------
@@ -310,6 +314,165 @@ class NNSewingPattern(VisPattern):
 
         return np.array(stitch_tags)
 
+    def stitches_as_3D_pairs(self, stitch_pairs_num=None, non_stitch_pairs_num=None, randomize_edges=False, randomize_list_order=False):
+        """
+            Return a collection of edge pairs with each pair marked as stitched or not, with 
+            edges represented as 3D vertex positions and (relative) curvature values.
+            All stitched pairs that exist in the pattern are guaranteed to be included. 
+            It's not guaranteed that the pairs would be unique (hence any number of pairs could be requested,
+            regardless of the total number of unique pairs)
+
+            * stitch_pairs -- number of edge pairs that are part of a stitch to return. Should be larger then the number of stitches.
+            * non_stitch_pairs -- total number of non-connected edge pairs to return.
+            * randomize_edges -- to randomize direction of edges and the order within each pair.
+            * randomize_list_order -- to randomize the list of 
+        """
+
+        if stitch_pairs_num is not None and stitch_pairs_num < len(self.pattern['stitches']):
+            raise ValueError(
+                '{}::{}::Error::Requested less edge pairs ({}) that there are stitches ({})'.format(
+                    self.__class__.__name__, self.name, stitch_pairs_num, len(self.pattern['stitches'])))
+
+        rng = default_rng()  # new Numpy random number generator API
+
+        # collect edges representations per panels
+        edges_3d = self._3D_edges_per_panel(randomize_edges)
+
+        # construct edge pairs (stitched & some random selection of non-stitched)
+        pairs = []
+        mask = []
+
+        # ---- Stitched ----
+        stitched_pairs_ids = set()
+        # stitches
+        for stitch in self.pattern['stitches']:
+            pair = []
+            for side in [0, 1]:
+                pair.append(edges_3d[stitch[side]['panel']][stitch[side]['edge']])
+
+            if randomize_edges and rng.integers(2):  # randomly change the order in pair
+                # flip the edge
+                pair[0], pair[1] = pair[1], pair[0]
+
+            pairs.append(np.concatenate(pair))
+            mask.append(True)
+            stitched_pairs_ids.add((
+                (stitch[0]['panel'], stitch[0]['edge']),
+                (stitch[1]['panel'], stitch[1]['edge'])
+            ))
+        if stitch_pairs_num is not None and stitch_pairs_num > len(self.pattern['stitches']):
+            for _ in range(len(self.pattern['stitches']), stitch_pairs_num):
+                # choose of the existing pairs to duplicate
+                pairs.append(pairs[rng.integers(len(self.pattern['stitches']))])
+                mask.append(True)
+        
+        if non_stitch_pairs_num is not None:
+            panel_order = self.panel_order()
+            for _ in range(non_stitch_pairs_num):
+                while True:
+                    # random pairs
+                    pair_names, pair_edges = [], []
+                    for _ in [0, 1]:
+                        pair_names.append(panel_order[rng.integers(len(panel_order))])
+                        pair_edges.append(rng.integers(len(self.pattern['panels'][pair_names[-1]]['edges'])))
+
+                    if pair_names[0] == pair_names[1] and pair_edges[0] == pair_edges[1]:
+                        continue  # try again
+
+                    # check if pair is already used
+                    pair_id = ((pair_names[0], pair_edges[0]), (pair_names[1], pair_edges[1]))
+                    if pair_id in stitched_pairs_ids or (pair_id[1], pair_id[0]) in stitched_pairs_ids:
+                        continue  # try again -- accudentially came up with a stitch
+
+                    # success! Use it
+                    pairs.append(np.concatenate([edges_3d[pair_names[0]][pair_edges[0]], edges_3d[pair_names[1]][pair_edges[1]]]))
+                    mask.append(False)  # at this point, all pairs are non-stitched!
+
+                    break 
+            
+        if randomize_list_order:
+            permutation = rng.permutation(len(pairs))
+            return np.stack(pairs)[permutation], np.array(mask, dtype=bool)[permutation]
+        else:
+            return np.stack(pairs), np.array(mask, dtype=bool)
+
+    def stitches_from_pair_classifier(self, model, data_stats):
+        """ Update stitches in the pattern by predictions of edge pairs classification model"""
+
+        self.pattern['stitches'] = []
+
+        edges_3D = self._3D_edges_per_panel()
+        num_panels = len(self.panel_order())
+        model.eval()
+
+        # TODO vectorize model inference better?
+        for i in range(num_panels):
+            panel_i = self.panel_order()[i]
+            edges_i = np.array(edges_3D[panel_i])
+            for j in range(i + 1, num_panels):  # assuming panels are not connected to themselves
+                panel_j = self.panel_order()[j]
+                edges_j = np.array(edges_3D[panel_j])
+
+                rows, cols = np.indices((len(edges_i), len(edges_j)))
+                edge_pairs = np.concatenate([edges_i[rows], edges_j[cols]], axis=-1)
+                # edge_pairs = np.concatenate([edges_j[cols], edges_i[rows]], axis=-1)
+
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(panel_i, panel_j)
+                    print(edge_pairs)
+
+                # apply appropriate scaling
+                # TODO different naming of std?
+                edge_pairs = (edge_pairs - data_stats['f_shift']) / data_stats['f_scale']
+
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(edge_pairs)
+
+                edge_pairs = torch.from_numpy(edge_pairs).float()
+
+                preds = model(edge_pairs)
+                preds_probability = torch.sigmoid(preds)
+                preds_class = torch.round(preds_probability)
+
+                stitched_ids = preds_class.nonzero(as_tuple=False).cpu().tolist()
+
+                if ('skirt_waistband' in self.name and (
+                        'wb_back' in panel_i or 'wb_back' in panel_j
+                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
+                    print(preds_class, preds_probability, preds, stitched_ids)
+
+                if len(stitched_ids) > 0:  # some stitches found!
+                    # print(stitched_ids)
+                    for stitch_idx in range(len(stitched_ids)):
+                        self.pattern['stitches'].append(self._stitch_entry(
+                            panel_i, stitched_ids[stitch_idx][0], 
+                            panel_j, stitched_ids[stitch_idx][1], 
+                            score=preds[stitched_ids[stitch_idx][0], stitched_ids[stitch_idx][1]].cpu().tolist()
+                        ))
+
+        # Post-analysis: check if any of the edges parttake in multiple stitches & only leave the stronger ones
+        to_remove = set()
+        for base_stitch_id in range(len(self.pattern['stitches'])):
+            base_stitch = self.pattern['stitches'][base_stitch_id]
+            for side in [0, 1]:
+                base_edge = base_stitch[side]
+                for other_stitch_id in range(base_stitch_id + 1, len(self.pattern['stitches'])):
+                    curr_stitch = self.pattern['stitches'][other_stitch_id]
+                    if (base_edge['panel'] == curr_stitch[0]['panel'] and base_edge['edge'] == curr_stitch[0]['edge']
+                            or base_edge['panel'] == curr_stitch[1]['panel'] and base_edge['edge'] == curr_stitch[1]['edge']):
+                        # same edge, multiple stitches!
+                        # score is the same for both sides, so it doesn't matter which one to take
+                        to_remove.add(
+                            base_stitch_id if base_stitch[0]['score'] < curr_stitch[0]['score'] else other_stitch_id)
+
+        if len(to_remove):
+            self.pattern['stitches'] = [value for i, value in enumerate(self.pattern['stitches']) if i not in to_remove]
+
+
     def _edge_dict(self, vstart, vend, curvature):
         """Convert given info into the proper edge dictionary representation"""
         edge_dict = {'endpoints': [vstart, vend]}
@@ -317,6 +480,64 @@ class NNSewingPattern(VisPattern):
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
 
+    def _num_edges(self):
+        """ Total number of edges in a pattern"""
+        if not hasattr(self, 'num_edges'):
+            self.num_edges = sum([len(self.pattern['panels'][panel]['edges']) for panel in self.pattern['panels']])
+
+        return self.num_edges
+
+    def _3D_edges_per_panel(self, randomize_direction=False):
+        """ 
+            Return all edges in the pattern (grouped by panels)
+            represented as 3D vertex positions and (relative) curvature values.
+
+            * 'randomize_direction' -- request to randomly flip the direction of some edges
+        """
+        if randomize_direction:
+            rng = default_rng()  # new Numpy random number generator API
+
+        # collect edges representations per panels
+        edges_3d = {}
+        for panel_name in self.panel_order():
+            edges_3d[panel_name] = []
+            panel = self.pattern['panels'][panel_name]
+            vertices = np.array(panel['vertices'])
+
+            # To 3D
+            rot_matrix = rotation_tools.euler_xyz_to_R(panel['rotation'])
+            vertices_3d = np.stack([self._point_in_3D(vertices[i], rot_matrix, panel['translation']) for i in range(len(vertices))])
+
+            # edge feature
+            for edge_dict in panel['edges']:
+                edge_verts = vertices_3d[edge_dict['endpoints']]  # ravel does not copy elements
+                curvature = np.array(edge_dict['curvature']) if 'curvature' in edge_dict else [0, 0]
+
+                if randomize_direction and rng.integers(2):
+                    # flip the edge
+                    edge_verts[[0, 1], :] = edge_verts[[1, 0], :]
+
+                    curvature[0] = 1 - curvature[0] if curvature[0] else 0
+                    curvature[1] = -curvature[1] 
+
+                edges_3d[panel_name].append(np.concatenate([edge_verts.ravel(), curvature]))
+
+        return edges_3d
+
+    def _stitch_entry(self, panel_1, edge_1, panel_2, edge_2, score=None):
+        """ element of a stitch list with given parameters (all need to be json-serializible)"""
+        return [
+            {
+                'panel': panel_1, 
+                'edge': edge_1, 
+                'score': score
+            },
+            {
+                'panel': panel_2, 
+                'edge': edge_2, 
+                'score': score
+            },
+        ]
     def _empty_panel(self, max_edge_num):
         """ Shape, rotation, and translation for empty panels"""
         # edge is 4-elem vector, 4 rotation element for quaternion, 3 element for world translation
@@ -397,6 +618,8 @@ class PanelClasses():
 
 # ---------- test -------------
 if __name__ == "__main__":
+    from pathlib import Path
+    from datetime import datetime
     import customconfig
     from pattern.wrappers import VisPattern
 
@@ -404,6 +627,7 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
+
     pattern = NNSewingPattern(
         Path(system_config['templates_path']) / 'basic tee' / 'tee.json', 
         panel_classifier=PanelClasses('./nn/panel_classes.json'), 
@@ -413,6 +637,8 @@ if __name__ == "__main__":
     print(pattern.panel_order())
 
     # print(pattern.stitches_as_tags())
+    print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
+
 
     # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
 

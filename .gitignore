@@ -25,3 +25,7 @@ system.json
 # file for small script tries
 tmp*
 *tmp*.mb
+
+
+# tmp data
+Garment-Pattern-Data*
