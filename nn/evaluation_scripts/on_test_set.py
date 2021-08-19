@@ -15,105 +15,31 @@ sys.path.insert(0, parentdir)
 import customconfig
 import data
 import metrics
-import nets
-from trainer import Trainer
-from experiment import WandbRunWrappper
-
-def get_values_from_args():
-    # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
-    parser = argparse.ArgumentParser()
-    
-    # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
-
-    # basic
-    parser.add_argument('--cluster_by', '-cb', help='', type=str, default='translation')
-    parser.add_argument('--diff_cluster_threshold', '-d', help='', type=float, default=0.1)
-    parser.add_argument('--version', '-v', help='Checkpoint version to request', type=int, default=-1)
-
-    args = parser.parse_args()
-    print(args)
-
-    loss_config = {
-        # 'epoch_with_order_matching': 0,
-        # 'panel_origin_invariant_loss': False,
-        # 'panel_order_inariant_loss': True,
-        # 'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
-
-        'cluster_by': args.cluster_by,  # 'panel_encodings', 'order_feature', 'translation'
-        'epoch_with_cluster_checks': 100,
-        'gap_cluster_threshold': 0.0,
-        'diff_cluster_threshold': args.diff_cluster_threshold,  # testing New!!
-        'cluster_gap_nrefs': 5,
-        'cluster_with_singles': True,
-        'cluster_memory_by_epoch': False,
-
-        'loss_components': ['shape'],  # , 'loop', 'rotation', 'translation'],
-        'quality_components': ['shape'],  #, 'discrete', 'rotation', 'translation'],
-    }
-
-    return loss_config, args.version
+from experiment import load_experiment
 
 
-# --------------- from experimnet ---------
 system_info = customconfig.Properties('./system.json')
-experiment = WandbRunWrappper(
-    system_info['wandb_username'],
-    project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-stitches-all', 
-    run_id='2hfx5dkv')  # finished experiment
 
-if not experiment.is_finished():
-    print('Warning::Evaluating unfinished experiment')
+# --- Predict shape from shape experimnet ---
+shape_datawrapper, shape_model = load_experiment('All-predefined-order-att-max', 's8fj6bqz', in_batch_size=5)
 
-# -------- data -------
-# data_config also contains the names of datasets to use
-split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
+prediction_path = shape_datawrapper.predict(
+    shape_model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 
-data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
+# --- Predict stitches for given prediction ---
+stitch_datawrapper, stitch_model = load_experiment('Tee-JS-stitches-all', '2hfx5dkv')
 
-if 'class' in data_config:
-    data_class = getattr(data, data_config['class'])
-    dataset = data_class(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
-else:
-    dataset = data.GarmentStitchPairsDataset(
-        system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+# On validation
+# TODO add as options to load_experiment() routine
+dataset_class = getattr(data, stitch_datawrapper.config['class'])
+# TODO check if this trick will work
+predicted_dataset = dataset_class(
+    prediction_path / 'validation', stitch_datawrapper.dataset.config, gt_caching=True, feature_caching=True)
+datawrapper = data.DatasetWrapper(predicted_dataset, batch_size=5)  # NOTE no split given -- evaluating on the full loaded dataset!!
 
-print(dataset.config)
-print('Batch: {}, Split: {}'.format(batch_size, split))
 
-# batch_size = 5
-
-datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
-
-# From input
-args_loss_config, checkpoint_version = get_values_from_args()
-
-# DEBUG Loss config
-loss_config = experiment.NN_config()['loss']
-print(args_loss_config)
-loss_config.update(args_loss_config)
-
-# ----- Model architecture -----
-model_class = getattr(nets, experiment.NN_config()['model'])
-# model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
-# model = nets.GarmentAttentivePattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
-model = model_class(dataset.config, experiment.NN_config(), loss_config)
-
-if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
-    model = nn.DataParallel(model, device_ids=['cuda:0'])
-
-# state_dict = 
-if checkpoint_version >= 0: 
-    state_dict = experiment.load_checkpoint_file(version=checkpoint_version, device='cuda:0')['model_state_dict'] 
-else:
-    state_dict = experiment.load_best_model(device='cuda:0')['model_state_dict']
-
-model.load_state_dict(state_dict)
-
-model.module.loss.debug_prints = True
-
-# ------- Evaluate --------
-valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
+# ------- Evaluate stitch prediction --------
+valid_loss = metrics.eval_metrics(stitch_model, datawrapper, 'validation')
 print('Validation metrics: {}'.format(valid_loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))

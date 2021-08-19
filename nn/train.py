@@ -186,7 +186,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Tee-JS-stitches-samples-num', 
+        run_name='All-panel-pred', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -196,15 +196,17 @@ if __name__ == "__main__":
     data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+    dataset = data.Garment3DPatternFullDataset(
+        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=False)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
     model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])

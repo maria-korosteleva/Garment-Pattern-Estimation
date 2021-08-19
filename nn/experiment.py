@@ -6,7 +6,62 @@ import time
 import torch
 import wandb as wb
 
+# My
+import customconfig
+import data
+import nets
 
+
+# -------- Working with existing experiments ------
+# TODO use in all subroutines
+def load_experiment(name, run_id, project='Garments-Reconstruction', in_batch_size=None, in_device=None, checkpoint_idx=None):
+    """
+        Load information (dataset, wrapper, model) associated with a particular experiment
+
+        `in_batch_size` and `in_device` re-write corresponding information from experiment, if set
+    """
+
+    system_info = customconfig.Properties('./system.json')
+    experiment = WandbRunWrappper(
+        system_info['wandb_username'],
+        project_name=project, 
+        run_name=name, 
+        run_id=run_id)  # finished experiment
+
+    if not experiment.is_finished():
+        print('Warning::Evaluating unfinished experiment')
+
+    # -------- data -------
+    # data_config also contains the names of datasets to use
+    split, batch_size, data_config = experiment.data_info()  
+    if in_batch_size is not None:
+        batch_size = in_batch_size
+
+    data_class = getattr(data, data_config['class'] if 'class' in data_config else 'Garment3DPatternFullDataset')  # TODO check if it works!!
+    dataset = data_class(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+    datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
+
+    # ----- Model -------
+    nn_config = experiment.NN_config()
+    model_class = getattr(nets, nn_config)
+    model = model_class(dataset.config, nn_config, nn_config['loss'])
+ 
+    device = in_device if in_device is not None else nn_config['device_ids'][0]
+    model = torch.nn.DataParallel(model, device_ids=device)
+
+    # TODO propagate device decision to the data at evaluation time, if not using Data Parallel?
+    
+    if checkpoint_idx is not None: 
+        state_dict = experiment.load_checkpoint_file(version=checkpoint_idx, device=device)['model_state_dict'] 
+    else:
+        state_dict = experiment.load_best_model(device=device)['model_state_dict']
+    
+    model.load_state_dict(state_dict)
+
+    return datawrapper, model
+
+
+# ------- Class for experiment tracking with wandb -------
 class WandbRunWrappper(object):
     """Class provides 
         * a convenient way to store wandb run info 

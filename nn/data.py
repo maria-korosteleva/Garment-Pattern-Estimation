@@ -1087,6 +1087,19 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             for key in predictions:
                 prediction[key] = predictions[key][idx]
 
+            # add values from GT if not present in prediction
+            if (('order_matching' in self.config and self.config['order_matching'])
+                    or 'origin_matching' in self.config and self.config['origin_matching']
+                    or not self.gt_caching):
+                print(f'{self.__class__.__name__}::Warning::Propagating '
+                      'information from GT on prediction is not implemented in given context')
+            else:
+                gt = self.gt_cached[folder + '/' + name]
+                for key in gt:
+                    if key not in prediction:
+                        prediction[key] = gt[key]
+
+            # Transform to pattern object
             pattern = self._pred_to_pattern(prediction, name)
 
             # save prediction
