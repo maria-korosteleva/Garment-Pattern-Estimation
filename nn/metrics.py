@@ -2,14 +2,13 @@
     List of metrics to evalute on a model and a dataset, along with pre-processing methods needed for such evaluation
 """
 
-import numpy as np
 import torch
 import torch.nn as nn
 import time
 
 from operator import itemgetter
 
-from gap import gap_torch as gap_statistic
+import gap
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
@@ -18,7 +17,8 @@ from data import Garment3DPatternFullDataset as PatternDataset
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = model.device_ids[0] if hasattr(model, 'device_ids') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    
     model.to(device)
     model.eval()
 
@@ -709,14 +709,19 @@ class ComposedPatternLoss():
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
             'stitch_hardnet_version': False,
+
             'panel_origin_invariant_loss': True,
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0,
+
             'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
             'epoch_with_cluster_checks': 0,
             'gap_cluster_threshold': 0.,  # differentiating single\multi class cases 
+            'diff_cluster_threshold': 0.,  # differentiating single\multi class cases 
             'cluster_gap_nrefs': 20,   # reducing will speed up training
+            'cluster_with_singles': False, 
+
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
             'epoch_with_att_saturation': 0
@@ -725,6 +730,7 @@ class ComposedPatternLoss():
 
         self.with_quality_eval = True  # quality evaluation switch -- may allow to speed up the loss evaluation if False
         self.training = False  # training\evaluation state
+        self.debug_prints = False
 
         # Convenience properties
         self.l_components = self.config['loss_components']
@@ -739,11 +745,13 @@ class ComposedPatternLoss():
             'scale': data_stats['gt_scale']['outlines']
         }
 
+        # store moving-around-clusters info
+        self.cluster_resolution_mapping = {}
+
         #  ----- Defining loss objects --------
         # NOTE I have to make a lot of 'ifs' as all losses have different function signatures
         # So, I couldn't come up with more consize defitions
         
-
         if 'shape' in self.l_components or 'rotation' in self.l_components or 'translation' in self.l_components:
             self.regression_loss = nn.MSELoss()  
         
@@ -801,6 +809,7 @@ class ComposedPatternLoss():
             * Function returns True in third parameter at the moment of the loss stucture update
         """
         self.device = preds['outlines'].device
+        self.epoch = epoch
         loss_dict = {}
         full_loss = 0.
 
@@ -810,7 +819,7 @@ class ComposedPatternLoss():
 
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
-            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth, epoch) 
+            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth) 
             loss_dict.update(order_metrics)
         else:  # keep original
             gt_rotated = ground_truth
@@ -821,7 +830,7 @@ class ComposedPatternLoss():
             gt_rotated = self._rotate_gt(preds, gt_rotated, gt_num_edges, epoch)
 
         # ---- Losses ------
-        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges, epoch)
+        main_losses, main_dict = self._main_losses(preds, gt_rotated, gt_num_edges)
         full_loss += main_losses
         loss_dict.update(main_dict)
 
@@ -858,7 +867,7 @@ class ComposedPatternLoss():
         self.training = mode
 
     # ------- evaluation breakdown -------
-    def _main_losses(self, preds, ground_truth, gt_num_edges, epoch):
+    def _main_losses(self, preds, ground_truth, gt_num_edges):
         """
             Main loss components. Evaluated in the same way regardless of the training stage
         """
@@ -887,7 +896,7 @@ class ComposedPatternLoss():
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
 
-        if 'att_distribution' in self.l_components and epoch >= self.config['epoch_with_att_saturation']:
+        if 'att_distribution' in self.l_components and self.epoch >= self.config['epoch_with_att_saturation']:
             att_loss = self.att_distribution(preds['att_weights'])
             full_loss += att_loss
             loss_dict.update(att_distribution_loss=att_loss)
@@ -980,7 +989,7 @@ class ComposedPatternLoss():
         return loss_dict
 
     # ------ Ground truth panel order match -----
-    def _gt_order_match(self, preds, ground_truth, epoch):
+    def _gt_order_match(self, preds, ground_truth):
         """
             Find the permutation of panel in GT that is best matched with the prediction (by geometry)
             and return the GT object with all properties updated according to this permutation 
@@ -1023,7 +1032,7 @@ class ComposedPatternLoss():
                 pred_feature = torch.cat([preds['translations'], preds['rotations']], dim=-1)
                 gt_feature = torch.cat([ground_truth['translations'], ground_truth['rotations']], dim=-1)
 
-                if epoch >= self.config['epoch_with_stitches']: 
+                if self.epoch >= self.config['epoch_with_stitches']: 
                     # add free mask as feature
                     # flatten per-edge info into single vector
                     # push preficted mask score to 0-to-1 range
@@ -1045,15 +1054,17 @@ class ComposedPatternLoss():
                 ))
 
             # run the optimal permutation eval
-            gt_permutation = self._panel_order_match(pred_feature, gt_feature, epoch)
+            gt_permutation = self._panel_order_match(pred_feature, gt_feature)
 
             collision_swaps_stats = {}
-            if (self.training and epoch >= self.config['epoch_with_cluster_checks']):
+            if self.epoch >= self.config['epoch_with_cluster_checks'] and self.config['cluster_by'] is not None:
                 # remove panel types collision even it's not the best match with net output
                 # enourages good separation of panel "classes" during training, but not needed at evaluation time
 
                 if self.config['cluster_by'] == 'panel_encodings':
                     cluster_feature = preds['panel_encodings']
+                elif self.config['cluster_by'] == 'translation':
+                    cluster_feature = self._feature_permute(ground_truth['translations'], gt_permutation)  # !!
                 else:  # order_feature -- default by the same feature as ordering
                     cluster_feature = self._feature_permute(gt_feature, gt_permutation)  # !!
 
@@ -1067,13 +1078,6 @@ class ComposedPatternLoss():
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
 
             gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
-            empty_att_slots = []
-            for panel_id in range(gt_updated['empty_panels_mask'].shape[-1]):
-                if gt_updated['empty_panels_mask'][:, panel_id].all():  
-                    # all panels at this place are empty
-                    empty_att_slots.append(panel_id)
-            print('Empty panels after swaps: ', empty_att_slots)
-
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
@@ -1081,7 +1085,7 @@ class ComposedPatternLoss():
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
             # if 'min_empty_att' in self.l_components:
                 
-            if epoch >= self.config['epoch_with_stitches'] and (
+            if self.epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
                     or 'stitch_supervised' in self.l_components
                     or 'free_class' in self.l_components):  # if there is any stitch-related evaluation
@@ -1102,7 +1106,7 @@ class ComposedPatternLoss():
 
         return gt_updated, collision_swaps_stats
 
-    def _panel_order_match(self, pred_features, gt_features, epoch):
+    def _panel_order_match(self, pred_features, gt_features):
         """
             Find the best-matching permutation of gt panels to the predicted panels (in panel order)
             based on the provided panel features
@@ -1111,7 +1115,7 @@ class ComposedPatternLoss():
             batch_size = pred_features.shape[0]
             pat_len = gt_features.shape[1]
 
-            if epoch < self.config['epoch_with_order_matching']:
+            if self.epoch < self.config['epoch_with_order_matching']:
                 # assign ordering randomly -- all the panel in the NN output have some non-zero signals at some point
                 per_pattern_permutation = torch.stack(
                     [torch.randperm(pat_len, dtype=torch.long, device=pred_features.device) for _ in range(batch_size)]
@@ -1143,97 +1147,6 @@ class ComposedPatternLoss():
                 raise ValueError('ComposedPatternLoss::Error::Failed to match panel order')
         
         return per_pattern_permutation
-
-    def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
-        """ (try) to find and resolve cases when multiple panel clusters 
-            were assigned to the same panel id (hence attention slot)
-            in the given batch
-            Clusters are evaluated in unsupervised manner based on fiven feature
-        """
-        # Apply permutation (since we need to check the quality of permutation, cap =))
-        empty_mask = self._feature_permute(empty_panel_mask, permutation)
-
-        # references to non-empty elements only
-        non_empty = ~empty_mask
-        non_empty_ids_per_slot = []
-        for panel_id in range(empty_mask.shape[-1]):
-            non_empty_ids_per_slot.append(torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1))
-
-        # evaluate clustering
-        empty_att_slots = []
-        single_class = []
-        multiple_classes = []
-        for panel_id in range(empty_mask.shape[-1]):
-            non_empty_ids = non_empty_ids_per_slot[panel_id]
-            if len(non_empty_ids) == 0:  
-                # all panels at this place are empty
-                empty_att_slots.append(panel_id)
-                continue
-
-            if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
-                single_class.append(panel_id)
-                continue
-            
-            # Differentiate single cluster from multi-cluster cases based on gap statistic            
-            K = range(1, 3)  # enough to compare 1 cluster and 2 cluster cases
-
-            gaps, stds, labels_2_class = gap_statistic(
-                features[non_empty_ids, panel_id, :],
-                nrefs=self.config['cluster_gap_nrefs'], ks=K)
-
-            # reduction in quality with number of classes increase -- or no differences in elements at all
-            print('Gaps: ', gaps, ' STDS: ', stds)
-            threshold = self.config['gap_cluster_threshold']  # or stds[1]?
-            if gaps[1] is None or gaps[0] is None or gaps[0] >= (gaps[1] - threshold):  # the last comes from gap stats formula
-                single_class.append(panel_id)
-            else:
-                multiple_classes.append((panel_id, gaps[1] - gaps[0], labels_2_class))  
-
-        print('Single class: {}; Multi-class: {}; Empty: {};'.format(
-            single_class, [el[0] for el in multiple_classes], empty_att_slots))
-
-        # Update permutation if some multi-class assignment was detected and there is space to move
-        num_swaps = 0
-        swapped_quality_levels = []
-        if len(multiple_classes) and len(empty_att_slots):
-            # sort according to distortion power to separate most obvious cases first
-            # https://stackoverflow.com/a/10695158
-            sorted_multi_classes = sorted(multiple_classes, key=itemgetter(1), reverse=True)
-
-            print(sorted_multi_classes)
-
-            for current_slot, curr_quality, labels in sorted_multi_classes:
-                if len(empty_att_slots) == 0: 
-                    # no more empty slots to use 
-                    break
-                empty_slot = empty_att_slots.pop()  # use empty slot
-                print('Using Empty ', empty_slot)
-                
-                # Choose labels that is used the least 
-                indices_0 = (labels == 0).nonzero(as_tuple=False).squeeze(-1)
-                indices_1 = (labels == 1).nonzero(as_tuple=False).squeeze(-1)
-
-                min_len = min(len(indices_0), len(indices_1)) 
-                # these are ids among non-empty features only
-                indices = indices_0 if len(indices_0) == min_len else indices_1
-
-                # convert to ids in batch 
-                indices = non_empty_ids_per_slot[current_slot][indices]
-
-                # move some of the panels from current_slot to empty_slot in permutation
-                permutation[indices, current_slot], permutation[indices, empty_slot] = permutation[indices, empty_slot], permutation[indices, current_slot]
-                
-                # Logging Info
-                num_swaps += 1
-                swapped_quality_levels.append(curr_quality)
-
-        # updated permutation & logging info
-        return permutation, {
-            'order_collision_swaps': num_swaps, 
-            'cluster_quality_improvement': sum(swapped_quality_levels) / len(swapped_quality_levels) if len(swapped_quality_levels) else 0,
-            'multi-class-diffs': sum([el[1] for el in multiple_classes]) / len(multiple_classes) if len(multiple_classes) else 0,
-            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1]
-        }
 
     @staticmethod
     def _feature_permute(pattern_features, permutation):
@@ -1282,6 +1195,235 @@ class ComposedPatternLoss():
                         stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
                 
         return stitches
+
+    # ------ Cluster analysis -------
+
+    def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
+        """ (try) to find and resolve cases when multiple panel clusters 
+            were assigned to the same panel id (hence attention slot)
+            in the given batch
+            Clusters are evaluated in unsupervised manner based on fiven feature
+        """
+        # Apply permutation (since we need to check the quality of permutation, cap =))
+        empty_mask = self._feature_permute(empty_panel_mask, permutation)
+
+        # references to non-empty elements only
+        non_empty = ~empty_mask
+        non_empty_ids_per_slot = []
+        for panel_id in range(empty_mask.shape[-1]):
+            non_empty_ids_per_slot.append(torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1))
+
+        # evaluate clustering
+        single_class, multiple_classes, empty_att_slots = self._eval_clusters(
+            features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
+
+        avg_classes = float(sum([multiple_classes[el][0] for el in multiple_classes]) + len(single_class)) \
+                      / (len(multiple_classes) + len(single_class))
+
+        # update permulation for multi-class cases
+        num_swaps = 0
+        if len(multiple_classes):
+            new_permutation, num_swaps = self._distribute_clusters(
+                single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
+        
+        # updated permutation (if in training mode!!) & logging info
+        return new_permutation if self.training and len(multiple_classes) else permutation, {
+            'order_collision_swaps': num_swaps, 
+            # Average "baddness" of the multi cluster cases, including zeros for single classes. 
+            'multi-class-diffs': sum([multiple_classes[el][1] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
+            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
+            'avg_clusters': avg_classes
+        }
+
+    def _eval_clusters(self, features, non_empty_ids_per_slot, max_k=2):
+        """
+            Evaluate clustering property of given feature distribution for each panel id
+        """
+        empty_att_slots = []
+        single_class = []  # TODO Single classes as dict too
+        multiple_classes = {}
+        for panel_id in range(features.shape[1]):
+            non_empty_ids = non_empty_ids_per_slot[panel_id]
+            if len(non_empty_ids) == 0:  
+                # all panels at this place are empty
+                empty_att_slots.append(panel_id)
+                continue
+
+            slot_features = features[non_empty_ids, panel_id, :]
+            if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
+                single_class.append((panel_id, slot_features[0], torch.cat((slot_features, slot_features))))
+                continue
+            
+            # Differentiate single cluster from multi-cluster cases based on gap statistic         
+            k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
+                slot_features,
+                max_k=max_k, 
+                sencitivity_threshold=self.config['diff_cluster_threshold'], 
+                logs=self.debug_prints
+            )
+
+            if k_optimal == 1:  # the last comes from gap stats formula
+                single_class.append((panel_id, cluster_centers[0], self._bbox(slot_features)))
+
+                if self.config['cluster_with_singles'] or panel_id in self.cluster_resolution_mapping:  
+                    # allow to map to this panel_id is singles are in use
+                    # AND make sure that this mapping is up-to-date when slot starts to be used
+                    self.cluster_resolution_mapping[panel_id] = single_class[-1][2]
+
+            else:
+                # TODO don't caculate this cdist twice!
+                # TODO Just max dist between features??
+                diff = torch.cdist(cluster_centers, cluster_centers).max()
+                bboxes = []
+                for label_id in range(k_optimal):
+                    if len(slot_features[labels == label_id]) == 0:  # happens, but rarely
+                        bboxes.append(None)
+                    else:
+                        bboxes.append(
+                            self._bbox(slot_features[labels == label_id])
+                        )
+                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers, bboxes)
+            
+            if self.debug_prints:
+                print(panel_id, ' -- ', k_optimal, ' ', diff)
+
+        if self.debug_prints:
+            print('Single class: {}; Multi-class: {}; Empty: {};'.format(
+                [el[0] for el in single_class], multiple_classes.keys(), empty_att_slots))
+
+        return single_class, multiple_classes, empty_att_slots
+
+    def _distribute_clusters(self, single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation):
+        """
+            Re-Distribute clusters of features in the dicovered multi-clustering cases
+        """
+        # Check if assignment could be reused 
+        assigned = set()
+
+        # Logging
+        single_slots = [elem[0] for elem in single_class]
+ 
+        # check if multi-class could be assigned to the same slot \ used single slot as earlier
+        memory_slots = []
+        memory_bboxes = []
+        for k in self.cluster_resolution_mapping:
+            if k in empty_att_slots:
+                memory_slots.append(k)
+                memory_bboxes.append(self.cluster_resolution_mapping[k])
+        if len(memory_slots):
+            for current_slot in multiple_classes:
+                if current_slot not in assigned:
+                    k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
+
+                    # comparison of current slot clusters to single-cluster slots
+                    bb_comparion = torch.zeros((k, len(memory_slots)), device=permutation.device)
+                    for label_id, m_box in enumerate(m_bboxes):
+                        if m_box is None:  # skip
+                            continue
+                        for slot_idx in range(len(memory_slots)):
+                            bbox_iou = self._bbox_iou(m_box, memory_bboxes[slot_idx])  # with single mox
+                            bb_comparion[label_id, slot_idx] = bbox_iou
+
+                    if bb_comparion.max() > 0.8:  # TODO parameter??
+                        flat_idx = bb_comparion.argmax()
+                        label_id = flat_idx // bb_comparion.shape[1]
+                        single_slot_list_id = flat_idx - label_id * bb_comparion.shape[1]
+                        new_slot = memory_slots[single_slot_list_id]
+
+                        # Update
+                        try:
+                            permutation = self._swap_slots(
+                                permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+                        except ValueError as e:
+                            if self.debug_prints:
+                                print(e)
+                            continue
+
+                        if self.debug_prints:
+                            tag = 'Using single' if new_slot in single_slots else 'Re-using'
+                            print(
+                                f'{tag} {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
+                                f' by {m_bboxes[label_id]} with '
+                                f'original {memory_bboxes[single_slot_list_id]}')
+                        
+                        # Logging Info
+                        if new_slot in empty_att_slots:
+                            empty_att_slots.remove(new_slot)
+                        assigned.add(current_slot)
+
+        # All the others are put to the new slots
+        for current_slot in multiple_classes:
+            if current_slot not in assigned and len(empty_att_slots):  # have options
+                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
+
+                new_slot = empty_att_slots.pop(0)  # use first available empty slot
+                assigned.add(current_slot)
+                if self.debug_prints:
+                    print(f'Using Empty {current_slot}->{new_slot}')  # Trying string interpolation
+
+                # Choose elements to move
+                if k > 2:  # the cluster that is further away from others
+                    dists = torch.cdist(m_cluster_centers, m_cluster_centers).sum(dim=-1)
+                    label_id = dists.argmax()
+                else:  # or the one used the least -- in case of 2 classes
+                    histogram = torch.histc(labels, bins=k, max=(k - 1))
+                    label_id = histogram.argmin()
+
+                # record for re-use. The m_bbox should not be None here..
+                self.cluster_resolution_mapping[new_slot] = m_bboxes[label_id]
+
+                # Update
+                permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
+        
+        if self.debug_prints:
+            print('After upds: Single class: {}; Multi-class: {}; Assigned: {}, Empty: {};'.format(
+                [el[0] for el in single_class], multiple_classes.keys(), assigned, empty_att_slots))
+        
+        return (permutation, len(assigned))
+
+    @staticmethod
+    def _swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot):
+        # move non-empy panels from current_slot to empty_slot in permutation
+        indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
+        indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
+
+        target_overlap = [idx for idx in indices if idx in non_empty_ids_per_slot[new_slot]]
+        if len(target_overlap) > 0:
+            raise ValueError(f'Tried to swap {current_slot}->{new_slot} with non-empty elements in {new_slot}: {target_overlap}. ')
+
+        permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
+
+        return permutation
+
+    @staticmethod
+    def _bbox(features):
+        """Evalyate bbox for given features"""
+        return torch.stack((features.min(dim=0)[0], features.max(dim=0)[0]))
+
+    @staticmethod
+    def _bbox_iou(bbox_1, bbox_2, tol=0.001):
+        """ 
+            Compute IOU for 2 n-dimentional BBoxes (assuming they are aligned with coordinate frame)
+            bbox[0] -- min, bbox[1] -- max
+        """
+        min_max_tols = torch.tensor([-tol, tol], device=bbox_1.device).unsqueeze(1).expand(-1, bbox_1.shape[-1])
+
+        bbox_intersect = [torch.max(bbox_1[0], bbox_2[0]) - tol, torch.min(bbox_1[0], bbox_2[0]) + tol]
+        intersect_volume = ComposedPatternLoss._bbox_volume(bbox_intersect)
+
+        union_volume = (ComposedPatternLoss._bbox_volume(bbox_1 + min_max_tols)
+                        + ComposedPatternLoss._bbox_volume(bbox_2 + min_max_tols)
+                        - intersect_volume)
+        
+        return intersect_volume / union_volume
+
+    @staticmethod
+    def _bbox_volume(bboxs):
+        diffs = bboxs[1] - bboxs[0]
+        if (diffs < 0).any():  # inverted bbox
+            return 0.
+
+        return diffs.prod()
 
     # ------ Ground truth panel edge loop origin shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):

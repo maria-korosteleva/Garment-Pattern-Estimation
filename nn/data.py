@@ -1,7 +1,9 @@
 import json
+import copy
 import numpy as np
 import os
 from pathlib import Path
+import random
 import shutil
 import time
 from datetime import datetime
@@ -13,7 +15,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
+from pattern_converter import NNSewingPattern, InvalidPatternDefError, PanelClasses
 
 
 # ---------------------- Main Wrapper ------------------
@@ -76,14 +78,24 @@ class DatasetWrapper(object):
         if self.batch_size is None:
             raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
 
-        self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+        try:
+            self.dataset.config['balanced_batch_sampling'] = True
+            # indices IN the training set breakdown per type
+            _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
+            batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
+            self.loader_train = DataLoader(self.training, batch_sampler=batch_sampler)
+        except (AttributeError, NotImplementedError) as e:  # cannot create balanced batches
+            print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
+            self.dataset.config['balanced_batch_sampling'] = False
+            self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
         # no need for breakdown per datafolder for training -- for now
 
-        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
+        # DEBUG shuffles
+        self.loader_validation = DataLoader(self.validation, self.batch_size, shuffle=True) if self.validation else None
         self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
         # loader with per-data folder examples for visualization
         if self.validation:
-            # indices_breakdown = self.dataset.indices_by_data_folder(self.validation.indices)
+            # indices_breakdown, _ = self.dataset.indices_by_data_folder(self.validation.indices)
             single_sample_ids = [folder_ids.indices[0] for folder_ids in self.validation_per_datafolder.values()]
             self.loader_valid_single_per_data = DataLoader(
                 Subset(self.dataset, single_sample_ids), batch_size=self.batch_size, shuffle=False) 
@@ -126,7 +138,10 @@ class DatasetWrapper(object):
 
         if 'random_seed' not in self.split_info or self.split_info['random_seed'] is None:
             self.split_info['random_seed'] = int(time.time())
+        # init for all libs =)
         torch.manual_seed(self.split_info['random_seed'])
+        random.seed(self.split_info['random_seed'])
+        np.random.seed(self.split_info['random_seed'])
 
         # if file is provided
         if 'filename' in self.split_info and self.split_info['filename'] is not None:
@@ -324,6 +339,87 @@ class GTtandartization():
         return updated_sample
 
 
+# -------------- Samplers ----------
+class BalancedBatchSampler():
+    """ Sampler creates batches that have the same class distribution as in given subset"""
+    # https://stackoverflow.com/questions/66065272/customizing-the-batch-with-specific-elements
+    def __init__(self, ids_by_type, batch_size=10, drop_last=True):
+        """
+            * ids_by_type provided as dictionary of torch.Subset() objects
+            * drop_last is True by default to better guarantee that all batches are well-balanced
+        """
+        if len(ids_by_type) > batch_size:
+            raise NotImplementedError('{}::Error::Creating batches that are smaller then total number of data classes is not implemented!'.format(
+                self.__class__.__name__
+            ))
+
+        print('{}::Using custom balanced batch data sampler'.format(self.__class__.__name__))
+
+        # represent as lists of ids for simplicity
+        self.data_ids_by_type = dict.fromkeys(ids_by_type)
+        for data_class in self.data_ids_by_type:
+            self.data_ids_by_type[data_class] = ids_by_type[data_class].tolist()
+
+        # print(self.data_ids_by_type)
+        self.class_names = list(self.data_ids_by_type.keys())
+        self.batch_size = batch_size
+        self.data_size = sum(len(self.data_ids_by_type[i]) for i in ids_by_type)
+        self.num_full_batches = self.data_size // batch_size  # int division
+        
+        # extra batch left?
+        last_batch_len = self.data_size - self.batch_size * self.num_full_batches
+        self.drop_last = drop_last or last_batch_len == 0  # by request or because there is no batch with leftovers 
+        
+        # num of elements per type in each batch
+        self.batch_len_per_type = dict.fromkeys(ids_by_type)
+        for data_class in self.class_names:
+            self.batch_len_per_type[data_class] = int((len(ids_by_type[data_class]) / self.data_size) * batch_size)  # always rounds down
+        
+        if sum(self.batch_len_per_type.values()) > self.batch_size:
+            raise('BalancedBatchSampler::Error:: Failed to evaluate per-type length correctly')
+
+
+    def __iter__(self):
+        ids_by_type = copy.deepcopy(self.data_ids_by_type)
+
+        # shuffle
+        for data_class in ids_by_type:
+            random.shuffle(ids_by_type[data_class])
+
+        batches = []
+        for _ in range(self.num_full_batches):
+            batch = []
+            for data_class in self.class_names:
+                
+                for _ in range(self.batch_len_per_type[data_class]):
+                    if not len(ids_by_type[data_class]):  # exausted
+                        break
+                    batch.append(ids_by_type[data_class].pop())
+
+            # Fill the rest of the batch randomly if needed
+            diff = self.batch_size - len(batch)
+            for _ in range(diff):
+                non_empty_class_names = [name for name in self.class_names if len(ids_by_type[name])]
+                batch.append(ids_by_type[random.choice(non_empty_class_names)].pop())
+            
+            random.shuffle(batch)  # to avoid grouping by type in case it matters
+            batches.append(batch)
+
+        if not self.drop_last:  
+            # put the rest of elements in the last batch
+            batch = []
+            for ids_list in ids_by_type.values():
+                batch += ids_list
+
+            random.shuffle(batch)  # to avoid grouping by type in case it matters
+            batches.append(batch)
+        
+        return iter(batches)
+
+    def __len__(self):
+        return self.num_full_batches + (not self.drop_last)
+
+
 # --------------------- Datasets -------------------------
 
 class BaseDataset(Dataset):
@@ -383,7 +479,7 @@ class BaseDataset(Dataset):
         if 'standardize' in self.config:
             self.standardize()
 
-        # DEBUG -- access all the datapoints to pre-populate the cache of the data
+        # FORDEBUG -- access all the datapoints to pre-populate the cache of the data
         # self._renew_cache()
 
         # in\out sizes
@@ -459,7 +555,8 @@ class BaseDataset(Dataset):
         """
             Separate provided indices according to dataset folders used in current dataset
         """
-        ids_dict = dict.fromkeys(self.data_folders)
+        ids_dict = dict.fromkeys(self.data_folders)  # consists of elemens of index_list
+        ids_mapping_dict = dict.fromkeys(self.data_folders)  # reference to the elements in index_list
         index_list = np.array(index_list)
         
         # assign by comparing with data_folders start & end ids
@@ -469,8 +566,9 @@ class BaseDataset(Dataset):
         for i in range(0, len(self.dataset_start_ids) - 1):
             ids_filter = (index_list >= self.dataset_start_ids[i][1]) & (index_list < self.dataset_start_ids[i + 1][1])
             ids_dict[self.dataset_start_ids[i][0]] = index_list[ids_filter]
+            ids_mapping_dict[self.dataset_start_ids[i][0]] = np.flatnonzero(ids_filter)
         
-        return ids_dict
+        return ids_dict, ids_mapping_dict
 
     def subsets_per_datafolder(self, index_list=None):
         """
@@ -479,7 +577,7 @@ class BaseDataset(Dataset):
         """
         if index_list is None:
             index_list = range(len(self))
-        per_data = self.indices_by_data_folder(index_list)
+        per_data, _ = self.indices_by_data_folder(index_list)
         breakdown = {}
         for folder, ids_list in per_data.items():
             breakdown[self.data_folders_nicknames[folder]] = Subset(self, ids_list)
@@ -681,6 +779,10 @@ class GarmentBaseDataset(BaseDataset):
         if 'obj_filetag' not in start_config:
             start_config['obj_filetag'] = 'sim'  # look for objects with this tag in filename when loading 3D models
 
+        if 'panel_classification' not in start_config:
+            start_config['panel_classification'] = None
+        self.panel_classifier = None
+
         super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
 
         # To make sure the datafolder names are unique after updates
@@ -691,7 +793,13 @@ class GarmentBaseDataset(BaseDataset):
             ))
             self.data_folders_nicknames = dict(zip(self.data_folders, self.data_folders))
 
+        # Load panel classifier
+        if self.config['panel_classification'] is not None:
+            self.panel_classifier = PanelClasses(self.config['panel_classification'])
+            self.config.update(max_pattern_len=len(self.panel_classifier))
+
         # evaluate base max values for number of panels, number of edges in panels among pattern in all the datasets
+        # NOTE: max_pattern_len is influcened by presence or abcense of self.panel_classifier
         if not pattern_size_initialized:
             num_panels = []
             num_edges_in_panel = []
@@ -724,6 +832,11 @@ class GarmentBaseDataset(BaseDataset):
             shutil.copy(
                 self.root_path / dataset_folder / 'dataset_properties.json', 
                 experiment.local_path() / (dataset_folder + '_properties.json'))
+        
+        if self.panel_classifier is not None:
+            shutil.copy(
+                self.panel_classifier.filename, 
+                experiment.local_path() / ('panel_classes.json'))
     
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
@@ -782,7 +895,10 @@ class GarmentBaseDataset(BaseDataset):
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
-        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
+        pattern = NNSewingPattern(
+            self.root_path / datapoint_name / spec_list[0], 
+            panel_classifier=self.panel_classifier, 
+            template_name=self.data_folders_nicknames[datapoint_name.split('/')[0]])
         return pattern.pattern_as_tensors(
             pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
@@ -796,7 +912,7 @@ class GarmentBaseDataset(BaseDataset):
         if std_config and 'standardize' in std_config:
             tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
 
-        pattern = NNSewingPattern(view_ids=False)
+        pattern = NNSewingPattern(view_ids=False, panel_classifier=self.panel_classifier)
         pattern.name = dataname
         try: 
             pattern.pattern_from_tensors(

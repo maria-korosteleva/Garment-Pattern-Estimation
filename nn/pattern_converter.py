@@ -1,7 +1,11 @@
 import copy
+from collections import OrderedDict
+from datetime import datetime
+import json
 import numpy as np
 from numpy.lib.function_base import append
 from numpy.random import default_rng
+from pathlib import Path
 import sys
 import torch
 
@@ -36,8 +40,14 @@ class NNSewingPattern(VisPattern):
     """
         Interface to Sewing patterns with Neural Net friendly representation
     """
-    def __init__(self, pattern_file=None, view_ids=False):
-        super().__init__(pattern_file=pattern_file, view_ids=view_ids)
+    def __init__(self, pattern_file=None, view_ids=False, panel_classifier=None, template_name=None):
+        """
+            `template_name` is need to use `panel_classifier` for panel ordering
+        """
+        self.panel_classifier = panel_classifier
+        self.template_name = template_name
+
+        super().__init__(pattern_file=pattern_file, view_ids=view_ids)        
 
     def pattern_as_tensors(
             self, 
@@ -55,26 +65,22 @@ class NNSewingPattern(VisPattern):
             raise RuntimeError('BasicPattern::Error::pattern_as_tensors() is only supported for Python 3.6+ and Scipy 1.2+')
         
         # get panel ordering
-        panel_order = self.panel_order()
+        panel_order = self.panel_order(pad_to_len=pad_panels_num)
 
         # Calculate max edge count among panels -- if not provided
-        panel_lens = [len(self.pattern['panels'][name]['edges']) for name in panel_order]
+        panel_lens = [len(self.pattern['panels'][name]['edges']) if name is not None else 0 for name in panel_order]
         max_len = pad_panels_to_len if pad_panels_to_len is not None else max(panel_lens)
 
         # Main info per panel
         panel_seqs, panel_translations, panel_rotations = [], [], []
         for panel_name in panel_order:
-            edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
+            if panel_name is not None:
+                edges, rot, transl = self.panel_as_numeric(panel_name, pad_to_len=max_len)
+            else:  # empty panel
+                edges, rot, transl = self._empty_panel(max_len)
             panel_seqs.append(edges)
             panel_translations.append(transl)
             panel_rotations.append(rot)
-        # add padded panels
-        if pad_panels_num is not None:
-            for _ in range(len(panel_seqs), pad_panels_num):
-                panel_seqs.append(np.zeros_like(panel_seqs[0]))
-                panel_translations.append(np.zeros_like(panel_translations[0]))
-                panel_rotations.append(np.zeros_like(panel_rotations[0]))
-                panel_lens.append(0)
 
         # Stitches info. Order of stitches doesn't matter
         stitches_num = len(self.pattern['stitches']) if pad_stitches_num is None else pad_stitches_num
@@ -130,7 +136,7 @@ class NNSewingPattern(VisPattern):
         in_panel_order = []
         new_panel_ids = [None] * len(pattern_representation)  # for correct stitches assignment in case of empty panels in-between
         for idx in range(len(pattern_representation)):
-            panel_name = 'panel_' + str(idx)
+            panel_name = 'panel_' + str(idx) if self.panel_classifier is None else self.panel_classifier.class_name(idx)
             
             try:
                 self.panel_from_numeric(
@@ -532,6 +538,82 @@ class NNSewingPattern(VisPattern):
                 'score': score
             },
         ]
+    def _empty_panel(self, max_edge_num):
+        """ Shape, rotation, and translation for empty panels"""
+        # edge is 4-elem vector, 4 rotation element for quaternion, 3 element for world translation
+        return np.zeros((max_edge_num, 4)), np.zeros(4), np.zeros(3)
+
+    # ordering of panels according to classification
+    def panel_order(self, force_update=False, pad_to_len=None):
+        """
+            Return order of panels either 
+                * according to the one provided in the pattern spec
+                * According to external panels classification if self.panel_classifier is set!
+            Note: 'None' represent empty panels at that place of ordered elements
+
+            Reloading 'panel_order' instead of 'define_panel_order' to preserve order from file 
+                if self.panel_classifier is not defined and 'force_update' is false
+        """
+        if self.panel_classifier is None or self.template_name is None:
+            # preserves the order is given in pattern spec!
+            order = super().panel_order(force_update=force_update)
+            
+        else:  
+            # NOTE: re-evaluate even if `force_update` flag is false
+            # as we need update even if the pattern spec already contains some order
+
+            # construct the order according to class indices
+            # -None- represents empty panels-placeholders
+            order = [None] * len(self.panel_classifier)
+            for panel_name in self.pattern['panels']:
+                class_idx = self.panel_classifier.class_idx(self.template_name, panel_name)
+                order[class_idx] = panel_name
+        
+        # Additionally pad to requested value if given
+        if pad_to_len is not None:
+            if pad_to_len < len(order):
+                raise ValueError(
+                    f'{self.__class__.__name__}::{self.name}::Error::Requested max num of panels {pad_to_len} '
+                    f'is smaller then evaluated number of panels {len(order)}')
+            order += [None] * (pad_to_len - len(order))
+
+        # Remember the order for future reference
+        self.pattern['panel_order'] = order
+
+        return order
+
+
+# -------- Panel classification Interface -----
+class PanelClasses():
+    """ Interface to access panel classification by role """
+    def __init__(self, classes_file):
+
+        self.filename = classes_file
+
+        with open(classes_file, 'r') as f:
+            # preserve the order of classes names
+            self.classes = json.load(f, object_pairs_hook=OrderedDict)
+
+        self.names = list(self.classes.keys())
+        
+        self.panel_to_idx = {}
+        for idx, class_name in enumerate(self.classes):
+            panels_list = self.classes[class_name]
+            for panel in panels_list:
+                self.panel_to_idx[tuple(panel)] = idx
+        
+    def __len__(self):
+        return len(self.classes)
+
+    def class_idx(self, template, panel):
+        """
+            Return idx of class for given panel (name) from given template(name)
+        """
+        # TODO process cases when given pair does not exist in the classes
+        return self.panel_to_idx[(template, panel)]
+
+    def class_name(self, idx):
+        return self.names[idx]
 
 
 # ---------- test -------------
@@ -545,20 +627,31 @@ if __name__ == "__main__":
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
-    pattern = NNSewingPattern(Path(system_config['templates_path']) / 'basic tee' / 'tee.json')
 
-    # empty_pattern = VisPattern()
-    print(pattern.panel_order(), len(pattern.pattern['stitches']))
+    pattern = NNSewingPattern(
+        Path(system_config['templates_path']) / 'basic tee' / 'tee.json', 
+        panel_classifier=PanelClasses('./nn/panel_classes.json'), 
+        template_name='tee')
 
+    empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/panel_classes.json'))
+    print(pattern.panel_order())
+
+    # print(pattern.stitches_as_tags())
     print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
+
 
     # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
 
-    # empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
+    tensor, edge_lens, num_panels, rot, transl, stitches, stitch_num, stitch_tags = pattern.pattern_as_tensors(
+        with_placement=True, with_stitches=True, with_stitch_tags=True)
+
+    empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     # print(pattern.pattern['stitches'])
     # print(empty_pattern.panel_order())
 
-    pattern.name = pattern.name + '_save_pattern_order' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
-    # empty_pattern.serialize(system_config['output'], to_subfolder=True)
+    # Save
+    empty_pattern.name = pattern.name + 'from_empty_with_class' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    pattern.name = pattern.name + '_with_class' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')
+    
+    empty_pattern.serialize(system_config['output'], to_subfolder=True)
     pattern.serialize(system_config['output'], to_subfolder=True)
-

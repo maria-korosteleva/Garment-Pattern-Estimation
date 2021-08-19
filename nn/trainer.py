@@ -1,5 +1,4 @@
 # Training loop func
-import numpy as np
 from pathlib import Path
 import time
 import traceback
@@ -17,21 +16,19 @@ class Trainer():
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
         self.datawraper = None
-        self.standardize_data = True
+        self.standardize_data = with_norm
         self.log_with_visualization = with_visualization
         
         # default training setup
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=300,  # 400,
+            epochs=350,
             batch_size=30,
-            learning_rate=0.001,
+            learning_rate=0.002,
             optimizer='Adam',
             weight_decay=0,
-            lr_scheduling={
-                'mode': '1cyclic'
-            },
+            lr_scheduling={ 'mode': '1cyclic' },
             early_stopping={
                 'window': 0.0001,
                 'patience': 100
@@ -110,7 +107,7 @@ class Trainer():
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
                 
                 # with torch.autograd.detect_anomaly():
-                loss, loss_dict, loss_structure_update = model.module.loss(model(features, log_step=log_step), gt, epoch=epoch)
+                loss, loss_dict, loss_structure_update = model.module.loss(model(features, log_step=log_step, epoch=epoch), gt, epoch=epoch)
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -124,11 +121,15 @@ class Trainer():
                 loss_dict.update({'epoch': epoch, 'batch': i, 'loss': loss, 'learning_rate': self.optimizer.param_groups[0]['lr']})
                 wb.log(loss_dict, step=log_step)
 
+            # Check the cluster assignment history
+            if hasattr(model.module.loss, 'cluster_resolution_mapping') and model.module.loss.debug_prints:
+                print(model.module.loss.cluster_resolution_mapping)
+
             # scheduler step: after optimizer step, see https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
             model.eval()
             with torch.no_grad():
                 losses = [model.module.loss(model(batch['features'].to(self.device)), batch['ground_truth'], epoch=epoch)[0] for batch in valid_loader]
-                valid_loss = np.sum(losses) / len(losses)  # Each loss element is already a mean for its batch
+                valid_loss = sum(losses) / len(losses)  # Each loss element is already a mean for its batch
 
             # Checkpoints: & compare with previous best
             if loss_structure_update or best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
@@ -175,7 +176,7 @@ class Trainer():
         elif self.setup['optimizer'] == 'Adam':
             # future 'else'
             print('Trainer::Using Adam optimizer')
-            model.to(self.setup['device'])  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
+            model.to(self.device)  # see https://discuss.pytorch.org/t/effect-of-calling-model-cuda-after-constructing-an-optimizer/15165/8
             self.optimizer = torch.optim.Adam(model.parameters(), lr=self.setup['learning_rate'], weight_decay=self.setup['weight_decay'])
 
     def _add_scheduler(self, steps_per_epoch):

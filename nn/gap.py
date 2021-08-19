@@ -1,55 +1,56 @@
 # gap.py
-# (c) 2013 Mikael Vejdemo-Johansson  
+# (c) 2013 Mikael Vejdemo-Johansson for the code structure
+# (c) 2021 Maria Korosteleva for PyTorch adaptation and the rest of the changes
 # BSD License
 #
-# SciPy function to compute the gap statistic for evaluating k-means clustering.
+# PyTorch-based function to compute the gap statistic and standard error for evaluating k-means clustering.
 # Gap statistic defined in
 # Tibshirani, Walther, Hastie:
 #  Estimating the number of clusters in a data set via the gap statistic
 #  J. R. Statist. Soc. B (2001) 63, Part 2, pp 411-423  (http://web.stanford.edu/~hastie/Papers/gap.pdf)
-# Available here: https://gist.github.com/michiexile/5635273
 
-# Maria Korosteleva: Re-written for PyTorch allowing GPU-only operations
-# PyTorch & GPU friendliness 
+
 import torch 
 from kmeans_pytorch import kmeans  # https://github.com/subhadarship/kmeans_pytorch
 
 
-def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
+def gaps(data, nrefs=20, max_k=10, extra_sencitivity_threshold=0.0, logs=False):
     """
-        Compute the Gap statistic for an n x m dataset in data (presented as torch.Tensor).
+        Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
+        Gap statistic
 
-        Either give a precomputed set of reference distributions in *refs* as an (nrefs, n, m) torch tensor,
-        or state the number *nrefs* of reference distributions for automatic generation with a
+        * State the number *nrefs* of reference distributions for automatic generation with a
         uniformed distribution within the bounding box of data.
+        * Give the list of k-values for which you want to compute the statistic in ks.
+        * 'extra_sencitivity_threshold' reduce sencitivity for improvement of adding more classes 
+            (creates additional bias towards smaller number of classes)
 
-        Give the list of k-values for which you want to compute the statistic in ks.
+        Returns: 
+            optimal class_numbers, 
+            how much 1-class scenario is worse then the optimal, 
+            labels for optimal class, 
+            cluster_centers for optimal class
 
         Devices note: all computations are performed on the device where the *data* is located. 
         Both CPU and GPU are supported.
     """
     shape = data.shape
-    if refs is None:
-        tops, _ = data.max(dim=0)
-        bots, _ = data.min(dim=0)
-        dists = tops - bots 
 
-        if torch.allclose(tops, bots, atol=0.1):  # degenerate case, no need for further processing
-            labels, _ = _single_cluster_kmeans(data)
-            return [None] * len(ks), [None] * len(ks), labels
+    max_k = min(max_k, len(data))  # cannot be more then number of datapoints
 
-        # uniform distribution
-        rands = torch.rand((nrefs, shape[0], shape[1]), device=data.device)
-        rands = rands * dists + bots
+    # reference distributions
+    rands = _reference_distributions(data, nrefs)
+    if rands is None:  # degenerate case, no need for further processing
+        labels, cluster_center = _single_cluster_kmeans(data)
+        return 1, 0.0, labels, [cluster_center]
 
-    else:
-        rands = refs
-
-    gaps = [None] * len(ks)  # lists allow for None values
-    std_errors = [None] * len(ks)
-    zero = torch.zeros(1, device=data.device)
+    # Optimal class number
+    gaps = [None] * (max_k + 1)  # list(s allow for None values
+    std_errors = [None] * (max_k + 1)
     labels_per_k = []
-    for (i, k) in enumerate(ks):   
+    ccs_per_k = []
+    for k in range(1, max_k + 1):   
+        # Step 1 -- clustering
         # on the data
         if k == 1:
             labels, cluster_centers = _single_cluster_kmeans(data)
@@ -57,6 +58,7 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
             labels, cluster_centers = kmeans(X=data, num_clusters=k, device=data.device, tqdm_flag=False)
             labels, cluster_centers = labels.to(data.device), cluster_centers.to(data.device)
         labels_per_k.append(labels)  # save labels to return
+        ccs_per_k.append(cluster_centers)
 
         disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])])
 
@@ -71,16 +73,81 @@ def gap_torch(data, refs=None, nrefs=20, ks=range(1, 11)):
 
             refdisps[j] = sum([torch.dist(rands[j, m], cluster_centers[labels[m]]) for m in range(shape[0])])
 
-        # Step 2 in original paper
+        # Step 2 -- gaps
         # flipped mean & log https://gist.github.com/michiexile/5635273#gistcomment-2324237
         reflogs = torch.log(refdisps)
         refmean = torch.mean(reflogs)
-        gaps[i] = refmean - torch.log(disp)
-        
-        # Step 3 in the original paper
-        std_errors[i] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
+        gaps[k] = refmean - torch.log(disp)
 
-    return gaps, std_errors, labels_per_k[-1] if len(labels_per_k) else None
+        # Step 3 -- standard errors
+        std_errors[k] = torch.sqrt(torch.mean((reflogs - refmean) ** 2) * (1 + 1. / nrefs))
+        std_errors[k] += extra_sencitivity_threshold  # with some adjustment
+
+        # Check optimality criteria 
+        if k > 1 and gaps[k - 1] >= gaps[k] - std_errors[k]:
+            # optimal class found!
+            return k - 1, max(-1 * (gaps[1] - (gaps[k - 1] - std_errors[k - 1])), 0.), labels_per_k[-2], ccs_per_k[-2]
+
+    if logs:
+        print('Gaps::Warning::Optimal K not found, returning the last one, for gaps {}'.format(gaps))
+    return max_k, max(-1 * (gaps[1] - (gaps[max_k] - std_errors[max_k])), 0.), labels_per_k[-1], ccs_per_k[-1]
+
+
+def optimal_clusters(data, max_k=10, sencitivity_threshold=0.1, logs=False):
+    """
+        Find the optimal number of clusters in n x m dataset in data (presented as torch.Tensor) based on
+        cluster compactness. Optimal K is the minimum K wich wich cluster member are `sencitivity_threshold`
+        away from the center on average
+
+        * Give the list of k-values for which you want to compute the statistic in ks.
+        * 'sencitivity_threshold' -- Target compactness
+
+        Assuming: 
+        * distance between clusters is much larger distances within (real) clusters
+
+        Returns: 
+            optimal class_numbers, 
+            optimal compactness, 
+            labels for optimal class, 
+            cluster_centers for optimal class
+
+        Devices note: all computations are performed on the device where the *data* is located. 
+        Both CPU and GPU are supported.
+    """
+    shape = data.shape
+
+    max_k = min(max_k, len(data))  # cannot be more then number of datapoints
+
+    # Optimal class number
+    labels_per_k = []
+    ccs_per_k = []
+    disp_list = []
+    for k in range(1, max_k + 1):   
+        # Step 1 -- clustering
+        # on the data
+        if k == 1:
+            labels, cluster_centers = _single_cluster_kmeans(data)
+        else:
+            labels, cluster_centers = kmeans(X=data, num_clusters=k, device=data.device, tqdm_flag=False)
+            labels, cluster_centers = labels.to(data.device), cluster_centers.to(data.device)
+        labels_per_k.append(labels)  # save labels to return
+        ccs_per_k.append(cluster_centers)
+
+        # average distance to cluster centers
+        disp = sum([torch.dist(data[m], cluster_centers[labels[m]]) for m in range(shape[0])]) / shape[0]
+        disp_list.append(disp)
+
+        if disp <= sencitivity_threshold:
+            # optimal class found! Clustering is compact enough
+            return k, disp, labels_per_k[-1], ccs_per_k[-1]
+        elif k > 1 and (abs(disp - disp_list[-2]) < 0.02 * disp or disp > disp_list[-2]):
+            # Improvement is too small or metric started growing (!)
+            return k - 1, disp_list[-2], labels_per_k[-2], ccs_per_k[-2]
+
+    if logs:
+        print('Optimal_clusters::Warning::Optimal K not found, returning the last one, for disp {}'.format(disp))
+    return max_k, disp, labels_per_k[-1], ccs_per_k[-1]
+
 
 
 def _single_cluster_kmeans(data):
@@ -92,3 +159,23 @@ def _single_cluster_kmeans(data):
     labels = torch.zeros(data.shape[0], dtype=torch.int, device=data.device)
 
     return labels, cluster_center
+
+
+def _reference_distributions(data, nrefs):
+    """
+        Generate (random) reference distributions for given dataset
+    """
+
+    # refs
+    tops, _ = data.max(dim=0)
+    bots, _ = data.min(dim=0)
+    dists = tops - bots 
+
+    if torch.allclose(tops, bots, atol=0.01):  # degenerate case, no need for further processing
+        return None
+
+    # uniform distribution
+    rands = torch.rand((nrefs, data.shape[0], data.shape[1]), device=data.device)
+    rands = rands * dists + bots
+
+    return rands

@@ -74,6 +74,13 @@ class WandbRunWrappper(object):
         except ValueError as e:  # if file not found, training will just proceed with generated split
             print(e)
             print('Experiment::Warning::Skipping loading split file..')
+        
+        try:
+            self.load_file('panel_classes.json', './wandb')
+            data_config['panel_classification'] = './wandb/panel_classes.json'
+        except ValueError as e:  # if file not found, training will just proceed with generated split
+            print(e)
+            print('Experiment::Warning::Skipping loading panel classes file..')
         return split_config, run.config['batch_size'], data_config
 
     def last_best_validation_loss(self):
