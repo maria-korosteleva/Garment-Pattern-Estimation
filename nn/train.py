@@ -133,7 +133,7 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='All-cluster-strategy-furthest-fix', run_id='3fwyhuny'  # all data 800
+            run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -148,11 +148,11 @@ def get_data_config(in_config, old_stats=False):
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
         split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
         data_config = {
-            'max_datapoints_per_type': 5000,  # upper limit of how much data to grab from each type
+            'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
             'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
-            'panel_classification': './nn/panel_classes.json'
+            'panel_classification': './nn/panel_classes_extended.json'
         }  
 
     # update with freshly configured values
@@ -186,11 +186,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-panel-pred', 
+        run_name='All-panel-pred-rnn', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
@@ -204,8 +204,8 @@ if __name__ == "__main__":
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
