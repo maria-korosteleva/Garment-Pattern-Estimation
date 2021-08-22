@@ -146,7 +146,7 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count'}   # , 'filename': './wandb/data_split.json'} 
+        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'} 
         data_config = {
             'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
             'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
@@ -186,30 +186,30 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-panel-pred-rnn', 
+        run_name='All-stitches-800', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(
-        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+    # dataset = data.Garment3DPatternFullDataset(
+    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
+    dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=False)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
+    model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:3'])  # , 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
