@@ -60,8 +60,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Tee-JS-stitches-all', 
-    run_id='2hfx5dkv')  # finished experiment
+    run_name='All-stitches-800', 
+    run_id='35515dwx')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -89,15 +89,13 @@ datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_s
 # From input
 args_loss_config, checkpoint_version = get_values_from_args()
 
-# DEBUG Loss config
+# # DEBUG Loss config
 loss_config = experiment.NN_config()['loss']
-print(args_loss_config)
-loss_config.update(args_loss_config)
+# print(args_loss_config)
+# loss_config.update(args_loss_config)
 
 # ----- Model architecture -----
 model_class = getattr(nets, experiment.NN_config()['model'])
-# model = nets.GarmentFullPattern3DDisentangle(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
-# model = nets.GarmentAttentivePattern3D(dataset.config, experiment.NN_config(), experiment.NN_config()['loss'])
 model = model_class(dataset.config, experiment.NN_config(), loss_config)
 
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
@@ -114,8 +112,8 @@ model.load_state_dict(state_dict)
 model.module.loss.debug_prints = True
 
 # ------- Evaluate --------
-valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
-print('Validation metrics: {}'.format(valid_loss))
+# valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
+# print('Validation metrics: {}'.format(valid_loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
@@ -131,7 +129,7 @@ print('Validation metrics: {}'.format(valid_loss))
 
 # # -------- Predict ---------
 # # save prediction for validation to file
-# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 # print('Saved to {}'.format(prediction_path))
 # # # reflect predictions info in expetiment
 # experiment.add_statistic('pred_folder', prediction_path.name)
