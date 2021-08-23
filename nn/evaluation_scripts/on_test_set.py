@@ -27,7 +27,7 @@ prediction_path = shape_datawrapper.predict(
     shape_model, save_to=Path(system_info['output']), sections=['validation', 'test'])
 
 # --- Predict stitches for given prediction ---
-stitch_datawrapper, stitch_model = load_experiment('Tee-JS-stitches-all', '2hfx5dkv')
+stitch_datawrapper, stitch_model = load_experiment('All-stitches-800', '35515dwx')
 
 # On validation
 # TODO add as options to load_experiment() routine
