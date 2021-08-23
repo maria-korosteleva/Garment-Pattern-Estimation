@@ -90,8 +90,7 @@ class DatasetWrapper(object):
             self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
         # no need for breakdown per datafolder for training -- for now
 
-        # DEBUG shuffles
-        self.loader_validation = DataLoader(self.validation, self.batch_size, shuffle=True) if self.validation else None
+        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
         self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
         # loader with per-data folder examples for visualization
         if self.validation:
@@ -829,9 +828,12 @@ class GarmentBaseDataset(BaseDataset):
         super().save_to_wandb(experiment)
 
         for dataset_folder in self.data_folders:
-            shutil.copy(
-                self.root_path / dataset_folder / 'dataset_properties.json', 
-                experiment.local_path() / (dataset_folder + '_properties.json'))
+            try:
+                shutil.copy(
+                    self.root_path / dataset_folder / 'dataset_properties.json', 
+                    experiment.local_path() / (dataset_folder + '_properties.json'))
+            except FileNotFoundError:
+                pass
         
         if self.panel_classifier is not None:
             shutil.copy(
@@ -845,19 +847,26 @@ class GarmentBaseDataset(BaseDataset):
             Updates the currect dataset nickname as a small sideeffect
         """
 
-        dataset_props = Properties(self.root_path / dataset_folder / 'dataset_properties.json')
-        if not dataset_props['to_subfolders']:
-            raise NotImplementedError('Only working with datasets organized with subfolders')
-
-        # NOTE A little side-effect here, since we are loading the dataset_properties anyway
-        self.data_folders_nicknames[dataset_folder] = dataset_props['templates'].split('/')[-1].split('.')[0]
-
         try: 
             datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
             print('Dataset {}:: /renders/ subfolder ignored'.format(dataset_folder))
         except ValueError:  # it's ok if there is no subfolder for renders
             print('GarmentBaseDataset::Info::No renders subfolder found in {}'.format(dataset_folder))
             pass
+
+        try: 
+            dataset_props = Properties(self.root_path / dataset_folder / 'dataset_properties.json')
+        except FileNotFoundError:
+            # missing dataset props file -- skip failure processing
+            print(f'{self.__class__.__name__}::Warning::No `dataset_properties.json` found. Using all datapoints without filtering.')
+            self.data_folders_nicknames[dataset_folder] = dataset_folder
+            return datapoints_names
+
+        if not dataset_props['to_subfolders']:
+                raise NotImplementedError('Only working with datasets organized with subfolders')
+
+        # NOTE A little side-effect here, since we are loading the dataset_properties anyway
+        self.data_folders_nicknames[dataset_folder] = dataset_props['templates'].split('/')[-1].split('.')[0]
 
         fails_dict = dataset_props['sim']['stats']['fails']
         # TODO allow not to ignore some of the subsections
@@ -1250,11 +1259,13 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 continue
             prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
-        # stitch tags to stitch list
-        stitches = self.tags_to_stitches(
-            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edges_mask']
-        )
+        if 'stitches' in prediction:  # if somehow prediction already has an answer
+            stitches = prediction['stitches']
+        else:  # stitch tags to stitch list
+            stitches = self.tags_to_stitches(
+                torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
+                prediction['free_edges_mask']
+            )
 
         return self._pattern_from_tenzor(
             dataname, 

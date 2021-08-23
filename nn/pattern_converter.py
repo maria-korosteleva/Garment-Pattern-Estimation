@@ -1,3 +1,4 @@
+import contextlib
 import copy
 from collections import OrderedDict
 from datetime import datetime
@@ -163,9 +164,13 @@ class NNSewingPattern(VisPattern):
             edges_per_panel = pattern_representation.shape[1]
             for stitch_id in range(stitches.shape[1]):
                 stitch_object = []
+                if stitches[0][stitch_id] == 0 and stitches[1][stitch_id] == 0:
+                    # This is padding -- skip
+                    continue 
                 for side_id in range(stitches.shape[0]):
                     pattern_edge_id = stitches[side_id][stitch_id]
                     in_panel_id = int(pattern_edge_id // edges_per_panel)
+
                     if in_panel_id > (len(pattern_representation) - 1) or new_panel_ids[in_panel_id] is None:  # validity of stitch definition
                         raise InvalidPatternDefError(self.name, 'stitch {} referes to non-existing panel {}'.format(stitch_id, in_panel_id))
                     stitch_object.append(
@@ -633,11 +638,11 @@ if __name__ == "__main__":
         panel_classifier=PanelClasses('./nn/panel_classes.json'), 
         template_name='tee')
 
-    empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/panel_classes.json'))
+    empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/panel_classes_extended.json'))
     print(pattern.panel_order())
 
     # print(pattern.stitches_as_tags())
-    print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
+    # print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
 
 
     # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
@@ -646,7 +651,7 @@ if __name__ == "__main__":
         with_placement=True, with_stitches=True, with_stitch_tags=True)
 
     empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
-    # print(pattern.pattern['stitches'])
+    print(empty_pattern.pattern['stitches'])
     # print(empty_pattern.panel_order())
 
     # Save

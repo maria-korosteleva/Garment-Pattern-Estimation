@@ -43,11 +43,11 @@ def load_experiment(name, run_id, project='Garments-Reconstruction', in_batch_si
 
     # ----- Model -------
     nn_config = experiment.NN_config()
-    model_class = getattr(nets, nn_config)
+    model_class = getattr(nets, nn_config['model'])
     model = model_class(dataset.config, nn_config, nn_config['loss'])
  
     device = in_device if in_device is not None else nn_config['device_ids'][0]
-    model = torch.nn.DataParallel(model, device_ids=device)
+    model = torch.nn.DataParallel(model, device_ids=[device])
 
     # TODO propagate device decision to the data at evaluation time, if not using Data Parallel?
     
