@@ -17,7 +17,6 @@ import data
 import metrics
 from experiment import load_experiment
 
-
 system_info = customconfig.Properties('./system.json')
 
 # ---Load models ---
@@ -36,17 +35,19 @@ prediction_path = Path('D:/GK-Pattern-Outputs/nn_pred_210823-23-41-42')
 dataset_class = getattr(data, stitch_datawrapper.dataset.config['class'])
 
 data_config = stitch_datawrapper.dataset.config
-data_folders = os.listdir(str(prediction_path / 'validation'))
+data_folders = os.listdir(str(prediction_path / 'test'))
 data_config.update(data_folders=data_folders)
 
 predicted_dataset = dataset_class(
-    prediction_path / 'validation', stitch_datawrapper.dataset.config, gt_caching=True, feature_caching=True)
-datawrapper = data.DatasetWrapper(predicted_dataset, batch_size=5)  # NOTE no split given -- evaluating on the full loaded dataset!!
+    prediction_path / 'test', stitch_datawrapper.dataset.config, gt_caching=True, feature_caching=True)
 
+# NOTE no split given -- evaluating on the full loaded dataset!!
+# singletone batch to allow different number of edge pairs in different samples
+datawrapper = data.DatasetWrapper(predicted_dataset, batch_size=1)  
 
 # ------- Evaluate stitch prediction --------
 loss = metrics.eval_metrics(stitch_model, datawrapper, 'full')
-print('Validation metrics: {}'.format(loss))
+print('Sitch metrics: {}'.format(loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
