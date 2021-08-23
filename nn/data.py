@@ -1216,6 +1216,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return mask
 
     @staticmethod
+    # TODO This method is invalid (empty panels can be in-between) and should be removed!!!!
     def empty_panels_mask(num_panels, tot_length):
         """Empty panels as boolean mask"""
 
@@ -1382,7 +1383,6 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
 
             # find stitches
             pattern.stitches_from_pair_classifier(model, self.config['standardize'])
-
 
             # save prediction
             # TODO Move to separate fucntion (for all datasets)

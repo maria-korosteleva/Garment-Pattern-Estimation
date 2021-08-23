@@ -9,6 +9,7 @@ from numpy.random import default_rng
 from pathlib import Path
 import sys
 import torch
+from torch._C import device
 
 if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya
@@ -405,59 +406,31 @@ class NNSewingPattern(VisPattern):
         """ Update stitches in the pattern by predictions of edge pairs classification model"""
 
         self.pattern['stitches'] = []
-
-        edges_3D = self._3D_edges_per_panel()
-        num_panels = len(self.panel_order())
         model.eval()
 
-        # TODO vectorize model inference better?
-        for i in range(num_panels):
-            panel_i = self.panel_order()[i]
-            edges_i = np.array(edges_3D[panel_i])
-            for j in range(i + 1, num_panels):  # assuming panels are not connected to themselves
-                panel_j = self.panel_order()[j]
-                edges_j = np.array(edges_3D[panel_j])
+        edge_pairs_list, pairs_mapping, _ = self.all_edge_pairs(device=model.device_ids[0])
 
-                rows, cols = np.indices((len(edges_i), len(edges_j)))
-                edge_pairs = np.concatenate([edges_i[rows], edges_j[cols]], axis=-1)
-                # edge_pairs = np.concatenate([edges_j[cols], edges_i[rows]], axis=-1)
+        # apply appropriate scaling
+        shift = torch.tensor(data_stats['f_shift'], device=model.device_ids[0])
+        scale = torch.tensor(data_stats['f_scale'], device=model.device_ids[0])
+        edge_pairs_list = (edge_pairs_list - shift) / scale
 
-                if ('skirt_waistband' in self.name and (
-                        'wb_back' in panel_i or 'wb_back' in panel_j
-                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
-                    print(panel_i, panel_j)
-                    print(edge_pairs)
+        preds = model(edge_pairs_list)
+        preds_probability = torch.sigmoid(preds)
+        preds_class = torch.round(preds_probability)
 
-                # apply appropriate scaling
-                # TODO different naming of std?
-                edge_pairs = (edge_pairs - data_stats['f_shift']) / data_stats['f_scale']
+        # record stitches
+        stitched_ids = preds_class.nonzero(as_tuple=False).squeeze().cpu().tolist()
+        if len(stitched_ids) > 0:  # some stitches found!
+            # print(stitched_ids)
+            for stitch_idx in range(len(stitched_ids)):
+                edge_pair = pairs_mapping[stitch_idx]
 
-                if ('skirt_waistband' in self.name and (
-                        'wb_back' in panel_i or 'wb_back' in panel_j
-                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
-                    print(edge_pairs)
-
-                edge_pairs = torch.from_numpy(edge_pairs).float()
-
-                preds = model(edge_pairs)
-                preds_probability = torch.sigmoid(preds)
-                preds_class = torch.round(preds_probability)
-
-                stitched_ids = preds_class.nonzero(as_tuple=False).cpu().tolist()
-
-                if ('skirt_waistband' in self.name and (
-                        'wb_back' in panel_i or 'wb_back' in panel_j
-                        or 'wb_front' in panel_i or 'wb_front' in panel_j)):
-                    print(preds_class, preds_probability, preds, stitched_ids)
-
-                if len(stitched_ids) > 0:  # some stitches found!
-                    # print(stitched_ids)
-                    for stitch_idx in range(len(stitched_ids)):
-                        self.pattern['stitches'].append(self._stitch_entry(
-                            panel_i, stitched_ids[stitch_idx][0], 
-                            panel_j, stitched_ids[stitch_idx][1], 
-                            score=preds[stitched_ids[stitch_idx][0], stitched_ids[stitch_idx][1]].cpu().tolist()
-                        ))
+                self.pattern['stitches'].append(self._stitch_entry(
+                    edge_pair[0][0], edge_pair[0][1], 
+                    edge_pair[1][0], edge_pair[1][1], 
+                    score=preds[stitched_ids[stitch_idx]].cpu().tolist()
+                ))
 
         # Post-analysis: check if any of the edges parttake in multiple stitches & only leave the stronger ones
         to_remove = set()
@@ -477,6 +450,56 @@ class NNSewingPattern(VisPattern):
         if len(to_remove):
             self.pattern['stitches'] = [value for i, value in enumerate(self.pattern['stitches']) if i not in to_remove]
 
+    def all_edge_pairs(self, device='cpu'):
+        """
+            Construct all possible edge pairs for given sewing pattern 
+            with GT stitching labels if available and requested in `with_labels`
+        """
+        edges_3D = self._3D_edges_per_panel()
+        num_panels = len(self.panel_order())
+
+        stitch_set = self._stitches_as_set()
+        mask = []
+
+        edge_pairs_list = []
+        pairs_mapping = []
+        for i in range(num_panels):
+            panel_i = self.panel_order()[i]
+            edges_i = np.array(edges_3D[panel_i])
+            for j in range(i + 1, num_panels):  # assuming panels are not connected to themselves
+                panel_j = self.panel_order()[j]
+                edges_j = np.array(edges_3D[panel_j])
+
+                rows, cols = np.indices((len(edges_i), len(edges_j)))
+                edge_pairs = np.concatenate([edges_i[rows], edges_j[cols]], axis=-1)
+
+                # record the pair
+                edge_pairs = torch.from_numpy(edge_pairs).float().to(device)
+                edge_pairs = edge_pairs.view(-1, edge_pairs.shape[-1])  # flatten to the list of pairs
+                edge_pairs_list.append(edge_pairs)
+
+                # record backward mapping & labels
+                for row_idx in range(len(edges_i)):
+                    for col_idx in range(len(edges_j)):
+                        pair_id = ((panel_i, row_idx), (panel_j, col_idx))
+                        pairs_mapping.append(pair_id)
+
+
+                        mask.append(pair_id in stitch_set or (pair_id[1], pair_id[0]) in stitch_set)
+
+
+        edge_pairs_list = torch.cat(edge_pairs_list)
+
+        return edge_pairs_list, pairs_mapping, mask
+
+    def _stitches_as_set(self):
+        stitches_set = set()
+        for stitch in self.pattern['stitches']:
+            stitches_set.add((
+                (stitch[0]['panel'], stitch[0]['edge']),
+                (stitch[1]['panel'], stitch[1]['edge'])
+            ))
+        return stitches_set
 
     def _edge_dict(self, vstart, vend, curvature):
         """Convert given info into the proper edge dictionary representation"""
@@ -543,6 +566,7 @@ class NNSewingPattern(VisPattern):
                 'score': score
             },
         ]
+
     def _empty_panel(self, max_edge_num):
         """ Shape, rotation, and translation for empty panels"""
         # edge is 4-elem vector, 4 rotation element for quaternion, 3 element for world translation
