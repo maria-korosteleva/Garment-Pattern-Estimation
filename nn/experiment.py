@@ -14,11 +14,17 @@ import nets
 
 # -------- Working with existing experiments ------
 # TODO use in all subroutines
-def load_experiment(name, run_id, project='Garments-Reconstruction', in_batch_size=None, in_device=None, checkpoint_idx=None):
+def load_experiment(
+        name, run_id, project='Garments-Reconstruction', 
+        in_data_folders=None, in_datapath=None,
+        in_batch_size=None, in_device=None, checkpoint_idx=None):
     """
         Load information (dataset, wrapper, model) associated with a particular experiment
 
-        `in_batch_size` and `in_device` re-write corresponding information from experiment, if set
+        Parameters re-write corresponding information from experiment, if set
+
+        NOTE: if in_data_folders is provided then all data is loaded in a single loader instead of being splitted
+            (since original split may not make sense for new data folders )
     """
 
     system_info = customconfig.Properties('./system.json')
@@ -36,9 +42,15 @@ def load_experiment(name, run_id, project='Garments-Reconstruction', in_batch_si
     split, batch_size, data_config = experiment.data_info()  
     if in_batch_size is not None:
         batch_size = in_batch_size
+    if in_data_folders is not None:
+        data_config.update(data_folders=in_data_folders)
+        split = None  # Just use all the data if the base set of datafolders is updated
+
+    data_path = in_datapath if in_datapath is not None else system_info['datasets_path']
+
 
     data_class = getattr(data, data_config['class'] if 'class' in data_config else 'Garment3DPatternFullDataset')  # TODO check if it works!!
-    dataset = data_class(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
+    dataset = data_class(data_path, data_config, gt_caching=True, feature_caching=True)
     datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
     # ----- Model -------

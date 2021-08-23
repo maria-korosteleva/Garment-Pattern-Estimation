@@ -21,8 +21,6 @@ system_info = customconfig.Properties('./system.json')
 
 # ---Load models ---
 # shape_datawrapper, shape_model = load_experiment('All-predefined-order-att-max', 's8fj6bqz', in_batch_size=5, in_device='cuda:0')
-stitch_datawrapper, stitch_model = load_experiment('All-stitches-800', '35515dwx', in_device='cuda:0')
-
 # --- Predict shape from shape experimnet ---
 # prediction_path = shape_datawrapper.predict(
 #    shape_model, save_to=Path(system_info['output']), sections=['validation', 'test'])
@@ -30,23 +28,18 @@ stitch_datawrapper, stitch_model = load_experiment('All-stitches-800', '35515dwx
 prediction_path = Path('D:/GK-Pattern-Outputs/nn_pred_210823-23-41-42')
 
 # --- Predict stitches for given prediction ---
-# On validation
-# TODO add as options to load_experiment() routine
-dataset_class = getattr(data, stitch_datawrapper.dataset.config['class'])
-
-data_config = stitch_datawrapper.dataset.config
+# On test
 data_folders = os.listdir(str(prediction_path / 'test'))
-data_config.update(data_folders=data_folders)
-
-predicted_dataset = dataset_class(
-    prediction_path / 'test', stitch_datawrapper.dataset.config, gt_caching=True, feature_caching=True)
-
-# NOTE no split given -- evaluating on the full loaded dataset!!
-# singletone batch to allow different number of edge pairs in different samples
-datawrapper = data.DatasetWrapper(predicted_dataset, batch_size=1)  
+stitch_datawrapper, stitch_model = load_experiment(
+    'All-stitches-800', '35515dwx', in_device='cuda:0',
+    in_data_folders=data_folders, in_datapath=prediction_path / 'test', 
+    in_batch_size=1  # singletone batch to allow different number of edge pairs in different samples
+)
+# for all edge pairs
+stitch_datawrapper.dataset.config.update(random_pairs_mode=False) 
 
 # ------- Evaluate stitch prediction --------
-loss = metrics.eval_metrics(stitch_model, datawrapper, 'full')
+loss = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full')
 print('Sitch metrics: {}'.format(loss))
 # valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
