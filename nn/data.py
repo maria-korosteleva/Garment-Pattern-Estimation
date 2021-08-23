@@ -744,11 +744,6 @@ class BaseDataset(Dataset):
         elem = self[0]
         feature_size = elem['features'].shape[0]
         gt_size = elem['ground_truth'].shape[0] if hasattr(elem['ground_truth'], 'shape') else None
-        # sanity checks
-        if ('feature_size' in self.config and feature_size != self.config['feature_size'] 
-                or 'ground_truth_size' in self.config and gt_size != self.config['ground_truth_size']):
-            raise RuntimeError('BaseDataset::Error::feature shape ({}) or ground truth shape ({}) from loaded config do not match calculated values: {}, {}'.format(
-                self.config['feature_size'], self.config['ground_truth_size'], feature_size, gt_size))
 
         self.config['feature_size'], self.config['ground_truth_size'] = feature_size, gt_size
 

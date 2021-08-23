@@ -12,11 +12,10 @@ to_download = {
     # 'wb_dress_sleeveless:latest': 'wb_dress_sleeveless_2600',
     # 'jacket_hood:latest': 'jacket_hood_2700',
     # 'jacket:latest': 'jacket_2200',
-    'skirt_4_panels:latest': 'skirt_4_panels_1600',
-    'skirt_2_panels:latest': 'skirt_2_panels_1200',
-    # 'skirt_8_panels:latest': 'skirt_8_panels_1000',
-    # 'wb_pants_straight:latest': 'wb_pants_straight_1500'
-
+    # 'skirt_4_panels:latest': 'skirt_4_panels_1600',
+    # 'skirt_2_panels:latest': 'skirt_2_panels_1200',
+    'skirt_8_panels:latest': 'skirt_8_panels_1000',
+    'wb_pants_straight:latest': 'wb_pants_straight_1500'
 }
 
 api = wandb.Api({'project': 'Garments-Reconstruction'})
