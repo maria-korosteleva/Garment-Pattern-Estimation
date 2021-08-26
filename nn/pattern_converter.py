@@ -133,6 +133,14 @@ class NNSewingPattern(VisPattern):
         # Invalidate parameter & constraints values
         self._invalidate_all_values()
 
+        # Assuming the input (from NN) follows the norm -- no updates will be made on further loads
+        self.properties.update(
+            curvature_coords='relative', 
+            normalize_panel_translation=False, 
+            normalized_edge_loops=True,
+            units_in_meter=100  # cm
+        )
+
         # remove existing panels -- start anew
         self.pattern['panels'] = {}
         in_panel_order = []
@@ -487,6 +495,8 @@ class NNSewingPattern(VisPattern):
 
                         mask.append(pair_id in stitch_set or (pair_id[1], pair_id[0]) in stitch_set)
 
+        if len(edge_pairs_list) == 0:
+            raise InvalidPatternDefError(self.name, 'No edges to construct')
 
         edge_pairs_list = torch.cat(edge_pairs_list)
 
