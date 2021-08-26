@@ -70,7 +70,7 @@ def load_experiment(
     
     model.load_state_dict(state_dict)
 
-    return datawrapper, model
+    return datawrapper, model, experiment
 
 
 # ------- Class for experiment tracking with wandb -------

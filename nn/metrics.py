@@ -12,7 +12,7 @@ import gap
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
-
+from pattern_converter import InvalidPatternDefError
 
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
@@ -45,7 +45,17 @@ def _eval_metrics_per_loader(model, loss, loader, device):
     Secondary function -- it assumes that context is set up: torch.no_grad(), model device & mode, etc."""
 
     current_metrics = dict.fromkeys(['full_loss'], 0)
-    for batch in loader:
+    counter = 0
+    loader_iter = iter(loader)
+    while True:  # DEBUG
+        try:
+            batch = next(loader_iter)  #  loader_iter.next()
+        except StopIteration:
+            break
+        except InvalidPatternDefError as e:
+            print(e)
+            continue
+
         features, gt = batch['features'].to(device), batch['ground_truth']
         if gt is None or (hasattr(gt, 'nelement') and gt.nelement() == 0):  # assume reconstruction task
             gt = features
@@ -682,8 +692,9 @@ class ComposedLoss():
         # total number of labeled as target label
         pred_as_target_count = torch.count_nonzero(preds == target_label).float()
 
-        precision = correct_count / pred_as_target_count
-        recall = correct_count / len(target_label_ids[0])  
+        # careful with division by zero
+        precision = correct_count / pred_as_target_count if pred_as_target_count else 0
+        recall = correct_count / len(target_label_ids[0]) if len(target_label_ids[0]) else 0
 
         return precision, recall
 

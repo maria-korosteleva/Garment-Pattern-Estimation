@@ -29,19 +29,19 @@ dataset_list = [
     'wb_jumpsuit_sleeveless_150'
 ]
 
-# ---Load data and models ---
-shape_datawrapper, shape_model = load_experiment(
-    'All-predefined-order-att-max', 's8fj6bqz', in_data_folders=dataset_list,
-    in_batch_size=5, in_device='cuda:0')
-
 # --- Predict shape from shape experimnet ---
+shape_datawrapper, shape_model, _ = load_experiment(
+    'All-predefined-order-att-max', 's8fj6bqz', 
+    in_data_folders=dataset_list, in_datapath=Path(system_info['datasets_path']) / 'test',
+    in_batch_size=5, in_device='cuda:0')
 prediction_path = shape_datawrapper.predict(
     shape_model, save_to=Path(system_info['output']), sections=['full'])
 
+# prediction_path = Path('D:/GK-Pattern-Outputs/nn_pred_210824-03-28-38')
 
 # --- Predict stitches for given prediction ---
 data_folders = os.listdir(str(prediction_path / 'full'))
-stitch_datawrapper, stitch_model = load_experiment(
+stitch_datawrapper, stitch_model, stitch_experiment = load_experiment(
     'All-stitches-800', '35515dwx', in_device='cuda:0',
     in_data_folders=data_folders, in_datapath=prediction_path / 'full', 
     in_batch_size=1  # singletone batch to allow different number of edge pairs in different samples
@@ -50,19 +50,19 @@ stitch_datawrapper, stitch_model = load_experiment(
 stitch_datawrapper.dataset.config.update(random_pairs_mode=False)  
 
 # ------- Evaluate stitch prediction --------
-metrics = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full')
-print('Sitch metrics: {}'.format(metrics))
+metrics_values = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full')
+print('Sitch metrics: {}'.format(metrics_values))
 breakdown = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full_per_data_folder')
 print('Stitch metrics per dataset: {}'.format(breakdown))
 
-# experiment.add_statistic('unseen_full', metrics)
-# experiment.add_statistic('unseen', breakdown)
-# experiment.add_statistic('unseen_folders', dataset_list)
+stitch_experiment.add_statistic('unseen_preds_full', metrics_values)
+stitch_experiment.add_statistic('unseen_preds', breakdown)
+stitch_experiment.add_statistic('unseen_shape_model', 'All-predefined-order-att-max-s8fj6bqz')
 
 # # -------- Predict ---------
 # # save prediction for validation to file
-# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-# print('Saved to {}'.format(prediction_path))
+prediction_path = stitch_datawrapper.predict(stitch_model, save_to=Path(system_info['output']), sections=['full'])
+print('Saved to {}'.format(prediction_path))
 # # # reflect predictions info in expetiment
 # experiment.add_statistic('pred_folder', prediction_path.name)
 

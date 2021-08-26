@@ -1416,7 +1416,11 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         if not spec_list:
             raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
         
-        pattern = NNSewingPattern(self.root_path / datapoint_name / spec_list[0])
+        # Load from prediction if exists
+        predicted_list = [file for file in spec_list if 'predicte' in file]
+        spec = predicted_list[0] if len(predicted_list) > 0 else spec_list[0]
+
+        pattern = NNSewingPattern(self.root_path / datapoint_name / spec)
 
         if self.config['random_pairs_mode']:
             features, ground_truth = pattern.stitches_as_3D_pairs(
