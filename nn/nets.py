@@ -553,7 +553,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
             in_loss_config.update(
                 loss_components=['shape', 'loop', 'rotation', 'translation'], 
                 quality_components=['shape', 'discrete', 'rotation', 'translation']
-                )
+            )
 
         # training control defaults
         if 'freeze_on_clustering' not in config:
