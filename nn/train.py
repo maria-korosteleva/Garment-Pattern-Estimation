@@ -167,7 +167,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     dataset_list = [
-        # 'dress_sleeveless_2550',
+        'dress_sleeveless_2550',
         'jumpsuit_sleeveless_2000',
         'skirt_8_panels_1000',
         'wb_pants_straight_1500',
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         'jacket_hood_2700',
         'pants_straight_sides_1000',
         'tee_2300',
-        # 'skirt_4_panels_1600'
+        'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-order-att-max-no-dress-skirts', 
+        run_name='All-att-encoder', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -206,11 +206,12 @@ if __name__ == "__main__":
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     model.module.loss.with_quality_eval = True  # False to save compute time
