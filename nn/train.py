@@ -134,8 +134,9 @@ def get_data_config(in_config, old_stats=False):
         # get data stats from older runs to save runtime
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
+            project_name='Test-Garments-Reconstruction', 
+            # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
+            run_name='segmentation', run_id='pq1lcbo7'  # DEBUG
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
         split, _, data_config = old_experiment.data_info()
@@ -192,7 +193,7 @@ if __name__ == "__main__":
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
