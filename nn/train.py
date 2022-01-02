@@ -200,7 +200,7 @@ if __name__ == "__main__":
         Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
-    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=False)  # only turn on visuals on custom garment data
+    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
@@ -213,6 +213,8 @@ if __name__ == "__main__":
     # Multi-GPU!!!
     model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
+
+    print(f'Using devices: {model.device_ids}')
 
     model.module.loss.with_quality_eval = True  # False to save compute time
     model.module.loss.debug_prints = True  # False to avoid extra prints
