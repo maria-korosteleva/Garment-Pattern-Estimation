@@ -518,13 +518,6 @@ class NNSewingPattern(VisPattern):
             edge_dict['curvature'] = curvature.tolist()
         return edge_dict
 
-    def _num_edges(self):
-        """ Total number of edges in a pattern"""
-        if not hasattr(self, 'num_edges'):
-            self.num_edges = sum([len(self.pattern['panels'][panel]['edges']) for panel in self.pattern['panels']])
-
-        return self.num_edges
-
     def _3D_edges_per_panel(self, randomize_direction=False):
         """ 
             Return all edges in the pattern (grouped by panels)

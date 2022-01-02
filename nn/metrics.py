@@ -776,9 +776,8 @@ class ComposedPatternLoss():
             self.bce_logits_loss = nn.BCEWithLogitsLoss()  # binary classification loss
         if 'att_distribution' in self.l_components:
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
-        if 'min_empty_att' in self.l_components:
-            self.min_empty_panels_att = AttentionEmptyMinLoss()
         if 'segmentation' in self.l_components:
+            # TODO!!! IS IT CE? The output is SparseMax not the logits. Or use logits??
             self.segmentation = nn.CrossEntropyLoss()
 
         # -------- quality metrics ------
@@ -905,11 +904,6 @@ class ComposedPatternLoss():
             att_loss = self.att_distribution(preds['att_weights'])
             full_loss += att_loss
             loss_dict.update(att_distribution_loss=att_loss)
-        
-        if 'min_empty_att' in self.l_components:
-            att_empty_loss = self.min_empty_panels_att(preds['att_weights'], ground_truth['empty_panels_mask'])
-            full_loss += self.config['att_empty_weight'] * att_empty_loss
-            loss_dict.update(att_empty_loss=att_empty_loss)
 
         if 'segmentation' in self.l_components:
             segm_loss = self.segmentation(preds['att_weights'], ground_truth['segmentation'])
@@ -1084,16 +1078,14 @@ class ComposedPatternLoss():
 
             # Update gt info according to the permutation
             gt_updated['outlines'] = self._feature_permute(ground_truth['outlines'], gt_permutation)
-
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
-
             gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
+            gt_updated['segmentation'] = self._feature_permute(ground_truth['segmentation'], gt_permutation)
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)
             if 'translation' in self.l_components:
                 gt_updated['translations'] = self._feature_permute(ground_truth['translations'], gt_permutation)
-            # if 'min_empty_att' in self.l_components:
                 
             if self.epoch >= self.config['epoch_with_stitches'] and (
                     'stitch' in self.l_components
@@ -1207,7 +1199,6 @@ class ComposedPatternLoss():
         return stitches
 
     # ------ Cluster analysis -------
-
     def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
         """ (try) to find and resolve cases when multiple panel clusters 
             were assigned to the same panel id (hence attention slot)

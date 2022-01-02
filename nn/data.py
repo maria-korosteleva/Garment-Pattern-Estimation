@@ -1177,7 +1177,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             pad_stitches_num=self.config['max_num_stitches'],
             with_placement=True, with_stitches=True, with_stitch_tags=True)
         free_edges_mask = self.free_edges_mask(pattern, stitches, num_stitches)
-        empty_panels_mask = self.empty_panels_mask(num_panels, len(pattern))  # useful for evaluation
+        empty_panels_mask = self.empty_panels_mask(num_edges, num_panels, len(pattern))  # useful for evaluation
 
 
         return {
@@ -1258,6 +1258,14 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
         return point_segmentation
 
+    def _empty_panels_mask(self, num_edges, num_panels, tot_length):
+        """Empty panels as boolean mask"""
+
+        mask = np.zeros(tot_length, dtype=np.bool)
+        mask[num_edges == 0] = True
+
+        return mask
+
     # ----- Stitches tools -----
     @staticmethod
     def tags_to_stitches(stitch_tags, free_edges_score):
@@ -1326,17 +1334,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 mask[edge_id // max_edge][edge_id % max_edge] = False
         
         return mask
-
-    @staticmethod
-    # TODO This method is invalid (empty panels can be in-between) and should be removed!!!!
-    def empty_panels_mask(num_panels, tot_length):
-        """Empty panels as boolean mask"""
-
-        mask = np.zeros(tot_length, dtype=np.bool)
-        mask[num_panels:] = True
-
-        return mask
-
 
 class Garment2DPatternDataset(Garment3DPatternFullDataset):
     """Dataset definition for 2D pattern autoencoder
