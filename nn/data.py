@@ -976,8 +976,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
             explicit_stitch_tags=False
         )
-
-        
     
     def standardize(self, training=None):
         """Use shifting and scaling for fitting data to interval comfortable for NN training.
@@ -1553,7 +1551,7 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
             prediction['free_edges_mask']
         )
 
-        pattern = VisPattern(view_ids=False)
+        pattern = NNSewingPattern(view_ids=False)
         pattern.name = name
         try:
             pattern.pattern_from_tensors(
