@@ -11,6 +11,7 @@ import gap
 from data import Garment3DPatternFullDataset as PatternDataset
 from pattern_converter import InvalidPatternDefError
 
+
 # ------- Model evaluation shortcut -------------
 def eval_metrics(model, data_wrapper, section='test'):
     """Evalutes current model on the given dataset section"""

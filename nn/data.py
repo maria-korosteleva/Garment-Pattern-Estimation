@@ -1258,7 +1258,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             for idx, name in enumerate(point_segmentation_names):
                 point_segmentation[idx] = unique_dict[name]
 
-        return point_segmentation
+        return point_segmentation.astype(np.int)
 
     def _empty_panels_mask(self, num_edges):
         """Empty panels as boolean mask"""
