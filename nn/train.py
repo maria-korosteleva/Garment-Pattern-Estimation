@@ -202,7 +202,9 @@ if __name__ == "__main__":
         Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
-    print(dataset[0]['ground_truth']['segmentation'])
+    # for i in range(len(dataset)):
+    #     print(dataset[i]['name'])
+    #     print(dataset[i]['ground_truth']['segmentation'])
 
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
@@ -215,7 +217,7 @@ if __name__ == "__main__":
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0'])   #, 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     print(f'Using devices: {model.device_ids}')

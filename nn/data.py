@@ -1233,8 +1233,12 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         point_segmentation_names = vert_labels[map_list]
 
         # find those that map to stitches and assign them the closest panel label
-        stitch_points_ids = point_segmentation_names == 'stitch'
-        non_stitch_points_ids = point_segmentation_names != 'stitch'
+        # Also doing this for occasional 'None's 
+        stitch_points_ids = np.logical_or(
+            point_segmentation_names == 'stitch', point_segmentation_names == 'None')
+        non_stitch_points_ids = np.logical_and(
+            point_segmentation_names != 'stitch', point_segmentation_names != 'None')
+
         map_stitches, _, _ = igl.snap_points(points[stitch_points_ids], points[non_stitch_points_ids])
 
         # DEBUG print(f'Mapped to stitches {stitch_points_ids.sum()} with non-stitched {non_stitch_points_ids.sum()}')
