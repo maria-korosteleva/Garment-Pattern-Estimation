@@ -654,6 +654,19 @@ class PanelClasses():
     def class_name(self, idx):
         return self.names[idx]
 
+    def map(self, template_name, panel_list):
+        """Map the list of panels for given template to the given list"""
+        
+        out_list = np.empty(len(panel_list))
+        for idx, panel in enumerate(panel_list):
+            if panel == 'stitch':
+                out_list[idx] = -1
+                print(f'{self.__class__.__name__}::Warning::Mapping stitch label')
+            else:
+                out_list[idx] = self.panel_to_idx[(template_name, panel)]
+
+        return out_list
+
 
 # ---------- test -------------
 if __name__ == "__main__":

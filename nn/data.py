@@ -516,10 +516,6 @@ class BaseDataset(Dataset):
         for transform in self.transforms:
             sample = transform(sample)
 
-        # if datapoint_name == 'tee_AME9SSCR7X':
-        #     print(self.transforms)
-        #     print('After transform: {}'.format(sample['features']))
-
         return sample
 
     def update_config(self, in_config):
@@ -715,29 +711,20 @@ class BaseDataset(Dataset):
         if datapoint_name in self.gt_cached:  # might not be compatible with list indexing
             ground_truth = self.gt_cached[datapoint_name]
         else:
-            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-            ground_truth = self._get_ground_truth(datapoint_name, folder_elements)
+            ground_truth = np.array([0])
+
             if self.gt_caching:
                 self.gt_cached[datapoint_name] = ground_truth
         
         if datapoint_name in self.feature_cached:
             features = self.feature_cached[datapoint_name]
         else:
-            folder_elements = folder_elements if folder_elements is not None else [file.name for file in (self.root_path / datapoint_name).glob('*')]
-            features = self._get_features(datapoint_name, folder_elements)
+            features = np.array([0])
             
             if self.feature_caching:  # save read values 
                 self.feature_cached[datapoint_name] = features
         
         return features, ground_truth
-
-    def _get_features(self, datapoint_name, folder_elements=None):
-        """Read/generate datapoint features"""
-        return np.array([0])
-
-    def _get_ground_truth(self, datapoint_name, folder_elements=None):
-        """Ground thruth prediction for a datapoint"""
-        return np.array([0])
 
     def _estimate_data_shape(self):
         """Get sizes/shapes of a datapoint for external references"""
@@ -876,20 +863,9 @@ class GarmentBaseDataset(BaseDataset):
         return datapoints_names
 
     # ------------- Datapoints Utils --------------
-    def _sample_points(self, datapoint_name, folder_elements):
-        """Make a sample from the 3d surface from a given datapoint files"""
-        obj_list = [file for file in folder_elements if self.config['obj_filetag'] in file and '.obj' in file]
-        if not obj_list:
-            raise RuntimeError('Dataset:Error: geometry file *{}*.obj not found for {}'.format(self.config['obj_filetag'], datapoint_name))
-        
-        verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
-        points = GarmentBaseDataset.sample_mesh_points(self.config['mesh_samples'], verts, faces)
-
-        # Debug
-        # if 'skirt_4_panels_00HUVRGNCG' in datapoint_name:
-        #     meshplot.offline()
-        #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
-        return points
+    def template_name(self, datapoint_name):
+        """Get name of the garment template from the path to the datapoint"""
+        return self.data_folders_nicknames[datapoint_name.split('/')[0]]
 
     def _read_pattern(self, datapoint_name, folder_elements, 
                       pad_panels_to_len=None, pad_panel_num=None, pad_stitches_num=None,
@@ -902,7 +878,7 @@ class GarmentBaseDataset(BaseDataset):
         pattern = NNSewingPattern(
             self.root_path / datapoint_name / spec_list[0], 
             panel_classifier=self.panel_classifier, 
-            template_name=self.data_folders_nicknames[datapoint_name.split('/')[0]])
+            template_name=self.template_name(datapoint_name))
         return pattern.pattern_as_tensors(
             pad_panels_to_len, pad_panels_num=pad_panel_num, pad_stitches_num=pad_stitches_num,
             with_placement=with_placement, with_stitches=with_stitches, 
@@ -931,24 +907,6 @@ class GarmentBaseDataset(BaseDataset):
         return pattern
 
     # -------- Generalized Utils -----
-    @staticmethod
-    def sample_mesh_points(num_points, verts, faces):
-        """A routine to sample requested number of points from a given mesh
-            Returns points in world coordinates"""
-
-        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
-        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
-
-        # convert to world coordinates
-        points = np.empty(barycentric_samples.shape)
-        for i in range(len(face_ids)):
-            face = faces[face_ids[i]]
-            barycentric_coords = barycentric_samples[i]
-            face_verts = verts[face]
-            points[i] = np.dot(barycentric_coords, face_verts)
-
-        return points
-
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
         # NOTE: might be some false removal of zero edges in the middle of the list.
@@ -1004,6 +962,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
+        
+        # to cache segmentation mask if enabled
+        self.segm_cached = {}
+
         super().__init__(root_dir, start_config, 
                          gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
         
@@ -1014,6 +976,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             stitch_tag_size=self[0]['ground_truth']['stitch_tags'].shape[-1],
             explicit_stitch_tags=False
         )
+
+        
     
     def standardize(self, training=None):
         """Use shifting and scaling for fitting data to interval comfortable for NN training.
@@ -1075,6 +1039,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
+    # ----- Saving predictions -----
     def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None, **kwargs):
         """ 
             Saving predictions on batched from the current dataset
@@ -1142,6 +1107,158 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                     
         return prediction_imgs
 
+    def _pred_to_pattern(self, prediction, dataname):
+        """Convert given predicted value to pattern object
+        """
+
+        # undo standardization  (outside of generinc conversion function due to custom std structure)
+        gt_shifts = self.config['standardize']['gt_shift']
+        gt_scales = self.config['standardize']['gt_scale']
+        for key in gt_shifts:
+            if key == 'stitch_tags' and not self.config['explicit_stitch_tags']:  
+                # ignore stitch tags update if explicit tags were not used
+                continue
+            prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
+
+        if 'stitches' in prediction:  # if somehow prediction already has an answer
+            stitches = prediction['stitches']
+        else:  # stitch tags to stitch list
+            stitches = self.tags_to_stitches(
+                torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
+                prediction['free_edges_mask']
+            )
+
+        return self._pattern_from_tenzor(
+            dataname, 
+            prediction['outlines'], prediction['rotations'], prediction['translations'], 
+            stitches, 
+            std_config={}, supress_error=True)
+
+    # ----- Sample -----
+    def _get_sample_info(self, datapoint_name):
+        """
+            Get features and Ground truth prediction for requested data example
+        """
+        folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+
+        # features -- points
+        if datapoint_name in self.feature_cached:
+            points = self.feature_cached[datapoint_name]
+            segm = self.segm_cached[datapoint_name]
+        else:
+            points, verts = self._sample_points(datapoint_name, folder_elements)
+
+            # Segmentation
+            segm = self._point_classes_from_mesh(
+                points, verts, datapoint_name, folder_elements)
+            
+            if self.feature_caching:  # save read values 
+                self.feature_cached[datapoint_name] = points
+                self.segm_cached[datapoint_name] = segm
+        
+        # GT -- pattern and segmentation
+        if datapoint_name in self.gt_cached:  # might not be compatible with list indexing
+            ground_truth = self.gt_cached[datapoint_name]
+        else:
+            ground_truth = self._get_pattern_ground_truth(datapoint_name, folder_elements)
+            ground_truth['segmentation'] = segm
+
+            if self.gt_caching:
+                self.gt_cached[datapoint_name] = ground_truth
+
+        return points, ground_truth
+      
+    def _get_pattern_ground_truth(self, datapoint_name, folder_elements):
+        """Get the pattern representation with 3D placement"""
+        pattern, num_edges, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
+            datapoint_name, folder_elements, 
+            pad_panels_to_len=self.config['max_panel_len'],
+            pad_panel_num=self.config['max_pattern_len'],
+            pad_stitches_num=self.config['max_num_stitches'],
+            with_placement=True, with_stitches=True, with_stitch_tags=True)
+        free_edges_mask = self.free_edges_mask(pattern, stitches, num_stitches)
+        empty_panels_mask = self.empty_panels_mask(num_panels, len(pattern))  # useful for evaluation
+
+
+        return {
+            'outlines': pattern, 'num_edges': num_edges,
+            'rotations': rots, 'translations': tranls, 
+            'num_panels': num_panels, 'empty_panels_mask': empty_panels_mask, 'num_stitches': num_stitches,
+            'stitches': stitches, 'free_edges_mask': free_edges_mask, 'stitch_tags': stitch_tags}
+
+    # ----- Mesh tools -----
+    def _sample_points(self, datapoint_name, folder_elements):
+        """Make a sample from the 3d surface from a given datapoint files
+
+            Returns: sampled points and vertices of original mesh
+        
+        """
+        obj_list = [file for file in folder_elements if self.config['obj_filetag'] in file and '.obj' in file]
+        if not obj_list:
+            raise RuntimeError('Dataset:Error: geometry file *{}*.obj not found for {}'.format(self.config['obj_filetag'], datapoint_name))
+        
+        verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
+        points = self.sample_mesh_points(self.config['mesh_samples'], verts, faces)
+
+        # Debug
+        # if 'skirt_4_panels_00HUVRGNCG' in datapoint_name:
+        #     meshplot.offline()
+        #     meshplot.plot(points, c=points[:, 0], shading={"point_size": 3.0})
+        return points, verts
+
+    @staticmethod
+    def sample_mesh_points(num_points, verts, faces):
+        """A routine to sample requested number of points from a given mesh
+            Returns points in world coordinates"""
+
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
+        face_ids[face_ids >= len(faces)] = len(faces) - 1  # workaround for https://github.com/libigl/libigl/issues/1531
+
+        # convert to world coordinates
+        points = np.empty(barycentric_samples.shape)
+        for i in range(len(face_ids)):
+            face = faces[face_ids[i]]
+            barycentric_coords = barycentric_samples[i]
+            face_verts = verts[face]
+            points[i] = np.dot(barycentric_coords, face_verts)
+
+        return points
+
+    def _point_classes_from_mesh(self, points, verts, datapoint_name, folder_elements):
+        """Map segmentation from original mesh to sampled points"""
+
+        # load segmentation
+        seg_path_list = [file for file in folder_elements if self.config['obj_filetag'] in file and 'segmentation.txt' in file]
+        with open(str(self.root_path / datapoint_name / seg_path_list[0]), 'r') as f:
+            vert_labels = np.array([line.rstrip() for line in f])  # remove \n
+        map_list, _, _ = igl.snap_points(points, verts)
+        point_segmentation_names = vert_labels[map_list]
+
+        # find those that map to stitches and assign them the closest panel label
+        stitch_points_ids = point_segmentation_names == 'stitch'
+        non_stitch_points_ids = point_segmentation_names != 'stitch'
+        map_stitches, _, _ = igl.snap_points(points[stitch_points_ids], points[non_stitch_points_ids])
+
+        # DEBUG print(f'Mapped to stitches {stitch_points_ids.sum()} with non-stitched {non_stitch_points_ids.sum()}')
+
+        non_stitch_points_ids = np.flatnonzero(non_stitch_points_ids)
+        point_segmentation_names[stitch_points_ids] = point_segmentation_names[non_stitch_points_ids[map_stitches]]
+
+        # Map class names to int ids of loaded classes!
+        if self.panel_classifier is not None:
+            point_segmentation = self.panel_classifier.map(
+                self.template_name(datapoint_name), point_segmentation_names)
+        else:
+            # assign unique ids within given list
+            unique_names = np.unique(point_segmentation_names)
+            unique_dict = {name: idx for idx, name in enumerate(unique_names)}
+            point_segmentation = np.empty(len(point_segmentation_names))
+            for idx, name in enumerate(point_segmentation_names):
+                point_segmentation[idx] = unique_dict[name]
+
+        return point_segmentation
+
+    # ----- Stitches tools -----
     @staticmethod
     def tags_to_stitches(stitch_tags, free_edges_score):
         """
@@ -1219,55 +1336,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         mask[num_panels:] = True
 
         return mask
-
-    def _get_features(self, datapoint_name, folder_elements):
-        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        points = self._sample_points(datapoint_name, folder_elements)
-        return points  # return in 3D
-      
-    def _get_ground_truth(self, datapoint_name, folder_elements):
-        """Get the pattern representation with 3D placement"""
-        pattern, num_edges, num_panels, rots, tranls, stitches, num_stitches, stitch_tags = self._read_pattern(
-            datapoint_name, folder_elements, 
-            pad_panels_to_len=self.config['max_panel_len'],
-            pad_panel_num=self.config['max_pattern_len'],
-            pad_stitches_num=self.config['max_num_stitches'],
-            with_placement=True, with_stitches=True, with_stitch_tags=True)
-        free_edges_mask = self.free_edges_mask(pattern, stitches, num_stitches)
-        empty_panels_mask = self.empty_panels_mask(num_panels, len(pattern))  # useful for evaluation
-
-        return {
-            'outlines': pattern, 'num_edges': num_edges,
-            'rotations': rots, 'translations': tranls, 
-            'num_panels': num_panels, 'empty_panels_mask': empty_panels_mask, 'num_stitches': num_stitches,
-            'stitches': stitches, 'free_edges_mask': free_edges_mask, 'stitch_tags': stitch_tags}
-
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object
-        """
-
-        # undo standardization  (outside of generinc conversion function due to custom std structure)
-        gt_shifts = self.config['standardize']['gt_shift']
-        gt_scales = self.config['standardize']['gt_scale']
-        for key in gt_shifts:
-            if key == 'stitch_tags' and not self.config['explicit_stitch_tags']:  
-                # ignore stitch tags update if explicit tags were not used
-                continue
-            prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
-
-        if 'stitches' in prediction:  # if somehow prediction already has an answer
-            stitches = prediction['stitches']
-        else:  # stitch tags to stitch list
-            stitches = self.tags_to_stitches(
-                torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-                prediction['free_edges_mask']
-            )
-
-        return self._pattern_from_tenzor(
-            dataname, 
-            prediction['outlines'], prediction['rotations'], prediction['translations'], 
-            stitches, 
-            std_config={}, supress_error=True)
 
 
 class Garment2DPatternDataset(Garment3DPatternFullDataset):
@@ -1446,7 +1514,7 @@ def sample_points_from_meshes(mesh_paths, data_config):
     points_list = []
     for mesh in mesh_paths:
         verts, faces = igl.read_triangle_mesh(str(mesh))
-        points = GarmentBaseDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
+        points = Garment3DPatternFullDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
         if 'standardize' in data_config:
             points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
         points_list.append(torch.Tensor(points))

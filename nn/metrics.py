@@ -765,34 +765,28 @@ class ComposedPatternLoss():
         
         if 'shape' in self.l_components or 'rotation' in self.l_components or 'translation' in self.l_components:
             self.regression_loss = nn.MSELoss()  
-        
         if 'loop' in self.l_components:
             self.loop_loss = PanelLoopLoss(self.max_panel_len, data_stats=self.gt_outline_stats)
-        
         if 'stitch' in self.l_components:
             self.stitch_loss = PatternStitchLoss(
                 self.config['stitch_tags_margin'], use_hardnet=self.config['stitch_hardnet_version'])
-        
         if 'stitch_supervised' in self.l_components:
             self.stitch_loss_supervised = nn.MSELoss()
-
         if 'free_class' in self.l_components:
             self.bce_logits_loss = nn.BCEWithLogitsLoss()  # binary classification loss
-        
         if 'att_distribution' in self.l_components:
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
-
         if 'min_empty_att' in self.l_components:
             self.min_empty_panels_att = AttentionEmptyMinLoss()
+        if 'segmentation' in self.l_components:
+            self.segmentation = nn.CrossEntropyLoss()
 
         # -------- quality metrics ------
         if 'shape' in self.q_components:
             self.pattern_shape_quality = PanelVertsL2(self.max_panel_len, data_stats=self.gt_outline_stats)
-
         if 'discrete' in self.q_components:
             self.pattern_nums_quality = NumbersInPanelsAccuracies(
                 self.max_panel_len, data_stats=self.gt_outline_stats)
-
         if 'rotation' in self.q_components:
             self.rotation_quality = UniversalL2(data_stats={
                 'shift': data_stats['gt_shift']['rotations'], 
@@ -916,6 +910,11 @@ class ComposedPatternLoss():
             att_empty_loss = self.min_empty_panels_att(preds['att_weights'], ground_truth['empty_panels_mask'])
             full_loss += self.config['att_empty_weight'] * att_empty_loss
             loss_dict.update(att_empty_loss=att_empty_loss)
+
+        if 'segmentation' in self.l_components:
+            segm_loss = self.segmentation(preds['att_weights'], ground_truth['segmentation'])
+            full_loss += segm_loss
+            loss_dict.update(segm_loss=segm_loss)
 
         return full_loss, loss_dict
 
