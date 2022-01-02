@@ -4,6 +4,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import time
 
 from operator import itemgetter
@@ -778,7 +779,7 @@ class ComposedPatternLoss():
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
         if 'segmentation' in self.l_components:
             # TODO!!! IS IT CE? The output is SparseMax not the logits. Or use logits??
-            self.segmentation = nn.CrossEntropyLoss()
+            self.segmentation = nn.NLLLoss()
 
         # -------- quality metrics ------
         if 'shape' in self.q_components:
@@ -906,7 +907,10 @@ class ComposedPatternLoss():
             loss_dict.update(att_distribution_loss=att_loss)
 
         if 'segmentation' in self.l_components:
-            segm_loss = self.segmentation(preds['att_weights'], ground_truth['segmentation'])
+            
+            print(preds['att_weights'].shape)
+
+            segm_loss = self.segmentation(F.log(preds['att_weights']), ground_truth['segmentation'])
             full_loss += segm_loss
             loss_dict.update(segm_loss=segm_loss)
 
