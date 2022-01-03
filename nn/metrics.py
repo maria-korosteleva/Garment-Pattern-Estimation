@@ -904,9 +904,6 @@ class ComposedPatternLoss():
             loss_dict.update(att_distribution_loss=att_loss)
 
         if 'segmentation' in self.l_components:
-
-            print(preds['att_weights'].shape)
-
             segm_loss = self.segmentation(torch.log(preds['att_weights']), ground_truth['segmentation'])
             full_loss += segm_loss
             loss_dict.update(segm_loss=segm_loss)
