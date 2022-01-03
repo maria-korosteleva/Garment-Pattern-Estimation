@@ -28,7 +28,7 @@ class Trainer():
             learning_rate=0.002,
             optimizer='Adam',
             weight_decay=0,
-            lr_scheduling={ 'mode': '1cyclic' },
+            lr_scheduling={'mode': '1cyclic'},
             early_stopping={
                 'window': 0.0001,
                 'patience': 50
