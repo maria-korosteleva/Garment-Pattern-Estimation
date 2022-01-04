@@ -821,6 +821,9 @@ class ComposedPatternLoss():
 
         # ------ GT pre-processing --------
         if self.config['panel_order_inariant_loss']:  # match panel order
+            # NOTE: Not supported for 
+            if 'segmentation' in self.l_components: 
+                raise NotImplementedError('Order matching not supported for training with segmentation losses')
             gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth) 
             loss_dict.update(order_metrics)
         else:  # keep original
@@ -904,7 +907,23 @@ class ComposedPatternLoss():
             loss_dict.update(att_distribution_loss=att_loss)
 
         if 'segmentation' in self.l_components:
-            segm_loss = self.segmentation(torch.log(preds['att_weights']), ground_truth['segmentation'])
+
+            # DEBUG
+            print(preds['att_weights'].shape, ground_truth['segmentation'].shape)
+            pred_flat = preds['att_weights'].view(-1, preds['att_weights'].shape[-1])
+            gt_flat = ground_truth['segmentation'].view(-1)
+            print(pred_flat.shape, gt_flat.shape)
+
+            print(pred_flat)
+            print('xxxx')
+            print(gt_flat)
+            print('-----------')
+
+
+            segm_loss = self.segmentation(torch.log(pred_flat), gt_flat)
+
+            print(segm_loss)
+
             full_loss += segm_loss
             loss_dict.update(segm_loss=segm_loss)
 
@@ -1078,7 +1097,9 @@ class ComposedPatternLoss():
             gt_updated['outlines'] = self._feature_permute(ground_truth['outlines'], gt_permutation)
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
             gt_updated['empty_panels_mask'] = self._feature_permute(ground_truth['empty_panels_mask'], gt_permutation)
-            gt_updated['segmentation'] = self._feature_permute(ground_truth['segmentation'], gt_permutation)
+            
+            # Not supported
+            # gt_updated['segmentation'] = self._feature_permute(ground_truth['segmentation'], gt_permutation)
 
             if 'rotation' in self.l_components:
                 gt_updated['rotations'] = self._feature_permute(ground_truth['rotations'], gt_permutation)

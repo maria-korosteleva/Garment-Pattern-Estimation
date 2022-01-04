@@ -361,7 +361,6 @@ class BalancedBatchSampler():
         for data_class in self.data_ids_by_type:
             self.data_ids_by_type[data_class] = ids_by_type[data_class].tolist()
 
-        # print(self.data_ids_by_type)
         self.class_names = list(self.data_ids_by_type.keys())
         self.batch_size = batch_size
         self.data_size = sum(len(self.data_ids_by_type[i]) for i in ids_by_type)

@@ -623,6 +623,9 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
             points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
 
+        # DEBUG 
+        print(f'Point Weights', points_weights)
+
         # ----- Getting per-panel features after attention application ------
         all_panel_features = []
         for panel_id in range(points_weights.shape[-1]):
