@@ -586,7 +586,8 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
-            Sparsemax(dim=1)  # in the feature dimention
+            # Sparsemax(dim=1)  # in the feature dimention
+            nn.Softmax(dim=1)   # DEBUG temporary solution for segmentation losses
         )
 
         # additional panel encoding post-procedding
@@ -624,7 +625,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
             points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
 
         # DEBUG 
-        print(f'Point Weights', points_weights)
+        # print(f'Point Weights', points_weights)
 
         # ----- Getting per-panel features after attention application ------
         all_panel_features = []

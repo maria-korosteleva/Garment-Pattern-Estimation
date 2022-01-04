@@ -909,20 +909,25 @@ class ComposedPatternLoss():
         if 'segmentation' in self.l_components:
 
             # DEBUG
-            print(preds['att_weights'].shape, ground_truth['segmentation'].shape)
+            # print(preds['att_weights'].shape, ground_truth['segmentation'].shape)
             pred_flat = preds['att_weights'].view(-1, preds['att_weights'].shape[-1])
             gt_flat = ground_truth['segmentation'].view(-1)
-            print(pred_flat.shape, gt_flat.shape)
+            # print(pred_flat.shape, gt_flat.shape)
 
-            print(pred_flat)
-            print('xxxx')
-            print(gt_flat)
-            print('-----------')
+            # DEBUG
+            # with torch.no_grad():
+            #     print(torch.sum(pred_flat, dim=1).shape)
+            #     print(torch.mean(torch.sum(pred_flat, dim=1)))
 
+            # print(pred_flat)
+            # print('xxxx')
+            # print(gt_flat, gt_flat.max(), gt_flat.min())
+            # print('-----------')
 
+            # NOTE!!! SparseMax produces exact zeros
             segm_loss = self.segmentation(torch.log(pred_flat), gt_flat)
 
-            print(segm_loss)
+            # print(segm_loss)
 
             full_loss += segm_loss
             loss_dict.update(segm_loss=segm_loss)
