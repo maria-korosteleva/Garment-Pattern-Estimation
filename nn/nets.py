@@ -586,8 +586,8 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
-            # Sparsemax(dim=1)  # in the feature dimention
-            nn.Softmax(dim=1)   # DEBUG temporary solution for segmentation losses
+            Sparsemax(dim=1)  # in the feature dimention
+            # nn.Softmax(dim=1)   # DEBUG temporary solution for segmentation losses
         )
 
         # additional panel encoding post-procedding
