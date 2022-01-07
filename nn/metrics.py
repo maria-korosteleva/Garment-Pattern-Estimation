@@ -5,6 +5,8 @@
 import torch
 import torch.nn as nn
 
+from entmax import SparsemaxLoss  # https://github.com/deep-spin/entmax
+
 import gap
 
 # My modules
@@ -775,8 +777,8 @@ class ComposedPatternLoss():
         if 'att_distribution' in self.l_components:
             self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
         if 'segmentation' in self.l_components:
-            # TODO!!! IS IT CE? The output is SparseMax not the logits. Or use logits??
-            self.segmentation = nn.NLLLoss()
+            # Segmenation output is Sparsemax scores (not SoftMax), hence using the appropriate loss
+            self.segmentation = SparsemaxLoss()
 
         # -------- quality metrics ------
         if 'shape' in self.q_components:
@@ -925,7 +927,7 @@ class ComposedPatternLoss():
             # print('-----------')
 
             # NOTE!!! SparseMax produces exact zeros
-            segm_loss = self.segmentation(torch.log(pred_flat), gt_flat)
+            segm_loss = self.segmentation(pred_flat, gt_flat)
 
             # print(segm_loss)
 
