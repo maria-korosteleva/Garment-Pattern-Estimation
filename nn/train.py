@@ -195,7 +195,7 @@ if __name__ == "__main__":
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     data_config.update(panel_classification='./nn/data_configs/panel_classes_extended.json')  # DEBUG Just for now!
