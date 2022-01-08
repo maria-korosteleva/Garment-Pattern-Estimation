@@ -1,7 +1,7 @@
 {
     "dress_sleeveless": {
         "waist_wideness": [0.9, 1.2],
-        "skirt_length": [0.8, 1.9]
+        "skirt_length": [0.9, 1.9]
     },
     "jacket": {
         "sllength": [5, 37],
@@ -38,10 +38,9 @@
     },
     "wb_pants_straight": {},
 
-
     "dress": {
         "waist_wideness": [0.9, 1.2],
-        "skirt_length": [0.8, 1.9],
+        "skirt_length": [0.9, 1.9],
         "sllength": [5, 37]
     },
     "jacket_hood_sleeveless": {

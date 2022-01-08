@@ -458,6 +458,10 @@ class BaseDataset(Dataset):
                 # The sample sewing patterns are randomly generated in the first place without particulat order
                 # hence, simple slicing of elements would be equivalent to sampling them randomly from the list
                 clean_list = clean_list[:self.config['max_datapoints_per_type']] 
+
+                # DEBUG
+                print(f'Final number: {data_folder}: {len(clean_list)}')
+
             self.datapoints_names += clean_list
         self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
         self.config['size'] = len(self)
@@ -832,9 +836,7 @@ class GarmentBaseDataset(BaseDataset):
 
         try: 
             datapoints_names.remove(dataset_folder + '/renders')  # TODO read ignore list from props
-            print('Dataset {}:: /renders/ subfolder ignored'.format(dataset_folder))
         except ValueError:  # it's ok if there is no subfolder for renders
-            print('GarmentBaseDataset::Info::No renders subfolder found in {}'.format(dataset_folder))
             pass
 
         try: 
@@ -857,7 +859,7 @@ class GarmentBaseDataset(BaseDataset):
             for fail in fails_dict[subsection]:
                 try:
                     datapoints_names.remove(dataset_folder + '/' + fail)
-                    print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
+                    # DEBUG print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
         
@@ -892,7 +894,7 @@ class GarmentBaseDataset(BaseDataset):
                 final_list.append(datapoint_name)
         
         # DEBUG
-        print(f'{dataset_folder}::{len(final_list)} of {len(datapoint_names)}')
+        print(f'{self.__class__.__name__}::Filtering::{dataset_folder}::{len(final_list)} of {len(datapoint_names)}')
 
         return final_list
 

@@ -150,7 +150,7 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'} 
+        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count'}  # DEBUG 'filename': './wandb/data_split.json'} 
         data_config = {
             'max_datapoints_per_type': 800,  # upper limit of how much data to grab from each type
             'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filtered-att', 
+        run_name='Filtered-att-new-split', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -208,8 +208,8 @@ if __name__ == "__main__":
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
-    # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
