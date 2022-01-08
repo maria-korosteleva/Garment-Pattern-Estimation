@@ -846,7 +846,7 @@ class GarmentBaseDataset(BaseDataset):
             return datapoints_names
 
         if not dataset_props['to_subfolders']:
-                raise NotImplementedError('Only working with datasets organized with subfolders')
+            raise NotImplementedError('Only working with datasets organized with subfolders')
 
         # NOTE A little side-effect here, since we are loading the dataset_properties anyway
         self.data_folders_nicknames[dataset_folder] = dataset_props['templates'].split('/')[-1].split('.')[0]
@@ -861,7 +861,40 @@ class GarmentBaseDataset(BaseDataset):
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
         
+        # filter by parameters
+        if 'filter_by_params' in self.config and self.config['filter_by_params']:
+            datapoints_names = self.filter_by_params(
+                self.config['filter_by_params'], dataset_folder, datapoints_names)
+
         return datapoints_names
+
+    def filter_by_params(self, filter_file, dataset_folder, datapoint_names):
+        """ Remove from considerstion datapoint that don't pass the parameter filter
+
+            * filter_file -- path to .json file with allowed parameter ranges
+            * dataset_folder -- data folder to filter
+            * datapoint_names -- list of samples to apply filter to
+        """
+        with open(filter_file, 'r') as f:
+            param_filters = json.load(f)
+
+        final_list = []
+        for datapoint_name in datapoint_names:
+            pattern = NNSewingPattern(self.root_path / datapoint_name / 'specification.json')
+            template_name = self.template_name(datapoint_name)
+            to_add = True
+            for param in param_filters[template_name]:
+                value = pattern.parameters[param]['value']
+                if value < param_filters[template_name][param][0] or value > param_filters[template_name][param][1]:
+                    to_add = False
+                    break
+            if to_add:
+                final_list.append(datapoint_name)
+        
+        # DEBUG
+        print(f'{dataset_folder}::{len(final_list)} of {len(datapoint_names)}')
+
+        return final_list
 
     # ------------- Datapoints Utils --------------
     def template_name(self, datapoint_name):

@@ -678,7 +678,7 @@ if __name__ == "__main__":
         panel_classifier=PanelClasses('./nn/panel_classes.json'), 
         template_name='tee')
 
-    empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/panel_classes_extended.json'))
+    empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/data_configs/panel_classes_extended.json'))
     print(pattern.panel_order())
 
     # print(pattern.stitches_as_tags())

@@ -98,7 +98,7 @@ def get_values_from_args():
     }
 
     loss_config = {
-        'loss_components': ['shape', 'loop', 'rotation', 'translation', 'segmentation'],
+        'loss_components': ['shape', 'loop', 'rotation', 'translation'],  # , 'segmentation'],
 
         # Extra loss parameters
         'stitch_tags_margin': args.st_tag_margin,
@@ -145,7 +145,8 @@ def get_data_config(in_config, old_stats=False):
             'max_pattern_len': data_config['max_pattern_len'],
             'max_panel_len': data_config['max_panel_len'],
             'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
-            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None  # keep the numbers too
+            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None,  # keep the numbers too
+            'filter_by_params': './nn/data_configs/param_filter.json'   # DEBUG Should be loaded too though!
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
@@ -155,7 +156,8 @@ def get_data_config(in_config, old_stats=False):
             'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
-            'panel_classification': './nn/panel_classes_extended.json'
+            'panel_classification': './nn/data_configs/panel_classes_extended.json',
+            'filter_by_params': './nn/data_configs/param_filter.json'
         }  
 
     # update with freshly configured values
@@ -189,14 +191,14 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-att-segmentation', 
+        run_name='Filtered-att', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
-    data_config.update(panel_classification='./nn/panel_classes_extended.json')  # DEBUG Just for now!
+    data_config.update(panel_classification='./nn/data_configs/panel_classes_extended.json')  # DEBUG Just for now!
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(
