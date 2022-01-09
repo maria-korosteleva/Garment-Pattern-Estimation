@@ -491,7 +491,9 @@ class BaseDataset(Dataset):
 
     def save_to_wandb(self, experiment):
         """Save data cofiguration to current expetiment run"""
+        # config
         experiment.add_config('dataset', self.config)
+
 
     def update_transform(self, transform):
         """apply new transform when loading the data"""
@@ -814,6 +816,7 @@ class GarmentBaseDataset(BaseDataset):
         """Save data cofiguration to current expetiment run"""
         super().save_to_wandb(experiment)
 
+        # dataset props files
         for dataset_folder in self.data_folders:
             try:
                 shutil.copy(
@@ -822,10 +825,17 @@ class GarmentBaseDataset(BaseDataset):
             except FileNotFoundError:
                 pass
         
+        # panel classes
         if self.panel_classifier is not None:
             shutil.copy(
                 self.panel_classifier.filename, 
                 experiment.local_path() / ('panel_classes.json'))
+
+        # param filter file
+        if 'filter_by_params' in self.config and self.config['filter_by_params']:
+            shutil.copy(
+                self.config['filter_by_params'], 
+                experiment.local_path() / ('param_filter.json'))
     
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
