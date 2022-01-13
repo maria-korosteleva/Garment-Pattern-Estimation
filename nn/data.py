@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 import torch
+from torch._C import Value
 from torch.utils.data import DataLoader, Dataset, Subset
 import igl
 # import meshplot  # when uncommented, could lead to problems with wandb run syncing
@@ -1272,10 +1273,18 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         """Map segmentation from original mesh to sampled points"""
 
         # load segmentation
+
+        print(datapoint_name)   # DEBUG
+
         seg_path_list = [file for file in folder_elements if self.config['obj_filetag'] in file and 'segmentation.txt' in file]
         with open(str(self.root_path / datapoint_name / seg_path_list[0]), 'r') as f:
             vert_labels = np.array([line.rstrip() for line in f])  # remove \n
         map_list, _, _ = igl.snap_points(points, verts)
+
+        # DEBUG
+        if len(verts) > len(vert_labels):
+            raise ValueError(f'Not enough segmentation labels -- {len(vert_labels)} for {len(verts)} vertices')
+
         point_segmentation_names = vert_labels[map_list]
 
         # find those that map to stitches and assign them the closest panel label
