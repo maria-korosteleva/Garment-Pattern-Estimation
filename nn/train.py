@@ -98,7 +98,7 @@ def get_values_from_args():
     }
 
     loss_config = {
-        'loss_components': ['shape', 'loop', 'rotation', 'translation'],  # , 'segmentation'],
+        'loss_components': ['shape', 'loop', 'rotation', 'translation', 'segmentation'],
 
         # Extra loss parameters
         'stitch_tags_margin': args.st_tag_margin,
@@ -135,7 +135,8 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
+            # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
+            run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  # all data 800
             # run_name='segmentation', run_id='pq1lcbo7'  # DEBUG
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -159,7 +160,7 @@ def get_data_config(in_config, old_stats=False):
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes.json',
-            'filter_by_params': ''   # './nn/data_configs/param_filter.json'
+            'filter_by_params': './nn/data_configs/param_filter.json'
         }  
 
     # update with freshly configured values
@@ -193,11 +194,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-att-5000-less-cl', 
+        run_name='Filtered-condenced-segment', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
