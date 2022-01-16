@@ -1275,8 +1275,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # load segmentation
         seg_path_list = [file for file in folder_elements if self.config['obj_filetag'] in file and 'segmentation.txt' in file]
 
-        print(datapoint_name, ' : ', seg_path_list)  # DEBUG
-
         with open(str(self.root_path / datapoint_name / seg_path_list[0]), 'r') as f:
             vert_labels = np.array([line.rstrip() for line in f])  # remove \n
         map_list, _, _ = igl.snap_points(points, verts)
