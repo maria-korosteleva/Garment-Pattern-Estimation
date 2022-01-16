@@ -716,6 +716,7 @@ class ComposedPatternLoss():
             'loss_components': ['shape'],  # 'loop',  
             'quality_components': [],  # 'loop',  
             'loop_loss_weight': 1.,
+            'segm_loss_weight': 0.05,
             'stitch_tags_margin': 0.3,
             'epoch_with_stitches': 40, 
             'stitch_supervised_weight': 0.1,   # only used when explicit stitches are enabled
@@ -931,7 +932,7 @@ class ComposedPatternLoss():
 
             # print(segm_loss)
 
-            full_loss += segm_loss
+            full_loss += self.config['segm_loss_weight'] * segm_loss
             loss_dict.update(segm_loss=segm_loss)
 
         return full_loss, loss_dict

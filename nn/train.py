@@ -104,6 +104,7 @@ def get_values_from_args():
         'stitch_tags_margin': args.st_tag_margin,
         'stitch_hardnet_version': args.st_tag_hardnet,
         'loop_loss_weight': 1.,
+        'segm_loss_weight': 0.05,
         'stitch_tags_margin': 0.3,
         'epoch_with_stitches': 1000,  # turn off stitches
 
@@ -193,8 +194,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Filtered-condenced-segment', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='Filtered-condenced-w-segment', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
