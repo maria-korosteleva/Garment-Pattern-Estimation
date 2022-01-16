@@ -1282,7 +1282,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         # DEBUG
         if len(verts) > len(vert_labels):
             point_segmentation = np.zeros(len(map_list))
-            print(f'{self.__class__.__name__}::WARNING::Not enough segmentation labels -- {len(vert_labels)} for {len(verts)} vertices. Setting segmenations to zero')
+            print(f'{self.__class__.__name__}::{datapoint_name}::WARNING::Not enough segmentation labels -- {len(vert_labels)} for {len(verts)} vertices. Setting segmenations to zero')
 
             return point_segmentation.astype(np.int64)
 
