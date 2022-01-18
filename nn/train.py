@@ -136,8 +136,9 @@ def get_data_config(in_config, old_stats=False):
         old_experiment = WandbRunWrappper(
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
-            # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  # all data 800
-            run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  # all data 800
+            # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  
+            # run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  
+            run_name='All-5000-condenced-classes', run_id='1plkspqt' 
             # run_name='segmentation', run_id='pq1lcbo7'  # DEBUG
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -161,7 +162,7 @@ def get_data_config(in_config, old_stats=False):
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
-            'filter_by_params': './nn/data_configs/param_filter.json'
+            'filter_by_params': ''  # './nn/data_configs/param_filter.json'
         }  
 
     # update with freshly configured values
@@ -182,11 +183,11 @@ if __name__ == "__main__":
         'wb_pants_straight_1500',
         'skirt_2_panels_1200',
         'jacket_2200',
-        'tee_sleeveless_short_extended_2500',   # 'tee_sleeveless_1800',
+        'tee_sleeveless_1800',   # 'tee_sleeveless_short_extended_2500',   # 
         'wb_dress_sleeveless_2600',
         'jacket_hood_2700',
         'pants_straight_sides_1000',
-        'tee_short_extended_3000',   # 'tee_2300',
+        'tee_2300',  # 'tee_short_extended_3000',   # 
         'skirt_4_panels_1600'
     ]
     in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
@@ -195,11 +196,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filtered-condenced-extra-tees', 
+        run_name='All-5000-att-condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
