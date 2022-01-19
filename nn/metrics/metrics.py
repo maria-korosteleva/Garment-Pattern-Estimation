@@ -286,10 +286,6 @@ class PanelVertsL2():
         correct_panel_errors = []
         # panel_mask = correct_mask.t().repeat(num_panels) if correct_mask is not None else None
         panel_mask = torch.repeat_interleave(correct_mask, num_panels) if correct_mask is not None else None
-        
-        # DEBUG 
-        print(correct_mask.shape, panel_mask.shape)
-        print(correct_mask, panel_mask)
 
         # panel_mask = panel_mask.view(-1) if correct_mask is not None else None
 
