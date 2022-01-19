@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
-        'All-predefined-order-att-max', 's8fj6bqz', in_batch_size=5, in_device='cuda:0')
+        'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=30, in_device='cuda:0')
     prediction_path = shape_datawrapper.predict(
         shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
     # merge into one repo
@@ -93,19 +93,21 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='All-stitches-on-preds', 
+        run_name='Filtered-stitches-on-predss-split', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     in_data_config, in_nn_config, in_loss_config, net_seed = get_default_values()
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    _, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, _, _ = shape_experiment.data_info()
 
     data_config.update(data_folders=dataset_list)
     dataset = data.GarmentStitchPairsDataset(data_path, data_config, gt_caching=True, feature_caching=True)
 
     # -- Training --
     # No split provided -- use the whole data!!
-    trainer = Trainer(experiment, dataset, with_norm=True, with_visualization=False)
+    # TRY with split
+    trainer = Trainer(experiment, dataset, data_split=split, with_norm=True, with_visualization=False)
     trainer.init_randomizer(net_seed)
     model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 

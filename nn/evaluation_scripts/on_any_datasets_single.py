@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='All-predefined-order-stitches', 
-    run_id='6cuhgrcs')  # finished experiment
+    run_name='Filtered-att-data-condenced-classes', 
+    run_id='390wuxbm')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -48,7 +48,12 @@ data_config.update(data_folders=dataset_list)
 # data_config.pop('max_num_stitches', None)  # NOTE forces re-evaluation of max pattern sizes (but not standardization stats) 
 data_config.update(max_datapoints_per_type=150)
 
-batch_size = 5
+if not experiment.is_finished():
+    # Use files appropriate for the experiment
+    data_config.update({'filter_by_params': './nn/data_configs/param_filter.json'})
+    data_config.update({'panel_classification': './nn/data_configs/panel_classes_condenced.json'})
+
+batch_size = 5   # fit on less powerfull machines
 
 if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
@@ -73,18 +78,18 @@ print('Full metrics on unseen set: {}'.format(loss))
 breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
 print('Metrics per dataset: {}'.format(breakdown))
 
-# ---------- Log to the experiment -----------
-
-experiment.add_statistic('unseen_full', loss)
-experiment.add_statistic('unseen', breakdown)
-experiment.add_statistic('unseen_folders', dataset_list)
-
 # -------- Predict ---------
-# save predictions to file
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
 print('Saved to {}'.format(prediction_path))
-# # reflect predictions info in expetiment
-experiment.add_statistic('unseen_pred_folder', prediction_path.name)
 
-art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
-experiment.add_artifact(prediction_path, art_name, 'result')
+if experiment.is_finished():  # records won't be updates for unfinished experiment anyway
+    # ---------- Log to the experiment -----------
+    experiment.add_statistic('unseen_full', loss)
+    experiment.add_statistic('unseen', breakdown)
+    experiment.add_statistic('unseen_folders', dataset_list)
+
+    # reflect predictions info in expetiment
+    experiment.add_statistic('unseen_pred_folder', prediction_path.name)
+
+    art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
+    experiment.add_artifact(prediction_path, art_name, 'result')

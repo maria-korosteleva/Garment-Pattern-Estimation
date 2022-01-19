@@ -60,8 +60,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='All-stitches-800', 
-    run_id='35515dwx')  # finished experiment
+    run_name='Filtered-att-data-condenced-classes', 
+    run_id='390wuxbm')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -82,7 +82,7 @@ else:
 print(dataset.config)
 print('Batch: {}, Split: {}'.format(batch_size, split))
 
-# batch_size = 5
+batch_size = 5
 
 datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
 
@@ -128,11 +128,11 @@ model.module.loss.debug_prints = True
 # experiment.add_statistic('test', test_breakdown)
 
 # # -------- Predict ---------
-# # save prediction for validation to file
+# save prediction for validation to file
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-# print('Saved to {}'.format(prediction_path))
-# # # reflect predictions info in expetiment
-# experiment.add_statistic('pred_folder', prediction_path.name)
+print('Saved to {}'.format(prediction_path))
+# # reflect predictions info in expetiment
+experiment.add_statistic('test_pred_folder', prediction_path.name)
 
-# art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
-# experiment.add_artifact(prediction_path, art_name, 'result')
+art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
+experiment.add_artifact(prediction_path, art_name, 'result')
