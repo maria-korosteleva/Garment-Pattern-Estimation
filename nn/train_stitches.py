@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
-        'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=30, in_device='cuda:0')
+        'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=60, in_device='cuda:0')
     prediction_path = shape_datawrapper.predict(
         shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
     # merge into one repo
