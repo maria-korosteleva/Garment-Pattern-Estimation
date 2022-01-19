@@ -20,7 +20,7 @@ conda activate Garments
 ## 2. Dependencies
 
 ```
-conda install pytorch cudatoolkit=10.2 -c pytorch
+conda install pytorch=1.9 cudatoolkit=10.2 -c pytorch
 
 conda install -c conda-forge igl=2.2.1
 
@@ -37,9 +37,9 @@ pip install -r requirements.txt
 git clone <data_gen>
 ```
 
-Add path to custom packages to PYTHONPATH, for example in the terminal directly:
+Add path to custom packages to PYTHONPATH, for example, in the terminal:
 ```
-export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Estimation/packages
+export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Data/packages
 ```
 
 

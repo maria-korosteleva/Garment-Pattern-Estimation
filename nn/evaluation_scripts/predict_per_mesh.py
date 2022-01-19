@@ -2,6 +2,7 @@
 
 import argparse
 from datetime import datetime
+from genericpath import exists
 import igl
 import numpy as np
 from pathlib import Path
@@ -18,6 +19,7 @@ sys.path.insert(0, parentdir)
 import customconfig, nets, data
 from experiment import WandbRunWrappper
 from pattern.wrappers import VisPattern
+from pattern_converter import NNSewingPattern, InvalidPatternDefError
 
 
 def get_meshes_from_args():
@@ -69,6 +71,11 @@ if __name__ == "__main__":
         project_name='Garments-Reconstruction', 
         run_name='multi-all-fin', 
         run_id='216nexgv')  # finished experiment
+    stitch_experiment = WandbRunWrappper(
+        system_info['wandb_username'],
+        project_name='Garments-Reconstruction', 
+        run_name='multi-all-fin', 
+        run_id='216nexgv')  # finished experiment
     if not experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
 
@@ -91,4 +98,38 @@ if __name__ == "__main__":
 
     # ---- save ----
     names = [VisPattern.name_from_path(mesh) for mesh in mesh_paths]
-    data.save_garments_prediction(predictions, save_to, data_config, names)
+    saving_path = save_to / 'shape'
+    saving_path.mkdir(parents=True, exists_ok=True)
+    data.save_garments_prediction(predictions, saving_path, data_config, names)
+
+    # ========== Stitch prediction =========
+
+    # ----- Model (Stitch Prediction) ------
+    _, _, data_config = stitch_experiment.data_info()  # need to get data stats
+    model_class = getattr(nets, stitch_experiment.NN_config()['model'])
+    stitch_model = model_class(data_config, stitch_experiment.NN_config(), stitch_experiment.NN_config()['loss'])
+    stitch_model.load_state_dict(stitch_experiment.load_best_model()['model_state_dict'])
+    stitch_model = stitch_model.to(device=device)
+    stitch_model.eval()
+
+    # ----- predict & save stitches ------
+    saving_path = save_to / 'stitched'
+    saving_path.mkdir(parents=True, exists_ok=True)
+    for idx, name in enumerate(names):
+        # "unbatch" dictionary
+        prediction = {}
+        for key in predictions:
+            prediction[key] = predictions[key][idx]
+        pattern = NNSewingPattern(view_ids=False)
+        pattern.name = name
+        try:
+            pattern.pattern_from_tensors(
+                prediction['outlines'], prediction['rotations'], prediction['translations'], 
+                padded=True)   
+            pattern.stitches_from_pair_classifier(stitch_model, data_config['standardize'])
+            pattern.serialize(save_to / 'stitched', to_subfolder=True)
+
+        except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+            print(e)
+            print('Saving predictions::Skipping pattern {}'.format(name))
+            pass

@@ -491,8 +491,7 @@ class NNSewingPattern(VisPattern):
                     for col_idx in range(len(edges_j)):
                         pair_id = ((panel_i, row_idx), (panel_j, col_idx))
                         pairs_mapping.append(pair_id)
-
-
+                        
                         mask.append(pair_id in stitch_set or (pair_id[1], pair_id[0]) in stitch_set)
 
         if len(edge_pairs_list) == 0:
