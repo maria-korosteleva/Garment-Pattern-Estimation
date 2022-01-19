@@ -361,8 +361,12 @@ class NNSewingPattern(VisPattern):
         # stitches
         for stitch in self.pattern['stitches']:
             pair = []
-            for side in [0, 1]:
-                pair.append(edges_3d[stitch[side]['panel']][stitch[side]['edge']])
+            try:
+                for side in [0, 1]:
+                    pair.append(edges_3d[stitch[side]['panel']][stitch[side]['edge']])
+            except IndexError:
+                print(f'Warning::{self.name}::Missing edge while constructing stitch pairs')
+                pass
 
             if randomize_edges and rng.integers(2):  # randomly change the order in pair
                 # flip the edge
