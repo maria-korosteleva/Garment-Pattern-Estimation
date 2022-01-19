@@ -1576,26 +1576,30 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
 
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):
         super()._clean_datapoint_list(datapoints_names, dataset_folder)
-        if self.filter_correct_n_panels:
-            final_list = []
-            for datapoint_name in datapoints_names:
-                folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
-                spec_list = [file for file in folder_elements if 'specification.json' in file]
-                if not spec_list:
-                    raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
-                
-                # Load from prediction if exists
-                predicted_list = [file for file in spec_list if 'predicte' in file]
-                spec = predicted_list[0] if len(predicted_list) > 0 else spec_list[0]
-                pattern = NNSewingPattern(self.root_path / datapoint_name / spec)
+        
+        final_list = []
+        for datapoint_name in datapoints_names:
+            folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+            spec_list = [file for file in folder_elements if 'specification.json' in file]
+            if not spec_list:
+                raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+            
+            # Load from prediction if exists
+            predicted_list = [file for file in spec_list if 'predicte' in file]
+            spec = predicted_list[0] if len(predicted_list) > 0 else spec_list[0]
+            pattern = NNSewingPattern(self.root_path / datapoint_name / spec)
+
+            if not len(pattern.pattern['stitches']):
+                print(f'{self.__class__.__name__}::ERROR::{datapoint_name}::has no stitches')
+                continue
+            if self.filter_correct_n_panels:
                 correct_num_panels = pattern.spec['properties']['correct_num_panels']
                 actual_num_panels = len(pattern.pattern['panels'])
-
-                if correct_num_panels == actual_num_panels:
-                    final_list.append(datapoint_name)
-            return final_list
-        else:
-            return datapoints_names
+                if correct_num_panels != actual_num_panels:
+                    continue
+            
+            final_list.append(datapoint_name)
+        return final_list
 
 # ------------------------- Utils for non-dataset examples --------------------------
 
