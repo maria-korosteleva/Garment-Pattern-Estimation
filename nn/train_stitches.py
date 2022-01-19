@@ -35,7 +35,7 @@ def get_default_values():
 
     loss_config = {}
 
-    return data_config, nn_config, loss_config, args.net_seed
+    return data_config, nn_config, loss_config, 10  # net seed
 
 
 def get_data_config(in_config, old_stats=False):
@@ -83,10 +83,12 @@ if __name__ == "__main__":
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
         'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=60, in_device='cuda:0')
-    prediction_path = shape_datawrapper.predict(
-        shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
-    # merge into one repo
-    data_path = merge_repos(prediction_path, ['train', 'validation', 'test'])
+    # prediction_path = shape_datawrapper.predict(
+    #     shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
+    # merge into one repo -- UPD. WHY????
+    # data_path = merge_repos(prediction_path, ['train', 'validation', 'test'])
+
+    data_path = Path('/DB/Garment-Outputs/nn_pred_220119-20-47-14/merged')
     dataset_list = os.listdir(str(data_path))
 
     # -- Setup stitch experiment --
@@ -106,7 +108,7 @@ if __name__ == "__main__":
 
     # -- Training --
     # No split provided -- use the whole data!!
-    # TRY with split
+    # UPD. TRY with split like a normal person
     trainer = Trainer(experiment, dataset, data_split=split, with_norm=True, with_visualization=False)
     trainer.init_randomizer(net_seed)
     model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
