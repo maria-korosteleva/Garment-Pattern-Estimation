@@ -55,8 +55,23 @@ print('Sitch metrics: {}'.format(metrics_values))
 breakdown = eval_metrics(stitch_model, stitch_datawrapper, 'full_per_data_folder')
 print('Stitch metrics per dataset: {}'.format(breakdown))
 
+# only on examples with correctly predicted number of panels
+corr_stitch_dataset = data.GarmentStitchPairsDataset(
+    prediction_path / 'full', 
+    stitch_datawrapper.dataset.config, 
+    gt_caching=True, feature_caching=True, filter_correct_n_panels=True)
+split, batch_size, _ = stitch_experiment.data_info()  
+corr_stitch_datawrapper = data.DatasetWrapper(corr_stitch_dataset, known_split=split, batch_size=batch_size)
+
+corr_metrics_values = eval_metrics(stitch_model, corr_stitch_datawrapper, 'full')
+print('Sitch correct metrics: {}'.format(metrics_values))
+corr_breakdown = eval_metrics(stitch_model, corr_stitch_datawrapper, 'full_per_data_folder')
+print('Stitch correct metrics per dataset: {}'.format(breakdown))
+
 stitch_experiment.add_statistic('unseen_preds_full', metrics_values)
 stitch_experiment.add_statistic('unseen_preds', breakdown)
+stitch_experiment.add_statistic('unseen_corr_preds_full', corr_metrics_values)
+stitch_experiment.add_statistic('unseen_corr_preds', corr_breakdown)
 stitch_experiment.add_statistic('unseen_shape_model', 'All-predefined-order-att-max-s8fj6bqz')
 
 # # -------- Predict ---------

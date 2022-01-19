@@ -23,7 +23,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filtered-att-data-condenced-classes', 
+    run_name='Filtered-att-data-condenced-classes',
     run_id='390wuxbm')  # finished experiment
 
 if not experiment.is_finished():
@@ -31,12 +31,12 @@ if not experiment.is_finished():
 
 # -------- data -------
 dataset_list = [
-    'jacket_hood_sleeveless_150',
-    'skirt_waistband_150', 
+    # 'jacket_hood_sleeveless_150',
+    # 'skirt_waistband_150', 
     'tee_hood_150',
     'jacket_sleeveless_150',
-    'dress_150',
-    'jumpsuit_150',
+    # 'dress_150',
+    # 'jumpsuit_150',
     'wb_jumpsuit_sleeveless_150'
 ]
 

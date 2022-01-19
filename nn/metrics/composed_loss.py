@@ -404,25 +404,38 @@ class ComposedPatternLoss():
         """
         loss_dict = {}
 
-        if 'shape' in self.q_components:
-            shape_l2 = self.pattern_shape_quality(
-                preds['outlines'], ground_truth['outlines'], gt_num_edges)
-            loss_dict.update(panel_shape_l2=shape_l2)
-
+        correct_mask = None
         if 'discrete' in self.q_components:
-            num_panels_acc, num_edges_acc = self.pattern_nums_quality(
+            num_panels_acc, num_edges_acc, correct_mask, num_edges_correct_acc = self.pattern_nums_quality(
                 preds['outlines'], gt_num_edges, ground_truth['num_panels'], pattern_names=names)
-            loss_dict.update(num_panels_accuracy=num_panels_acc, num_edges_accuracy=num_edges_acc,)
-            
+
+            print(correct_mask)  # DEBUG
+
+            loss_dict.update(
+                num_panels_accuracy=num_panels_acc, 
+                num_edges_accuracy=num_edges_acc,
+                corr_num_edges_accuracy=num_edges_correct_acc)
+
+        if 'shape' in self.q_components:
+            shape_l2, correct_shape_l2 = self.pattern_shape_quality(
+                preds['outlines'], ground_truth['outlines'], gt_num_edges, correct_mask)
+            loss_dict.update(
+                panel_shape_l2=shape_l2, 
+                corr_panel_shape_l2=correct_shape_l2, 
+            )
+        
+        # DEBUG
+        print(loss_dict)
+
         if 'rotation' in self.q_components:
-            rotation_l2 = self.rotation_quality(
-                preds['rotations'], ground_truth['rotations'])
-            loss_dict.update(rotation_l2=rotation_l2)
+            rotation_l2, correct_rotation_l2 = self.rotation_quality(
+                preds['rotations'], ground_truth['rotations'], correct_mask)
+            loss_dict.update(rotation_l2=rotation_l2, corr_rotation_l2=correct_rotation_l2)
 
         if 'translation' in self.q_components:
-            translation_l2 = self.translation_quality(
-                preds['translations'], ground_truth['translations'])
-            loss_dict.update(translation_l2=translation_l2)
+            translation_l2, correct_translation_l2 = self.translation_quality(
+                preds['translations'], ground_truth['translations'], correct_mask)
+            loss_dict.update(translation_l2=translation_l2, corr_translation_l2=correct_translation_l2)
     
         return loss_dict
 

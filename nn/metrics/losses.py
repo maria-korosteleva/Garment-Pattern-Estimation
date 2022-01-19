@@ -8,7 +8,7 @@ import gap
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
 from pattern_converter import InvalidPatternDefError
-
+from metrics.eval_utils import eval_pad_vector
 
 # ------- custom losses --------
 class PanelLoopLoss():

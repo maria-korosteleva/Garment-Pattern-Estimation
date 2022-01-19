@@ -63,6 +63,8 @@ def _eval_metrics_per_loader(model, loss, loader, device):
         for key, value in loss_dict.items():
             if key not in current_metrics:
                 current_metrics[key] = 0  # init new metric
+
+            print(key, value)
             current_metrics[key] += value
 
     # normalize & convert

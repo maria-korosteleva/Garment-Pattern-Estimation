@@ -60,7 +60,7 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filtered-att-data-condenced-classes', 
+    run_name='Filtered-att-data-condenced-classes',
     run_id='390wuxbm')  # finished experiment
 
 if not experiment.is_finished():
@@ -112,10 +112,10 @@ model.load_state_dict(state_dict)
 model.module.loss.debug_prints = True
 
 # ------- Evaluate --------
-# valid_loss = eval_metrics(model, datawrapper, 'validation')
-# print('Validation metrics: {}'.format(valid_loss))
-# valid_breakdown = eval_metrics(model, datawrapper, 'valid_per_data_folder')
-# print('Validation metrics per dataset: {}'.format(valid_breakdown))
+valid_loss = eval_metrics(model, datawrapper, 'validation')
+print('Validation metrics: {}'.format(valid_loss))
+valid_breakdown = eval_metrics(model, datawrapper, 'valid_per_data_folder')
+print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
 # test_metrics = eval_metrics(model, datawrapper, 'test')
 # print('Test metrics: {}'.format(test_metrics))

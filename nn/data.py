@@ -1085,7 +1085,9 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
     # ----- Saving predictions -----
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, features=None, weights=None, **kwargs):
+    def save_prediction_batch(
+            self, predictions, datanames, data_folders, 
+            save_to, features=None, weights=None, **kwargs):
         """ 
             Saving predictions on batched from the current dataset
             Saves predicted params of the datapoint to the requested data folder.
@@ -1115,6 +1117,11 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
 
             # Transform to pattern object
             pattern = self._pred_to_pattern(prediction, name)
+
+            # log gt number of panels
+            if self.gt_caching:
+                gt = self.gt_cached[folder + '/' + name]
+                pattern.spec['properties']['correct_num_panels'] = gt['num_panels']
 
             # save prediction
             folder_nick = self.data_folders_nicknames[folder]
@@ -1424,10 +1431,15 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
     """
         Dataset targets the task of predicting if a particular pair of edges is connected by a stitch or not
     """
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(
+            self, 
+            root_dir, start_config={'data_folders': []}, 
+            gt_caching=False, feature_caching=False, transforms=[], 
+            filter_correct_n_panels=False):
         if gt_caching or feature_caching:
             gt_caching = feature_caching = True  # ensure that both are simulataneously True or False
         
+        self.filter_correct_n_panels = filter_correct_n_panels
         # data-specific defaults
         init_config = {
             'data_folders': [],
@@ -1446,6 +1458,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             element_size=self[0]['features'].shape[-1],
         )
         
+        self.correctness_mask = []
 
     def standardize(self, training=None):
         """Use shifting and scaling for fitting data to interval comfortable for NN training.
@@ -1557,9 +1570,32 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         if self.gt_caching and self.feature_caching:
             self.gt_cached[datapoint_name] = ground_truth
             self.feature_cached[datapoint_name] = features
+            
         
         return features, ground_truth
 
+    def _clean_datapoint_list(self, datapoints_names, dataset_folder):
+        super()._clean_datapoint_list(datapoints_names, dataset_folder)
+        if self.filter_correct_n_panels:
+            final_list = []
+            for datapoint_name in datapoints_names:
+                folder_elements = [file.name for file in (self.root_path / datapoint_name).glob('*')]  # all files in this directory
+                spec_list = [file for file in folder_elements if 'specification.json' in file]
+                if not spec_list:
+                    raise RuntimeError('GarmentBaseDataset::Error::*specification.json not found for {}'.format(datapoint_name))
+                
+                # Load from prediction if exists
+                predicted_list = [file for file in spec_list if 'predicte' in file]
+                spec = predicted_list[0] if len(predicted_list) > 0 else spec_list[0]
+                pattern = NNSewingPattern(self.root_path / datapoint_name / spec)
+                correct_num_panels = pattern.spec['properties']['correct_num_panels']
+                actual_num_panels = len(pattern.pattern['panels'])
+
+                if correct_num_panels == actual_num_panels:
+                    final_list.append(datapoint_name)
+            return final_list
+        else:
+            return datapoints_names
 
 # ------------------------- Utils for non-dataset examples --------------------------
 

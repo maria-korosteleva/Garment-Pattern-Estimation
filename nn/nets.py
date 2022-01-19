@@ -266,7 +266,7 @@ class GarmentFullPattern3D(BaseModule):
         }
         self.config['loss'].update(in_loss_config)
         # loss object
-        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.loss = ComposedPatternLoss(data_config, self.config['loss'])
         self.config['loss'] = self.loss.config  # sync just in case
 
         # ---- Feature extractor definition -------

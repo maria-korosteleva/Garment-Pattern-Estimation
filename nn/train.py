@@ -196,7 +196,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Test-Garments-Reconstruction', 
-        run_name='All-5000-att-condenced', 
+        run_name='metric-tests', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:0'])  # DEBUG , 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     print(f'Using devices: {model.device_ids}')

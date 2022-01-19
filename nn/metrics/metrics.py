@@ -182,6 +182,10 @@ class NumbersInPanelsAccuracies():
 
         correct_num_panels = 0.
         num_edges_accuracies = 0.
+
+        correct_pattern_mask = torch.zeros(batch_size, dtype=torch.bool)
+        num_edges_in_correct = 0.
+
         for pattern_idx in range(batch_size):
             # assuming all empty panels are at the end of the pattern, if any
             predicted_num_panels = 0
@@ -211,6 +215,7 @@ class NumbersInPanelsAccuracies():
     
             # update num panels stats
             correct_len = (predicted_num_panels == gt_panel_nums[pattern_idx])
+            correct_pattern_mask[pattern_idx] = correct_len
             correct_num_panels += correct_len
 
             if pattern_names is not None and not correct_len:  # pattern len predicted wrongly
@@ -219,9 +224,16 @@ class NumbersInPanelsAccuracies():
 
             # update num edges stats (averaged per panel)
             num_edges_accuracies += correct_num_edges / gt_panel_nums[pattern_idx]
+            if correct_len:
+                num_edges_in_correct += correct_num_edges / gt_panel_nums[pattern_idx]
         
         # average by batch
-        return correct_num_panels / batch_size, num_edges_accuracies / batch_size
+        return (
+            correct_num_panels / batch_size, 
+            num_edges_accuracies / batch_size, 
+            correct_pattern_mask,   # which patterns in a batch have correct number of panels? 
+            num_edges_in_correct / correct_pattern_mask.sum()  # edges for correct patterns
+        )
     
 
 class PanelVertsL2():
@@ -242,12 +254,18 @@ class PanelVertsL2():
         self.max_panel_len = max_edges_in_panel
         self.empty_panel_template = torch.zeros((max_edges_in_panel, len(self.data_stats['shift'])))
     
-    def __call__(self, predicted_outlines, gt_outlines, gt_num_edges):
+    def __call__(self, predicted_outlines, gt_outlines, gt_num_edges, correct_mask=None):
         """
             Evaluate on the batch of panel outlines predictoins 
             * per_panel_leading_edges -- specifies where is the start of the edge loop for GT outlines 
                 that is well-matched to the predicted outlines. If not given, the default GT orientation is used
         """
+        # DEBUG 
+
+        num_panels = predicted_outlines.shape[1]
+
+        print(predicted_outlines.shape)
+
         # flatten input into list of panels
         predicted_outlines = predicted_outlines.view(-1, predicted_outlines.shape[-2], predicted_outlines.shape[-1])
         gt_outlines = gt_outlines.view(-1, gt_outlines.shape[-2], gt_outlines.shape[-1])
@@ -265,6 +283,16 @@ class PanelVertsL2():
 
         # per-panel evaluation
         panel_errors = []
+        correct_panel_errors = []
+        # panel_mask = correct_mask.t().repeat(num_panels) if correct_mask is not None else None
+        panel_mask = torch.repeat_interleave(correct_mask, num_panels) if correct_mask is not None else None
+        
+        # DEBUG 
+        print(correct_mask.shape, panel_mask.shape)
+        print(correct_mask, panel_mask)
+
+        # panel_mask = panel_mask.view(-1) if correct_mask is not None else None
+
         for panel_idx in range(len(predicted_outlines)):
             prediced_panel = predicted_outlines[panel_idx]
             gt_panel = gt_outlines[panel_idx]
@@ -280,9 +308,15 @@ class PanelVertsL2():
             panel_errors.append(
                 torch.mean(torch.sqrt(((self._to_verts(gt_panel) - self._to_verts(prediced_panel)) ** 2).sum(dim=1)))
             )
+
+            if panel_mask is not None and panel_mask[panel_idx]:
+                correct_panel_errors.append(panel_errors[-1])
         
         # mean of errors per panel
-        return sum(panel_errors) / len(panel_errors)
+        if panel_mask is not None and len(correct_panel_errors):
+            return sum(panel_errors) / len(panel_errors), sum(correct_panel_errors) / len(correct_panel_errors)
+        else:
+            return sum(panel_errors) / len(panel_errors), None
 
     def _to_verts(self, panel_edges):
         """Convert normalized panel edges into the vertex representation"""
@@ -321,10 +355,15 @@ class UniversalL2():
             'scale': torch.tensor(data_stats['scale']),
         }
     
-    def __call__(self, predicted, gt):
+    def __call__(self, predicted, gt, correct_mask=None):
         """
          Evaluate on the batch of predictions 
+         Used for rotation/translation evaluations which have input shape
+         (#batch, #panels, #feature)
         """
+        num_panels = predicted.shape[1]
+        correct_mask = torch.repeat_interleave(correct_mask, num_panels) if correct_mask is not None else None
+
         # flatten input 
         predicted = predicted.view(-1, predicted.shape[-1])
         gt = gt.view(-1, gt.shape[-1])
@@ -340,10 +379,12 @@ class UniversalL2():
 
         L2_norms = torch.sqrt(((gt - predicted) ** 2).sum(dim=1))
 
-        return torch.mean(L2_norms)
+        if correct_mask is not None and len(gt[correct_mask]):
+            correct_L2_norms = torch.mean(torch.sqrt(((gt[correct_mask] - predicted[correct_mask]) ** 2).sum(dim=1)))
+        else:
+            correct_L2_norms = None
 
-
-# ---------- Composition loss class -------------
+        return torch.mean(L2_norms), correct_L2_norms
 
 
 if __name__ == "__main__":
