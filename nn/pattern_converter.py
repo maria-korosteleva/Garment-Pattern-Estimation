@@ -379,10 +379,10 @@ class NNSewingPattern(VisPattern):
                 (stitch[0]['panel'], stitch[0]['edge']),
                 (stitch[1]['panel'], stitch[1]['edge'])
             ))
-        if stitch_pairs_num is not None and stitch_pairs_num > len(self.pattern['stitches']):
-            for _ in range(len(self.pattern['stitches']), stitch_pairs_num):
+        if stitch_pairs_num is not None and stitch_pairs_num > len(stitched_pairs_ids):
+            for _ in range(len(stitched_pairs_ids), stitch_pairs_num):
                 # choose of the existing pairs to duplicate
-                pairs.append(pairs[rng.integers(len(self.pattern['stitches']))])
+                pairs.append(pairs[rng.integers(len(stitched_pairs_ids))])
                 mask.append(True)
         
         if non_stitch_pairs_num is not None:
