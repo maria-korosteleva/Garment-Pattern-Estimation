@@ -5,7 +5,7 @@ from sparsemax import Sparsemax
 import wandb as wb
 
 # my modules
-import metrics
+from metrics.composed_loss import ComposedLoss, ComposedPatternLoss
 import net_blocks as blocks
 
 
@@ -80,7 +80,7 @@ class GarmentPanelsAE(BaseModule):
         self.config['loss'].update(in_loss_config)  # apply input settings 
 
         # create loss!
-        self.loss = metrics.ComposedPatternLoss(data_config, self.config['loss'])
+        self.loss = ComposedPatternLoss(data_config, self.config['loss'])
         self.config['loss'] = self.loss.config  # sync
 
         # ------ Modules ----
@@ -865,7 +865,7 @@ class StitchOnEdge3DPairs(BaseModule):
         self.config['loss'].update(in_loss_config)  # apply input settings 
 
         # create loss!
-        self.loss = metrics.ComposedLoss(data_config, self.config['loss'])
+        self.loss = ComposedLoss(data_config, self.config['loss'])
         self.config['loss'] = self.loss.config  # sync
 
         # ------ Modules ----

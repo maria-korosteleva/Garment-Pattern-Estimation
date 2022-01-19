@@ -9,7 +9,7 @@ from distutils import dir_util
 import customconfig
 import data
 import nets
-import metrics
+from metrics.eval_utils import eval_metrics
 from trainer import Trainer
 from experiment import WandbRunWrappper, load_experiment
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
@@ -132,18 +132,18 @@ if __name__ == "__main__":
 
     datawrapper = trainer.datawraper
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'validation')
+    final_metrics = eval_metrics(model, datawrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
     experiment.add_statistic('valid_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
+    final_metrics = eval_metrics(model, datawrapper, 'valid_per_data_folder')
     print('Validation metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('valid', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'test')
+    final_metrics = eval_metrics(model, datawrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
+    final_metrics = eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test', final_metrics)

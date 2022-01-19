@@ -14,7 +14,7 @@ sys.path.insert(0, parentdir)
 # My modules
 import customconfig
 import data
-import metrics
+from metrics.eval_utils import eval_metrics
 import nets
 from trainer import Trainer
 from experiment import WandbRunWrappper
@@ -112,14 +112,14 @@ model.load_state_dict(state_dict)
 model.module.loss.debug_prints = True
 
 # ------- Evaluate --------
-# valid_loss = metrics.eval_metrics(model, datawrapper, 'validation')
+# valid_loss = eval_metrics(model, datawrapper, 'validation')
 # print('Validation metrics: {}'.format(valid_loss))
-# valid_breakdown = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
+# valid_breakdown = eval_metrics(model, datawrapper, 'valid_per_data_folder')
 # print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
-# test_metrics = metrics.eval_metrics(model, datawrapper, 'test')
+# test_metrics = eval_metrics(model, datawrapper, 'test')
 # print('Test metrics: {}'.format(test_metrics))
-# test_breakdown = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
+# test_breakdown = eval_metrics(model, datawrapper, 'test_per_data_folder')
 # print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # experiment.add_statistic('valid_on_best', valid_loss)
