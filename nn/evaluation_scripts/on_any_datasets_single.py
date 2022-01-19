@@ -13,7 +13,7 @@ sys.path.insert(0,parentdir)
 # My modules
 import customconfig
 import data
-import metrics
+from metrics.eval_utils import eval_metrics
 import nets
 from trainer import Trainer
 from experiment import WandbRunWrappper
@@ -68,9 +68,9 @@ if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
 model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
-loss = metrics.eval_metrics(model, datawrapper, 'full')
+loss = eval_metrics(model, datawrapper, 'full')
 print('Full metrics on unseen set: {}'.format(loss))
-breakdown = metrics.eval_metrics(model, datawrapper, 'full_per_data_folder')
+breakdown = eval_metrics(model, datawrapper, 'full_per_data_folder')
 print('Metrics per dataset: {}'.format(breakdown))
 
 # ---------- Log to the experiment -----------

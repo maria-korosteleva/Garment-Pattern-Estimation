@@ -7,7 +7,7 @@ import torch.nn as nn
 import customconfig
 import data
 import nets
-import metrics
+from metrics.eval_utils import eval_metrics
 from trainer import Trainer
 from experiment import WandbRunWrappper
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
+        project_name='Test-Garments-Reconstruction', 
         run_name='All-5000-att-condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
@@ -242,18 +242,18 @@ if __name__ == "__main__":
 
     datawrapper = trainer.datawraper
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'validation')
+    final_metrics = eval_metrics(model, datawrapper, 'validation')
     print('Validation metrics: {}'.format(final_metrics))
     experiment.add_statistic('valid_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'valid_per_data_folder')
+    final_metrics = eval_metrics(model, datawrapper, 'valid_per_data_folder')
     print('Validation metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('valid', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'test')
+    final_metrics = eval_metrics(model, datawrapper, 'test')
     print('Test metrics: {}'.format(final_metrics))
     experiment.add_statistic('test_on_best', final_metrics)
 
-    final_metrics = metrics.eval_metrics(model, datawrapper, 'test_per_data_folder')
+    final_metrics = eval_metrics(model, datawrapper, 'test_per_data_folder')
     print('Test metrics breakdown: {}'.format(final_metrics))
     experiment.add_statistic('test', final_metrics)

@@ -14,7 +14,7 @@ sys.path.insert(0, parentdir)
 # My modules
 import customconfig
 import data
-import metrics
+from metrics.eval_utils import eval_metrics
 from experiment import load_experiment
 
 system_info = customconfig.Properties('./system.json')
@@ -38,9 +38,9 @@ stitch_datawrapper, stitch_model, stitch_experiment = load_experiment(
 stitch_datawrapper.dataset.config.update(random_pairs_mode=False) 
 
 # ------- Evaluate stitch prediction --------
-loss = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full')
+loss = eval_metrics(stitch_model, stitch_datawrapper, 'full')
 print('Sitch metrics: {}'.format(loss))
-breakdown = metrics.eval_metrics(stitch_model, stitch_datawrapper, 'full_per_data_folder')
+breakdown = eval_metrics(stitch_model, stitch_datawrapper, 'full_per_data_folder')
 print('Sitch metrics per dataset: {}'.format(breakdown))
 
 # experiment.add_statistic('valid_on_best', valid_loss)
