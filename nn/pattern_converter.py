@@ -387,6 +387,9 @@ class NNSewingPattern(VisPattern):
         
         if non_stitch_pairs_num is not None:
             panel_order = self.panel_order()
+            if len(pairs) < stitch_pairs_num:
+                # e.g., no stitches constructed at all
+                non_stitch_pairs_num += stitch_pairs_num - len(pairs)
             for _ in range(non_stitch_pairs_num):
                 while True:
                     # random pairs
