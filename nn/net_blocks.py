@@ -153,7 +153,9 @@ class EdgeConvFeatures(nn.Module):
             raise ValueError('{} pooling is not supported'.format(self.config['global_pool']))
             
         # Output linear layer
-        out_features = sum(features_by_layer) if self.config['skip_connections'] else self.config['EConv_feature']
+        # NOTE Skip connection is only for initial position
+        # TODO remove that at all
+        out_features = self.config['EConv_feature'] + 3 if self.config['skip_connections'] else self.config['EConv_feature']
 
         self.lin = nn.Linear(out_features, out_size)
 
@@ -175,8 +177,11 @@ class EdgeConvFeatures(nn.Module):
             out = self.conv_layers[conv_id](out, batch)
             if self.config['graph_pooling']:
                 out, batch = self.gpool_layers[conv_id](out, batch)
-            if self.config['skip_connections']:
-                aggr_features.append(self.global_pool(out, batch, batch_size))
+
+            # NOTE Skip connection is only for initial position
+            # TODO remove
+            # if self.config['skip_connections']:
+            #    aggr_features.append(self.global_pool(out, batch, batch_size))
         
         if self.config['skip_connections']:
             # concat positions and final features
@@ -184,7 +189,10 @@ class EdgeConvFeatures(nn.Module):
         
         if global_pool:
             # 'out' now holds per-point features
-            pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
+            # NOTE Skip connection are now only for initial position
+            # TODO remove
+            # pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
+            pooled_feature = self.global_pool(out, batch, batch_size)
 
             # post-processing
             encoding = self.lin(pooled_feature)
