@@ -408,9 +408,6 @@ class ComposedPatternLoss():
         if 'discrete' in self.q_components:
             num_panels_acc, num_edges_acc, correct_mask, num_edges_correct_acc = self.pattern_nums_quality(
                 preds['outlines'], gt_num_edges, ground_truth['num_panels'], pattern_names=names)
-
-            print(correct_mask)  # DEBUG
-
             loss_dict.update(
                 num_panels_accuracy=num_panels_acc, 
                 num_edges_accuracy=num_edges_acc,
@@ -424,9 +421,6 @@ class ComposedPatternLoss():
                 corr_panel_shape_l2=correct_shape_l2, 
             )
         
-        # DEBUG
-        print(loss_dict)
-
         if 'rotation' in self.q_components:
             rotation_l2, correct_rotation_l2 = self.rotation_quality(
                 preds['rotations'], ground_truth['rotations'], correct_mask)

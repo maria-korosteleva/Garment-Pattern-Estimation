@@ -260,11 +260,7 @@ class PanelVertsL2():
             * per_panel_leading_edges -- specifies where is the start of the edge loop for GT outlines 
                 that is well-matched to the predicted outlines. If not given, the default GT orientation is used
         """
-        # DEBUG 
-
         num_panels = predicted_outlines.shape[1]
-
-        print(predicted_outlines.shape)
 
         # flatten input into list of panels
         predicted_outlines = predicted_outlines.view(-1, predicted_outlines.shape[-2], predicted_outlines.shape[-1])
