@@ -98,7 +98,8 @@ def get_values_from_args():
     }
 
     loss_config = {
-        'loss_components': ['shape', 'loop', 'rotation', 'translation'],  # , 'segmentation'],
+        'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],  # , 'segmentation'],
+        'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
 
         # Extra loss parameters
         'stitch_tags_margin': args.st_tag_margin,
@@ -106,7 +107,7 @@ def get_values_from_args():
         'loop_loss_weight': 1.,
         'segm_loss_weight': 0.05,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 1000,  # turn off stitches
+        'epoch_with_stitches': 40,  # turn off stitches
 
         'epoch_with_order_matching': 0,
         'panel_origin_invariant_loss': False,
@@ -137,8 +138,8 @@ def get_data_config(in_config, old_stats=False):
             system_info['wandb_username'],
             project_name='Garments-Reconstruction', 
             # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  
-            # run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  
-            run_name='All-5000-condenced-classes', run_id='1plkspqt' 
+            run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  
+            # run_name='All-5000-condenced-classes', run_id='1plkspqt' 
             # run_name='segmentation', run_id='pq1lcbo7'  # DEBUG
         )
         # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
@@ -162,7 +163,7 @@ def get_data_config(in_config, old_stats=False):
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
-            'filter_by_params': ''  # './nn/data_configs/param_filter.json'
+            'filter_by_params': './nn/data_configs/param_filter.json'
         }  
 
     # update with freshly configured values
@@ -195,8 +196,8 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
-        run_name='metric-tests', 
+        project_name='Garments-Reconstruction', 
+        run_name='Filt-Att-Condences-Stitch-Tags', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
@@ -212,15 +213,15 @@ if __name__ == "__main__":
     trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
-    model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0'])  # DEBUG , 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
     model.module.config['device_ids'] = model.device_ids
 
     print(f'Using devices: {model.device_ids}')
