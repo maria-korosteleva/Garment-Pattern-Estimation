@@ -53,8 +53,10 @@ def get_data_config(in_config, old_stats=False):
 
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 150, 'test_per_type': 150, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'} 
-        data_config = {}  
+        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'} 
+        data_config = {
+            'filter_by_params': './nn/data_configs/param_filter.json'
+        }  
 
     # update with freshly configured values
     data_config.update(in_config)
@@ -79,31 +81,50 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     system_info = customconfig.Properties('./system.json')
+    train_on_predictions = False
 
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
         'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=60, in_device='cuda:0')
-    # prediction_path = shape_datawrapper.predict(
-    #     shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
-    # merge into one repo -- UPD. WHY????
-    # data_path = merge_repos(prediction_path, ['train', 'validation', 'test'])
+    if train_on_predictions:
+        # TODO save to original names!!
+        prediction_path = shape_datawrapper.predict(
+            shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
+        # merge into one repo -- UPD. WHY????
+        data_path = merge_repos(prediction_path, ['train', 'validation', 'test'])
+    else:
+        # data_path = Path('/DB/Garment-Outputs/nn_pred_220119-20-47-14/merged')
+        data_path = Path(system_info['datasets_path'])
 
-    data_path = Path('/DB/Garment-Outputs/nn_pred_220119-20-47-14/merged')
-    dataset_list = os.listdir(str(data_path))
+    dataset_list = [
+        'dress_sleeveless_2550',
+        'jumpsuit_sleeveless_2000',
+        'skirt_8_panels_1000',
+        'wb_pants_straight_1500',
+        'skirt_2_panels_1200',
+        'jacket_2200',
+        'tee_sleeveless_1800',   # 'tee_sleeveless_short_extended_2500',   # 
+        'wb_dress_sleeveless_2600',
+        'jacket_hood_2700',
+        'pants_straight_sides_1000',
+        'tee_2300',  # 'tee_short_extended_3000',   # 
+        'skirt_4_panels_1600'
+    ]
 
     # -- Setup stitch experiment --
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filtered-stitches-on-predss-split', 
+        run_name='Filtered-stitches-on-GT-split', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     in_data_config, in_nn_config, in_loss_config, net_seed = get_default_values()
     _, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
-    split, _, _ = shape_experiment.data_info()
+    split, _, _ = shape_experiment.data_info()   # split also contains appropriate filtering!
 
     data_config.update(data_folders=dataset_list)
+    data_config.update(filter_by_params='./nn/data_configs/param_filter.json')  # DEBUG
     dataset = data.GarmentStitchPairsDataset(data_path, data_config, gt_caching=True, feature_caching=True)
 
     # -- Training --
