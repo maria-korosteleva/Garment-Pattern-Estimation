@@ -40,7 +40,7 @@ def _eval_metrics_per_loader(model, loss, loader, device):
     
     Secondary function -- it assumes that context is set up: torch.no_grad(), model device & mode, etc."""
 
-    current_metrics = dict.fromkeys(['full_loss'], 0)
+    current_metrics = dict.fromkeys(['full_loss'], [])
     counter = 0
     loader_iter = iter(loader)
     while True:  # DEBUG
@@ -60,7 +60,7 @@ def _eval_metrics_per_loader(model, loss, loader, device):
         full_loss, loss_dict, _ = loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
 
         # gathering up
-        current_metrics['full_loss'] += full_loss
+        current_metrics['full_loss'].append(full_loss.cpu().numpy())
         for key, value in loss_dict.items():
             if key not in current_metrics:
                 current_metrics[key] = []  # init new metric
