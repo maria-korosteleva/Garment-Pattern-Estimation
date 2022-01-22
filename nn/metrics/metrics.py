@@ -28,7 +28,10 @@ class PatternStitchPrecisionRecall():
                 self.data_stats[key] = torch.Tensor(self.data_stats[key])
 
     def __call__(
-            self, stitch_tags, free_edge_class, gt_stitches, gt_stitches_nums, pattern_names=None):
+            self, 
+            stitch_tags, free_edge_class, 
+            gt_stitches, gt_stitches_nums, 
+            pattern_names=None, correct_mask=None):
         """
          Evaluate on the batch of stitch tags
         """
@@ -39,6 +42,8 @@ class PatternStitchPrecisionRecall():
         
         tot_precision = 0.
         tot_recall = 0.
+        corr_precision = []
+        corr_recall = []
         for pattern_idx in range(stitch_tags.shape[0]):
             stitch_list = PatternDataset.tags_to_stitches(stitch_tags[pattern_idx], free_edge_class[pattern_idx]).to(gt_stitches.device)
 
@@ -61,12 +66,23 @@ class PatternStitchPrecisionRecall():
                     print('StitchPrecisionRecall::{}::Stitch {} detected wrongly'.format(pattern_names[pattern_idx], detected))
 
             # precision -- how many of the detected stitches are actually there
-            tot_precision += correct_stitches / num_detected_stitches if num_detected_stitches else 0.
+            precision = correct_stitches / num_detected_stitches if num_detected_stitches else 0.
             # recall -- how many of the actual stitches were detected
-            tot_recall += correct_stitches / num_actual_stitches if num_actual_stitches else 0.
+            recall = correct_stitches / num_actual_stitches if num_actual_stitches else 0.
+
+            tot_precision += precision
+            tot_recall += recall
+            if correct_mask is not None and correct_mask[pattern_idx]:
+                corr_precision.append(precision)
+                corr_recall.append(recall)
         
-        # evrage by batch
-        return tot_precision / stitch_tags.shape[0], tot_recall / stitch_tags.shape[0]
+        # average by batch
+        return (
+            tot_precision / stitch_tags.shape[0], 
+            tot_recall / stitch_tags.shape[0],
+            sum(corr_precision) / len(corr_precision),
+            sum(corr_recall) / len(corr_recall)
+        )
 
     def on_loader(self, data_loader, model):
         """Evaluate recall&precision of stitch detection on the full data loader"""

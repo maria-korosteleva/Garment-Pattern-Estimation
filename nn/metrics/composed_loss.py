@@ -286,12 +286,13 @@ class ComposedPatternLoss():
         # ---- Quality metrics  ----
         if self.with_quality_eval:
             with torch.no_grad():
-                quality_breakdown = self._main_quality_metrics(preds, gt_rotated, gt_num_edges, names)
+                quality_breakdown, corr_mask = self._main_quality_metrics(preds, gt_rotated, gt_num_edges, names)
                 loss_dict.update(quality_breakdown)
 
                 # stitches quality
                 if epoch >= self.config['epoch_with_stitches']:
-                    quality_breakdown = self._stitch_quality_metrics(preds, gt_rotated, gt_num_edges, names)
+                    quality_breakdown = self._stitch_quality_metrics(
+                        preds, gt_rotated, gt_num_edges, names, corr_mask)
                     loss_dict.update(quality_breakdown)
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
@@ -431,21 +432,26 @@ class ComposedPatternLoss():
                 preds['translations'], ground_truth['translations'], correct_mask)
             loss_dict.update(translation_l2=translation_l2, corr_translation_l2=correct_translation_l2)
     
-        return loss_dict
+        return loss_dict, correct_mask
 
-    def _stitch_quality_metrics(self, preds, ground_truth, gt_num_edges, names):
+    def _stitch_quality_metrics(self, preds, ground_truth, gt_num_edges, names, correct_mask):
         """
             Quality components related to stitches prediction. May be called separately from main components 
             arrording to the training stage
         """
         loss_dict = {}
         if 'stitch' in self.q_components:
-            stitch_prec, stitch_recall = self.stitch_quality(
+            stitch_prec, stitch_recall, corr_prec, corr_rec = self.stitch_quality(
                 preds['stitch_tags'], preds['free_edges_mask'], 
                 ground_truth['stitches'].type(torch.IntTensor).to(self.device), 
                 ground_truth['num_stitches'],
-                pattern_names=names)
-            loss_dict.update(stitch_precision=stitch_prec, stitch_recall=stitch_recall)
+                pattern_names=names, 
+                correct_mask=correct_mask)
+            loss_dict.update(
+                stitch_precision=stitch_prec, 
+                stitch_recall=stitch_recall,
+                corr_stitch_precision=corr_prec, 
+                corr_stitch_recall=corr_rec)
         
         if 'free_class' in self.q_components:
             free_class = torch.round(torch.sigmoid(preds['free_edges_mask']))

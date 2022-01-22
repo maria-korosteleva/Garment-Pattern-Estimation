@@ -3,6 +3,7 @@
 """
 
 import torch
+from torch.functional import Tensor
 
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
@@ -44,7 +45,7 @@ def _eval_metrics_per_loader(model, loss, loader, device):
     loader_iter = iter(loader)
     while True:  # DEBUG
         try:
-            batch = next(loader_iter)  #  loader_iter.next()
+            batch = next(loader_iter)   #  loader_iter.next()
         except StopIteration:
             break
         except InvalidPatternDefError as e:
@@ -58,18 +59,18 @@ def _eval_metrics_per_loader(model, loss, loader, device):
         # loss evaluation
         full_loss, loss_dict, _ = loss(model(features), gt, names=batch['name'])  # use names for cleaner errors when needed
 
-        # summing up
+        # gathering up
         current_metrics['full_loss'] += full_loss
         for key, value in loss_dict.items():
             if key not in current_metrics:
-                current_metrics[key] = 0  # init new metric
-            current_metrics[key] += value
+                current_metrics[key] = []  # init new metric
+            if value is not None:  # otherwise skip this one from accounting for!
+                value = value.cpu().numpy() if isinstance(value, torch.Tensor) else value
+                current_metrics[key].append(value)  
 
-    # normalize & convert
+    # sum & normalize 
     for metric in current_metrics:
-        if isinstance(current_metrics[metric], torch.Tensor):
-            current_metrics[metric] = current_metrics[metric].cpu().numpy()  # conversion only works on cpu
-        current_metrics[metric] /= len(loader)
+        current_metrics[metric] = sum(current_metrics[metric]) / len(current_metrics[metric])
 
     return current_metrics
 
