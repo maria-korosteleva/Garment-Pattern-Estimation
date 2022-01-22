@@ -80,8 +80,8 @@ class PatternStitchPrecisionRecall():
         return (
             tot_precision / stitch_tags.shape[0], 
             tot_recall / stitch_tags.shape[0],
-            sum(corr_precision) / len(corr_precision),
-            sum(corr_recall) / len(corr_recall)
+            sum(corr_precision) / len(corr_precision) if len(corr_precision) else None,
+            sum(corr_recall) / len(corr_recall) if len(corr_recall) else None
         )
 
     def on_loader(self, data_loader, model):
