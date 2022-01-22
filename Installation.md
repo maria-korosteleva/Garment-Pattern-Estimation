@@ -20,7 +20,7 @@ conda activate Garments
 ## 2. Dependencies
 
 ```
-conda install pytorch=1.9.0 cudatoolkit=10.2 -c pytorch
+conda install pytorch=1.9.1 cudatoolkit=10.2 -c pytorch
 
 conda install -c conda-forge igl=2.2.1
 
