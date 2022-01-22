@@ -6,6 +6,8 @@ scipy==1.6.2
 wandb==0.10.33
 svglib==1.1.0
 svgwrite==1.4.1
+entmax==1.0
+numba==0.55.0
 
 # torch-geometric group
 torch-cluster -f https://pytorch-geometric.com/whl/torch-1.9.0+cu102.html &&
