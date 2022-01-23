@@ -98,8 +98,8 @@ def get_values_from_args():
     }
 
     loss_config = {
-        'loss_components': ['shape', 'loop', 'rotation', 'translation', 'stitch', 'free_class'],  # , 'segmentation'],
-        'quality_components': ['shape', 'discrete', 'rotation', 'translation', 'stitch', 'free_class'],
+        'loss_components': ['shape', 'rotation', 'translation'],  # 'loop',  , 'stitch', 'free_class'],  # , 'segmentation'],
+        'quality_components': ['shape', 'discrete', 'rotation', 'translation'],  # 'stitch', 'free_class'],
 
         # Extra loss parameters
         'stitch_tags_margin': args.st_tag_margin,
@@ -107,7 +107,7 @@ def get_values_from_args():
         'loop_loss_weight': 1.,
         'segm_loss_weight': 0.05,
         'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 40,  # turn off stitches
+        'epoch_with_stitches': 1000,  # turn off stitches
 
         'epoch_with_order_matching': 0,
         'panel_origin_invariant_loss': False,
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filt-Att-Condences-Stitch-Tags', 
+        run_name='No-Loop-Filt-Att-Condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
