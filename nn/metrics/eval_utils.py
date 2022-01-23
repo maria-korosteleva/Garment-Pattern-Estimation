@@ -70,7 +70,10 @@ def _eval_metrics_per_loader(model, loss, loader, device):
 
     # sum & normalize 
     for metric in current_metrics:
-        current_metrics[metric] = sum(current_metrics[metric]) / len(current_metrics[metric])
+        if len(current_metrics[metric]):
+            current_metrics[metric] = sum(current_metrics[metric]) / len(current_metrics[metric])
+        else:
+            current_metrics[metric] = None
 
     return current_metrics
 
