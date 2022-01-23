@@ -98,7 +98,7 @@ def get_values_from_args():
     }
 
     loss_config = {
-        'loss_components': ['shape', 'rotation', 'translation'],  # 'loop',  , 'stitch', 'free_class'],  # , 'segmentation'],
+        'loss_components': ['shape', 'loop', 'rotation', 'translation'],   # 'stitch', 'free_class'],  # , 'segmentation'],
         'quality_components': ['shape', 'discrete', 'rotation', 'translation'],  # 'stitch', 'free_class'],
 
         # Extra loss parameters
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='No-Loop-Filt-Att-Condenced', 
+        run_name='Filt-Att-Condenced-Retry', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
