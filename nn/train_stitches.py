@@ -81,16 +81,18 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     system_info = customconfig.Properties('./system.json')
-    train_on_predictions = False
+    train_on_predictions = True
 
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
-        'Filtered-att-data-condenced-classes', '390wuxbm', in_batch_size=60, in_device='cuda:0')
+        'RNN-no-stitch-5000-filt-cond', '3857jk4g', in_batch_size=60, in_device='cuda:0')
     if train_on_predictions:
         # TODO save to original names!!
         prediction_path = shape_datawrapper.predict(
-            shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'])
-        # merge into one repo -- UPD. WHY????
+            shape_model, 
+            save_to=Path(system_info['output']), 
+            sections=['train', 'validation', 'test'],
+            orig_folder_names=True)
         data_path = merge_repos(prediction_path, ['train', 'validation', 'test'])
     else:
         # data_path = Path('/DB/Garment-Outputs/nn_pred_220119-20-47-14/merged')
@@ -115,22 +117,21 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filtered-stitches-on-GT-split', 
+        run_name='Filtered-stitches-on-RNN', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
     in_data_config, in_nn_config, in_loss_config, net_seed = get_default_values()
     _, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
-    split, _, _ = shape_experiment.data_info()   # split also contains appropriate filtering!
+    split, _, shape_data_conf = shape_experiment.data_info()   # split also contains appropriate filtering!
 
     data_config.update(data_folders=dataset_list)
-    data_config.update(filter_by_params='./nn/data_configs/param_filter.json')  # DEBUG
+    data_config.update(filter_by_params=shape_data_conf['filter_by_params'])
     dataset = data.GarmentStitchPairsDataset(data_path, data_config, gt_caching=True, feature_caching=True)
 
     # -- Training --
-    # No split provided -- use the whole data!!
-    # UPD. TRY with split like a normal person
-    trainer = Trainer(experiment, dataset, data_split=split, with_norm=True, with_visualization=False)
+    # with split like a normal person
+    trainer = Trainer(experiment, dataset, data_split=split, batch_size=30, with_norm=True, with_visualization=False)
     trainer.init_randomizer(net_seed)
     model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 

@@ -218,7 +218,7 @@ class DatasetWrapper(object):
         self.dataset.standardize(self.training)
 
     # --------- Managing predictions on this data ---------
-    def predict(self, model, save_to, sections=['test'], single_batch=False):
+    def predict(self, model, save_to, sections=['test'], single_batch=False, orig_folder_names=False):
         """Save model predictions on the given dataset section"""
         # Main path
         prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
@@ -247,7 +247,7 @@ class DatasetWrapper(object):
                         preds = model(features_device)
                         self.dataset.save_prediction_batch(
                             preds, batch['name'], batch['data_folder'], section_dir, features=batch['features'].numpy(), 
-                            model=model)
+                            model=model, orig_folder_names=orig_folder_names)
                         
                         if single_batch:  # stop after first iteration
                             break
@@ -1087,7 +1087,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     # ----- Saving predictions -----
     def save_prediction_batch(
             self, predictions, datanames, data_folders, 
-            save_to, features=None, weights=None, **kwargs):
+            save_to, features=None, weights=None, orig_folder_names=False, **kwargs):
         """ 
             Saving predictions on batched from the current dataset
             Saves predicted params of the datapoint to the requested data folder.
@@ -1124,7 +1124,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 pattern.spec['properties']['correct_num_panels'] = gt['num_panels']
 
             # save prediction
-            folder_nick = self.data_folders_nicknames[folder]
+            folder_nick = self.data_folders_nicknames[folder] if not orig_folder_names else folder
 
             try: 
                 final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
@@ -1493,7 +1493,9 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
 
-    def save_prediction_batch(self, predictions, datanames, data_folders, save_to, model=None, **kwargs):
+    def save_prediction_batch(
+            self, predictions, datanames, data_folders, save_to, 
+            model=None, orig_folder_names=False, **kwargs):
         """ 
             Saving predictions on batch from the current dataset based on given model
             Saves predicted params of the datapoint to the requested data folder.
@@ -1519,7 +1521,8 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
 
             # save prediction
             # TODO Move to separate fucntion (for all datasets)
-            folder_nick = self.data_folders_nicknames[folder]
+            folder_nick = self.data_folders_nicknames[folder] if not orig_folder_names else folder
+
             try: 
                 final_dir = pattern.serialize(save_to / folder_nick, to_subfolder=True, tag='_predicted_')
             except (RuntimeError, InvalidPatternDefError, TypeError) as e:
@@ -1601,8 +1604,8 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             final_list.append(datapoint_name)
         return final_list
 
-# ------------------------- Utils for non-dataset examples --------------------------
 
+# ------------------------- Utils for non-dataset examples --------------------------
 def sample_points_from_meshes(mesh_paths, data_config):
     """
         Sample points from the given list of triangle meshes (as .obj files -- or other file formats supported by libigl)

@@ -11,7 +11,11 @@ import data as data
 
 
 class Trainer():
-    def __init__(self, experiment_tracker, dataset=None, data_split={}, with_norm=True, with_visualization=False):
+    def __init__(
+            self, 
+            experiment_tracker, dataset=None, data_split={}, 
+            batch_size=30,
+            with_norm=True, with_visualization=False):
         """Initialize training and dataset split (if given)
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
         self.experiment = experiment_tracker
@@ -24,7 +28,7 @@ class Trainer():
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
             epochs=350,
-            batch_size=30,
+            batch_size=batch_size,
             learning_rate=0.002,
             optimizer='Adam',
             weight_decay=0,
