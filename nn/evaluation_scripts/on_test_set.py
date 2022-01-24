@@ -51,6 +51,8 @@ stitch_experiment.add_statistic('shape_model', 'All-predefined-order-att-max-s8f
 
 # -------- Predict ---------
 # save prediction for validation to file
+
+# TODO is saves original svgs to the output folder, not the predicted patten!!!!
 # prediction_path = datawrapper.predict(stitch_model, save_to=Path(system_info['output']), sections=['full'])
 # print('Saved to {}'.format(prediction_path))
 # reflect predictions info in expetiment
