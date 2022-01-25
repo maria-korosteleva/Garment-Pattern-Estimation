@@ -111,6 +111,7 @@ class NumbersInPanelsAccuracies():
         self.max_panel_len = max_edges_in_panel
         self.pad_vector = eval_pad_vector(data_stats)
         self.empty_panel_template = self.pad_vector.repeat(self.max_panel_len, 1)
+        self.panel_loop_threshold = torch.tensor([3, 3]) / torch.Tensor(data_stats['scale'])[:2]  # 3 cm per coordinate is a tolerable error
 
     def __call__(self, predicted_outlines, gt_num_edges, gt_panel_nums, pattern_names=None):
         """
@@ -120,6 +121,7 @@ class NumbersInPanelsAccuracies():
         max_num_panels = predicted_outlines.shape[1]
         if self.empty_panel_template.device != predicted_outlines.device:
             self.empty_panel_template = self.empty_panel_template.to(predicted_outlines.device)
+            self.panel_loop_threshold = self.panel_loop_threshold.to(predicted_outlines.device)
 
         correct_num_panels = 0.
         num_edges_accuracies = 0.
@@ -138,6 +140,15 @@ class NumbersInPanelsAccuracies():
 
                 # check is the num of edges matches
                 predicted_num_edges = (~torch.all(predicted_bool_matrix, axis=1)).sum()  # only non-padded rows
+
+                # check if edge loop closes
+                edge_coords = predicted_outlines[pattern_idx][panel_id][:, :2]
+                loop_distance = edge_coords.sum(dim=0)    # empty edges are about zero anyway
+                if (torch.abs(loop_distance) > self.panel_loop_threshold).any():
+                    # if the edge loop doesn't return to origin, 
+                    # it basically means the need to create extra edge to force the closing
+
+                    predicted_num_edges += 1
             
                 if predicted_num_edges < 3:
                     # 0, 1, 2 edges are not enough to form a panel
