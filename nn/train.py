@@ -111,7 +111,7 @@ def get_values_from_args():
 
         'epoch_with_order_matching': 0,
         'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': False,  # False to use original order  # TODO!!! Experiment was wrong
+        'panel_order_inariant_loss': True,  # False to use original order  # TODO!!! Experiment was wrong
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
         'cluster_by': None,  # 'panel_encodings', 'order_feature', 'translation', None
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filt-Att-Condenced-Retry-longer', 
+        run_name='Filt-Att-Condenced-ordermatching', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
