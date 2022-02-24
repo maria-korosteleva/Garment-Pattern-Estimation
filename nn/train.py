@@ -111,7 +111,7 @@ def get_values_from_args():
 
         'epoch_with_order_matching': 0,
         'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': True,  # False to use original order  # TODO!!! Experiment was wrong
+        'panel_order_inariant_loss': False,  # False to use original order 
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
         'cluster_by': None,  # 'panel_encodings', 'order_feature', 'translation', None
@@ -156,14 +156,15 @@ def get_data_config(in_config, old_stats=False):
         }
     else:  # default split for reproducibility
         # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count'}  # DEBUG 'filename': './wandb/data_split.json'} 
+        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'}   # DEBUG 
         data_config = {
             'max_datapoints_per_type': 5000,  # upper limit of how much data to grab from each type
             'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
             'max_panel_len': 14,  # (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
-            'filter_by_params': './nn/data_configs/param_filter.json'
+            'filter_by_params': './nn/data_configs/param_filter.json',
+            'obj_filetag':  'scan'  # 'sim'   # DEBUG
         }  
 
     # update with freshly configured values
@@ -197,11 +198,11 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='Filt-Att-Condenced-ordermatching', 
+        run_name='Filt-Att-Condenced-scans', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
