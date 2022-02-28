@@ -154,8 +154,9 @@ class EdgeConvFeatures(nn.Module):
             
         # Output linear layer
         # NOTE Skip connection is only for initial position
-        # TODO remove that at all
+        # TODO remove that at all -- but with considerations for backward compatibility
         out_features = self.config['EConv_feature'] + 3 if self.config['skip_connections'] else self.config['EConv_feature']
+        # out_features = sum(features_by_layer) if self.config['skip_connections'] else self.config['EConv_feature']
 
         self.lin = nn.Linear(out_features, out_size)
 

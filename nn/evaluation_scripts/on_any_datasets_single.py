@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filt-Att-Condenced-ordermatching',
-    run_id='16m5ghzf')  # finished experiment
+    run_name='Filt-Att-Condenced-Retry',
+    run_id='25g4d6si')  # finished experiment
     # run_name='No-Loop-Filt-Att-Condenced',
     # run_id='2pbrilln')  # finished experiment
 
@@ -45,7 +45,7 @@ dataset_list = [
 # data_config also contains the names of datasets to use
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
-data_config.update({'obj_filetag': 'sim'})  # sim\scan imitation stats
+data_config.update({'obj_filetag': 'scan'})  # DEBUG sim\scan imitation stats
 data_config.update(data_folders=dataset_list)
 # data_config.pop('max_num_stitches', None)  # NOTE forces re-evaluation of max pattern sizes (but not standardization stats) 
 data_config.update(max_datapoints_per_type=150)
@@ -56,6 +56,8 @@ if not experiment.is_finished():
     data_config.update({'filter_by_params': './nn/data_configs/param_filter.json'})
 
 batch_size = 5   # fit on less powerfull machines
+
+print(data_config['class'])
 
 if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
@@ -86,12 +88,12 @@ print('Saved to {}'.format(prediction_path))
 
 if experiment.is_finished():  # records won't be updates for unfinished experiment anyway
     # ---------- Log to the experiment -----------
-    experiment.add_statistic('unseen_full', loss)
-    experiment.add_statistic('unseen', breakdown)
+    experiment.add_statistic('unseen_scan_full', loss)
+    experiment.add_statistic('unseen_scan', breakdown)
     experiment.add_statistic('unseen_folders', dataset_list)
 
     # reflect predictions info in expetiment
-    experiment.add_statistic('unseen_pred_folder', prediction_path.name)
+    experiment.add_statistic('unseen_scan_pred_folder', prediction_path.name)
 
     art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
     experiment.add_artifact(prediction_path, art_name, 'result')
