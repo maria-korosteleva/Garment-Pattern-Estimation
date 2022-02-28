@@ -27,7 +27,7 @@ class Trainer():
         self.setup = dict(
             model_random_seed=None,
             device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=350,
+            epochs=350,  # DEBUG
             batch_size=batch_size,
             learning_rate=0.002,
             optimizer='Adam',

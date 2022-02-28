@@ -99,6 +99,7 @@ class GarmentPanelsAE(BaseModule):
             self.config['panel_encoding_size'], 
             self.panel_elem_len, 
             self.config['panel_n_layers'], 
+            out_len=self.max_panel_len,
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )   
@@ -170,6 +171,7 @@ class GarmentPatternAE(GarmentPanelsAE):
             self.config['pattern_encoding_size'], 
             self.config['panel_encoding_size'], 
             self.config['pattern_n_layers'], 
+            out_len=self.max_pattern_size,
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
@@ -281,12 +283,14 @@ class GarmentFullPattern3D(BaseModule):
             self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
             self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
             self.config['panel_n_layers'], 
+            out_len = self.max_panel_len,
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
         pattern_decoder_module = getattr(blocks, self.config['pattern_decoder'])
         self.pattern_decoder = pattern_decoder_module(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
+            out_len = self.max_pattern_size,
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
@@ -373,6 +377,7 @@ class GarmentFullPattern3DDisentangle(GarmentFullPattern3D):
             self.panel_shape_enc_size, int(self.config['panel_encoding_size'] / 2), 
             self.panel_elem_len,  # last element is free tag indicator 
             self.config['panel_n_layers'], 
+            out_len=self.max_panel_len,
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
@@ -459,6 +464,7 @@ class GarmentAttentivePattern3D(GarmentFullPattern3D):
         pattern_decoder_module = getattr(blocks, self.config['pattern_decoder'])
         self.pattern_attention_decode = pattern_decoder_module(
             self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['attention_token_size'], self.config['pattern_n_layers'], 
+            out_len = self.max_pattern_size,
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )

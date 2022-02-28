@@ -32,8 +32,8 @@ def get_values_from_args():
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=25)
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
-    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')
-    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')
+    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='MLPDecoder')   # MLPDecoder
+    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')   # MLPDecoder
     # stitches
     parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
     parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
@@ -164,7 +164,7 @@ def get_data_config(in_config, old_stats=False):
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
             'filter_by_params': './nn/data_configs/param_filter.json',
-            'obj_filetag':  'scan'  # 'sim'   # DEBUG
+            'obj_filetag':  'sim'  # 'sim' 'scan' 
         }  
 
     # update with freshly configured values
@@ -197,12 +197,12 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='Filt-Att-Condenced-scans', 
+        project_name='Test-Garments-Reconstruction', 
+        run_name='MLP-Global-filt-Condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
@@ -211,13 +211,13 @@ if __name__ == "__main__":
         Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
 
-    trainer = Trainer(experiment, dataset, split, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+    # DEBUG
+    trainer = Trainer(experiment, dataset, split, batch_size=30, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)  # MAIN
     # model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 

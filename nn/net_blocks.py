@@ -285,11 +285,43 @@ class EdgeConvPoolingFeatures(nn.Module):
         return out
 
 
+# ------------ MLP Decoder -------------
+
+class MLPDecoder(nn.Module):
+    """ MLP-based decoding of latent code -> sequence of elements
+        Assuming the max length of sequence is known
+    """
+    def __init__(
+            self, 
+            encoding_size, hidden_size, out_elem_size, n_layers, out_len=1,
+            dropout=0, custom_init='kaiming_normal'):
+        super().__init__()
+        self.out_len = out_len
+
+        self.mlp = MLP([encoding_size] + [hidden_size * out_len for _ in range(n_layers)] + [out_elem_size * out_len])
+
+        # initialize
+        _init_weights(self.mlp, init_type=custom_init)
+
+    def forward(self, batch_enc, *args):
+        """out_len specifies the length of the output sequence to produce"""
+        batch_size = batch_enc.size(0)
+        
+        out = self.mlp(batch_enc)
+
+        # convert to sequence
+        out = out.contiguous().view(batch_size, self.out_len, -1)
+
+        return out
+
+
 # ------------- Sequence modules -----------
 def _init_tenzor(*shape, device='cpu', init_type=''):
     """shortcut to create & initialize tenzors on a given device.  """
     # TODO suport other init types 
-    if not init_type:  # zeros by default
+    if not init_type or len(shape) == 1:  
+        # zeros by default
+        # and in case of 1D tensor (which kaiming_normal does not support)
         new_tenzor = torch.zeros(shape)
     elif 'kaiming_normal' in init_type:
         new_tenzor = torch.empty(shape)
@@ -307,8 +339,12 @@ def _init_weights(module, init_type=''):
         return
     for name, param in module.named_parameters():
         if 'weight' in name:
+            
             if 'kaiming_normal' in init_type:
-                nn.init.kaiming_normal_(param)
+                if len(param.shape) == 1:  # case not supported by kaiming_normal
+                    param = torch.zeros(param.shape, device=param.device)
+                else:
+                    nn.init.kaiming_normal_(param)
             else:
                 raise NotImplementedError('{} weight initialization is not implemented'.format(init_type))
     # leave defaults for bias
@@ -343,7 +379,7 @@ class LSTMEncoderModule(nn.Module):
 
 class LSTMDecoderModule(nn.Module):
     """A wrapper for LSTM targeting decoding task"""
-    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal', **kwargs):
         super().__init__()
         self.custom_init = custom_init
         self.n_layers = n_layers
@@ -386,7 +422,7 @@ class LSTMDecoderModule(nn.Module):
 class LSTMDoubleReverseDecoderModule(nn.Module):
     """A wrapper for LSTM targeting decoding task that decodes the sequence in the reverse order, 
     and then processes it in the forward order to refine the reconstuction"""
-    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal', **kwargs):
         super().__init__()
         self.custom_init = custom_init
         self.n_layers = n_layers
@@ -437,7 +473,7 @@ class LSTMDoubleReverseDecoderModule(nn.Module):
 
 class GRUDecoderModule(nn.Module):
     """A wrapper for LSTM targeting decoding task"""
-    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal'):
+    def __init__(self, encoding_size, hidden_size, out_elem_size, n_layers, dropout=0, custom_init='kaiming_normal', **kwargs):
         super().__init__()
         self.custom_init = custom_init
         self.n_layers = n_layers
