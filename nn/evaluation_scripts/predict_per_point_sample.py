@@ -7,6 +7,8 @@ import numpy as np
 from pathlib import Path
 import shutil
 import torch
+import torch.nn as nn
+import traceback
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys,inspect
@@ -73,13 +75,13 @@ if __name__ == "__main__":
     shape_experiment = WandbRunWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
-        run_name='multi-all-fin', 
-        run_id='216nexgv')  # finished experiment
+        run_name='RNN-no-stitch-5000-filt-cond', 
+        run_id='3857jk4g')  # finished experiment
     stitch_experiment = WandbRunWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
-        run_name='multi-all-fin', 
-        run_id='216nexgv')  # finished experiment
+        run_name='Filtered-stitches-on-RNN', 
+        run_id='3ncgkjnh')  # finished experiment
     if not shape_experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
 
@@ -98,7 +100,13 @@ if __name__ == "__main__":
         points = np.array(points)
 
         if abs(points.shape[0] - data_config['mesh_samples']) > 10:  # some tolerance to error
-            raise ValueError('Input point cloud has {} points while {} are expected'.format(points.shape[0], data_config['mesh_samples']))
+            selection = np.random.permutation(points.shape[0])[:data_config['mesh_samples']]
+            print('Warning::Input point cloud has {} points while {} are expected. Needed #points was sampled'.format(
+                points.shape[0], data_config['mesh_samples']))
+            points = points[selection]
+            # raise ValueError('Input point cloud has {} points while {} are expected'.format(points.shape[0], data_config['mesh_samples']))
+            print(points.shape)
+           
 
         if 'standardize' in data_config:
             points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
@@ -107,6 +115,8 @@ if __name__ == "__main__":
     # ----- Model (Pattern Shape) architecture -----
     model_class = getattr(nets, shape_experiment.NN_config()['model'])
     model = model_class(data_config, shape_experiment.NN_config(), shape_experiment.NN_config()['loss'])
+    if 'device_ids' in shape_experiment.NN_config():  # model from multi-gpu training case
+        model = nn.DataParallel(model, device_ids=['cuda:0'])
     model.load_state_dict(shape_experiment.load_best_model()['model_state_dict'])
     model = model.to(device=device)
     model.eval()
@@ -118,7 +128,7 @@ if __name__ == "__main__":
 
     # ---- save shapes ----
     saving_path = save_to / 'shape'
-    saving_path.mkdir(parents=True, exists_ok=True)
+    saving_path.mkdir(parents=True, exist_ok=True)
 
     names = [VisPattern.name_from_path(elem) for elem in sample_paths]
     data.save_garments_prediction(predictions, saving_path, data_config, names)
@@ -127,31 +137,46 @@ if __name__ == "__main__":
     # ========== Stitch prediction =========
 
     # ----- Model (Stitch Prediction) ------
-    _, _, data_config = stitch_experiment.data_info()  # need to get data stats
+    _, _, stitch_data_config = stitch_experiment.data_info()  # need to get data stats
     model_class = getattr(nets, stitch_experiment.NN_config()['model'])
-    stitch_model = model_class(data_config, stitch_experiment.NN_config(), stitch_experiment.NN_config()['loss'])
+    stitch_model = model_class(stitch_data_config, stitch_experiment.NN_config(), stitch_experiment.NN_config()['loss'])
+    if 'device_ids' in stitch_experiment.NN_config():  # model from multi-gpu training case
+        stitch_model = nn.DataParallel(stitch_model, device_ids=['cuda:0'])
+
     stitch_model.load_state_dict(stitch_experiment.load_best_model()['model_state_dict'])
-    stitch_model = stitch_model.to(device=device)
+    # stitch_model = stitch_model.to(device=device)
     stitch_model.eval()
 
     # ----- predict & save stitches ------
     saving_path = save_to / 'stitched'
-    saving_path.mkdir(parents=True, exists_ok=True)
+    saving_path.mkdir(parents=True, exist_ok=True)
     for idx, name in enumerate(names):
         # "unbatch" dictionary
         prediction = {}
         for key in predictions:
             prediction[key] = predictions[key][idx]
+
+        if data_config is not None and 'standardize' in data_config:
+            # undo standardization  (outside of generinc conversion function due to custom std structure)
+            gt_shifts = data_config['standardize']['gt_shift']
+            gt_scales = data_config['standardize']['gt_scale']
+            for key in gt_shifts:
+                if key == 'stitch_tags' and not data_config['explicit_stitch_tags']:  
+                    # ignore stitch tags update if explicit tags were not used
+                    continue
+                prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
+
         pattern = NNSewingPattern(view_ids=False)
         pattern.name = name
         try:
             pattern.pattern_from_tensors(
                 prediction['outlines'], prediction['rotations'], prediction['translations'], 
                 padded=True)   
-            pattern.stitches_from_pair_classifier(stitch_model, data_config['standardize'])
+            pattern.stitches_from_pair_classifier(stitch_model, stitch_data_config['standardize'])
             pattern.serialize(save_to / 'stitched', to_subfolder=True)
 
         except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+            print(traceback.format_exc())
             print(e)
             print('Saving predictions::Skipping pattern {}'.format(name))
             pass

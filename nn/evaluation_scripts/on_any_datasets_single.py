@@ -23,20 +23,22 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filtered-att-data-condenced-classes',
-    run_id='390wuxbm')  # finished experiment
+    run_name='Filt-Att-Condenced-ordermatching',
+    run_id='16m5ghzf')  # finished experiment
+    # run_name='No-Loop-Filt-Att-Condenced',
+    # run_id='2pbrilln')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
 
 # -------- data -------
 dataset_list = [
-    # 'jacket_hood_sleeveless_150',
-    # 'skirt_waistband_150', 
+    'jacket_hood_sleeveless_150',
+    'skirt_waistband_150', 
     'tee_hood_150',
     'jacket_sleeveless_150',
-    # 'dress_150',
-    # 'jumpsuit_150',
+    'dress_150',
+    'jumpsuit_150',
     'wb_jumpsuit_sleeveless_150'
 ]
 
@@ -49,9 +51,9 @@ data_config.update(data_folders=dataset_list)
 data_config.update(max_datapoints_per_type=150)
 
 if not experiment.is_finished():
-    # Use files appropriate for the experiment
+    # NOTE Use files appropriate for the experiment
+    data_config.update({'panel_classification': './nn/data_configs/panel_classes_condenced.json'})   
     data_config.update({'filter_by_params': './nn/data_configs/param_filter.json'})
-    data_config.update({'panel_classification': './nn/data_configs/panel_classes_condenced.json'})
 
 batch_size = 5   # fit on less powerfull machines
 
@@ -78,7 +80,7 @@ print('Full metrics on unseen set: {}'.format(loss))
 breakdown = eval_metrics(model, datawrapper, 'full_per_data_folder')
 print('Metrics per dataset: {}'.format(breakdown))
 
-# -------- Predict ---------
+# # -------- Predict ---------
 prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['full'])
 print('Saved to {}'.format(prediction_path))
 

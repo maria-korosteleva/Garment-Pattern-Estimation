@@ -60,8 +60,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filtered-att-data-condenced-classes',
-    run_id='390wuxbm')  # finished experiment
+    run_name='No-Loop-Filt-Att-Condenced',
+    run_id='2pbrilln')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -71,6 +71,9 @@ if not experiment.is_finished():
 split, batch_size, data_config = experiment.data_info()  # note that run is not initialized -- we use info from finished run
 
 data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
+
+# DEBUG Force filtering    
+# data_config.update({'filter_by_params': './nn/data_configs/param_filter.json'})
 
 if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
@@ -112,27 +115,27 @@ model.load_state_dict(state_dict)
 model.module.loss.debug_prints = True
 
 # ------- Evaluate --------
-valid_loss = eval_metrics(model, datawrapper, 'validation')
-print('Validation metrics: {}'.format(valid_loss))
-valid_breakdown = eval_metrics(model, datawrapper, 'valid_per_data_folder')
-print('Validation metrics per dataset: {}'.format(valid_breakdown))
+# valid_loss = eval_metrics(model, datawrapper, 'validation')
+# print('Validation metrics: {}'.format(valid_loss))
+# valid_breakdown = eval_metrics(model, datawrapper, 'valid_per_data_folder')
+# print('Validation metrics per dataset: {}'.format(valid_breakdown))
 
-# test_metrics = eval_metrics(model, datawrapper, 'test')
-# print('Test metrics: {}'.format(test_metrics))
+test_metrics = eval_metrics(model, datawrapper, 'test')
+print('Test metrics: {}'.format(test_metrics))
 # test_breakdown = eval_metrics(model, datawrapper, 'test_per_data_folder')
 # print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # experiment.add_statistic('valid_on_best', valid_loss)
 # experiment.add_statistic('valid', valid_breakdown)
-# experiment.add_statistic('test_on_best', test_metrics)
+experiment.add_statistic('test_on_best', test_metrics)
 # experiment.add_statistic('test', test_breakdown)
 
 # # -------- Predict ---------
 # save prediction for validation to file
-prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-print('Saved to {}'.format(prediction_path))
-# # reflect predictions info in expetiment
-experiment.add_statistic('test_pred_folder', prediction_path.name)
+# prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
+# print('Saved to {}'.format(prediction_path))
+# # # reflect predictions info in expetiment
+# experiment.add_statistic('test_pred_folder', prediction_path.name)
 
-art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
-experiment.add_artifact(prediction_path, art_name, 'result')
+# art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
+# experiment.add_artifact(prediction_path, art_name, 'result')
