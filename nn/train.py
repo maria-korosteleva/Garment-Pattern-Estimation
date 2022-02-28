@@ -197,7 +197,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Test-Garments-Reconstruction', 
+        project_name='Garments-Reconstruction', 
         run_name='MLP-Global-filt-Condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
