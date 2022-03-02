@@ -23,8 +23,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='Filt-Att-Condenced-scans',
-    run_id='2av4kq0f')  # finished experiment
+    run_name='MLP-Global-filt-Condenced',
+    run_id='pl7kwsfr')  # finished experiment
     # run_name='No-Loop-Filt-Att-Condenced',
     # run_id='2pbrilln')  # finished experiment
 
