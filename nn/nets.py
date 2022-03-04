@@ -241,8 +241,10 @@ class GarmentFullPattern3D(BaseModule):
         # ---- Net configuration ----
         self.config.update({
             'panel_encoding_size': 70, 
+            'panel_hidden_size': 70,
             'panel_n_layers': 4, 
             'pattern_encoding_size': 130, 
+            'pattern_hidden_size': 130, 
             'pattern_n_layers': 3, 
             'dropout': 0,
             'lstm_init': 'kaiming_normal_', 
@@ -280,17 +282,21 @@ class GarmentFullPattern3D(BaseModule):
         # ----- Decode into pattern definition -------
         panel_decoder_module = getattr(blocks, self.config['panel_decoder'])
         self.panel_decoder = panel_decoder_module(
-            self.config['panel_encoding_size'], self.config['panel_encoding_size'], 
-            self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
-            self.config['panel_n_layers'], 
+            encoding_size=self.config['panel_encoding_size'], 
+            hidden_size=self.config['panel_hidden_size'], 
+            out_elem_size=self.panel_elem_len + self.config['stitch_tag_dim'] + 1,  # last element is free tag indicator 
+            n_layers=self.config['panel_n_layers'], 
             out_len = self.max_panel_len,
             dropout=self.config['dropout'], 
             custom_init=self.config['lstm_init']
         )
         pattern_decoder_module = getattr(blocks, self.config['pattern_decoder'])
         self.pattern_decoder = pattern_decoder_module(
-            self.config['pattern_encoding_size'], self.config['pattern_encoding_size'], self.config['panel_encoding_size'], self.config['pattern_n_layers'], 
-            out_len = self.max_pattern_size,
+            encoding_size=self.config['pattern_encoding_size'], 
+            hidden_size=self.config['pattern_hidden_size'], 
+            out_elem_size=self.config['panel_encoding_size'], 
+            n_layers=self.config['pattern_n_layers'], 
+            out_len=self.max_pattern_size,
             dropout=self.config['dropout'],
             custom_init=self.config['lstm_init']
         )
