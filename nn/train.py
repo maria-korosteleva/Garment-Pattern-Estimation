@@ -29,13 +29,13 @@ def get_values_from_args():
     parser.add_argument('--obj_nametag', '-obj', help='substring to identify 3D model files to load', type=str, default='sim')
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=25)  # larger model
-    parser.add_argument('--pattern_hidden_multiplier', '-phe', help='size of pattern encoding as multiplier of 10', type=int, default=5)  # DEBUG 250
+    parser.add_argument('--pattern_hidden_multiplier', '-phe', help='size of pattern encoding as multiplier of 10', type=int, default=5)  # DEBUG 25
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=25)
-    parser.add_argument('--panel_hidden_multiplier', '-plhe', help='size of panel encoding as multiplier of 10', type=int, default=5)  # DEBUG 250
+    parser.add_argument('--panel_hidden_multiplier', '-plhe', help='size of panel encoding as multiplier of 10', type=int, default=25)  # DEBUG 25 5
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
     parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='MLPDecoder')   # DEBUG MLPDecoder  LSTMDecoderModule
-    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='MLPDecoder')   # DEBUG MLPDecoder
+    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')   # DEBUG MLPDecoder
     # stitches
     parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
     parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='MLP-both-small-Global-filt-Condenced', 
+        run_name='MLP-pattern-small-Global-filt-Condenced', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
