@@ -60,8 +60,8 @@ system_info = customconfig.Properties('./system.json')
 experiment = WandbRunWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
-    run_name='No-Loop-Filt-Att-Condenced',
-    run_id='2pbrilln')  # finished experiment
+    run_name='Filt-Att-Condenced-Retry',
+    run_id='25g4d6si')  # finished experiment
 
 if not experiment.is_finished():
     print('Warning::Evaluating unfinished experiment')
@@ -74,6 +74,9 @@ data_config.update({'obj_filetag': 'sim'})  # scan imitation stats
 
 # DEBUG Force filtering    
 # data_config.update({'filter_by_params': './nn/data_configs/param_filter.json'})
+
+# DEBUG Force noise
+data_config.update({'point_noise_w': 0.1})
 
 if 'class' in data_config:
     data_class = getattr(data, data_config['class'])
@@ -122,13 +125,13 @@ model.module.loss.debug_prints = True
 
 test_metrics = eval_metrics(model, datawrapper, 'test')
 print('Test metrics: {}'.format(test_metrics))
-# test_breakdown = eval_metrics(model, datawrapper, 'test_per_data_folder')
-# print('Test metrics per dataset: {}'.format(test_breakdown))
+#test_breakdown = eval_metrics(model, datawrapper, 'test_per_data_folder')
+#print('Test metrics per dataset: {}'.format(test_breakdown))
 
 # experiment.add_statistic('valid_on_best', valid_loss)
 # experiment.add_statistic('valid', valid_breakdown)
-experiment.add_statistic('test_on_best', test_metrics)
-# experiment.add_statistic('test', test_breakdown)
+experiment.add_statistic('test_on_best_noise_0_1', test_metrics)
+# experiment.add_statistic('test_scan', test_breakdown)
 
 # # -------- Predict ---------
 # save prediction for validation to file

@@ -253,6 +253,11 @@ class GarmentFullPattern3D(BaseModule):
             'pattern_decoder': 'LSTMDecoderModule', 
             'stitch_tag_dim': 3
         })
+        # Adjust input settings for backwards compatibility (older runs had these parameters together)
+        if 'panel_hidden_size' not in config:
+            config['panel_hidden_size'] = config['panel_encoding_size']
+        if 'pattern_hidden_size' not in config:
+            config['pattern_hidden_size'] = config['pattern_encoding_size']
         # update with input settings
         self.config.update(config) 
 

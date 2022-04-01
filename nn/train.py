@@ -24,7 +24,7 @@ def get_values_from_args():
     # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
     # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=5)
+    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=4)
     parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
     parser.add_argument('--obj_nametag', '-obj', help='substring to identify 3D model files to load', type=str, default='sim')
     # Pattern decoder
@@ -57,12 +57,13 @@ def get_values_from_args():
     print(args)
 
     data_config = {
-        # 'mesh_samples': args.mesh_samples_multiplier * 500,
-        # 'obj_filetag': args.obj_nametag,
+        'mesh_samples': args.mesh_samples_multiplier * 500,
+        'obj_filetag': args.obj_nametag,
         'stitched_edge_pairs_num': 200,
         'non_stitched_edge_pairs_num': 200,
         'shuffle_pairs': True, 
-        'shuffle_pairs_order': True
+        'shuffle_pairs_order': True,
+        'point_noise_w': 0
     }
 
     nn_config = {
@@ -168,7 +169,7 @@ def get_data_config(in_config, old_stats=False):
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
             'filter_by_params': './nn/data_configs/param_filter.json',
-            'obj_filetag':  'sim'  # 'sim' 'scan' 
+            'obj_filetag':  'sim'  # 'sim' 'scan',
         }  
 
     # update with freshly configured values

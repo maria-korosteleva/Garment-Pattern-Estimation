@@ -1009,6 +1009,8 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
     def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
+        if 'point_noise_w' not in start_config:
+            start_config['point_noise_w'] = 0  # default value if not given -- a bettern gurantee than a default value in func params
         
         # to cache segmentation mask if enabled
         self.segm_cached = {}
@@ -1251,6 +1253,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         
         verts, faces = igl.read_triangle_mesh(str(self.root_path / datapoint_name / obj_list[0]))
         points = self.sample_mesh_points(self.config['mesh_samples'], verts, faces)
+
+        # add gaussian noise
+        if self.config['point_noise_w']:
+            points += np.random.normal(loc=0.0, scale=self.config['point_noise_w'], size=points.shape)
 
         # Debug
         # if 'skirt_4_panels_00HUVRGNCG' in datapoint_name:
