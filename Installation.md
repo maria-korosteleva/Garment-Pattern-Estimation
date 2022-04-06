@@ -19,6 +19,22 @@ conda activate Garments
 
 ## 2. Dependencies
 
+* For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` will likely fail
+
+* When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools
+
+* [libigl](https://github.com/libigl/libigl-python-bindings) needs installation with conda. You could also check other options on [their GitHub page](https://github.com/libigl/libigl-python-bindings)
+    ```
+    conda install -c conda-forge igl
+    ```
+* [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
+* Simple installation with `pip install <package_name>`: 
+    * `wandb` 
+    * `svglib` 
+    * `svgwrite`
+
+Example set of commands:
+
 ```
 conda install pytorch=1.9.1 cudatoolkit=10.2 -c pytorch
 
@@ -31,13 +47,26 @@ pip install -r requirements.txt
 
 ```
 
+Development was done on _Windows 10_ and Ubuntu. If running on other OS ends up with errors, please, raise an issue!
+
+**Notes on errors with PIL.Image**
+
+You might experience errors related with PIL (pillow) Image module. Those most often come from the ReportLab library requiring older versions of pillow that are currently available, the compatibility issues of pillow and python version, or ReportLab and libigl visualization routines requiring different versions of pillow. 
+
+*Working combinations*:
+* For ReportLab (saving patterns as png images) to work: 
+    * Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
+    * Python 3.8.5 + ReportLab 3.5.55 + pillow 7.1.1
+
 ## 3. Custom dependencies access
 
+Download [Garment-Pattern-Generator](https://github.com/maria-korosteleva/Garment-Pattern-Generator) code (for pattern loading)
+
 ```
-git clone <data_gen>
+git clone https://github.com/maria-korosteleva/Garment-Pattern-Generator
 ```
 
-Add path to custom packages to PYTHONPATH, for example, in the terminal:
+Add path to custom packages to PYTHONPATH for correct importing of our custom modules. For example, in the terminal:
 ```
 export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Data/packages
 ```
