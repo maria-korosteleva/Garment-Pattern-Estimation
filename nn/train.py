@@ -29,13 +29,13 @@ def get_values_from_args():
     parser.add_argument('--obj_nametag', '-obj', help='substring to identify 3D model files to load', type=str, default='sim')
     # Pattern decoder
     parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=25)  # larger model
-    parser.add_argument('--pattern_hidden_multiplier', '-phe', help='size of pattern encoding as multiplier of 10', type=int, default=5)  # DEBUG 25
+    parser.add_argument('--pattern_hidden_multiplier', '-phe', help='size of pattern encoding as multiplier of 10', type=int, default=25)  # DEBUG 25
     parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
     parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=25)
     parser.add_argument('--panel_hidden_multiplier', '-plhe', help='size of panel encoding as multiplier of 10', type=int, default=25)  # DEBUG 25 5
     parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
-    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='MLPDecoder')   # DEBUG MLPDecoder  LSTMDecoderModule
-    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')   # DEBUG MLPDecoder
+    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')   # MLPDecoder  LSTMDecoderModule
+    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')   #  MLPDecoder
     # stitches
     parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
     parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
@@ -164,8 +164,8 @@ def get_data_config(in_config, old_stats=False):
         split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'}   # DEBUG 
         data_config = {
             'max_datapoints_per_type': 5000,  # upper limit of how much data to grab from each type
-            'max_pattern_len': 30,  # DEBUG 30 > then the total number of panel classes  
-            'max_panel_len': 14,  # (jumpsuit front)
+            'max_pattern_len': 30,  # > then the total number of panel classes  
+            'max_panel_len': 14,  # > (jumpsuit front)
             'max_num_stitches': 24,  # jumpsuit (with sleeves)
             'panel_classification': './nn/data_configs/panel_classes_condenced.json',
             'filter_by_params': './nn/data_configs/param_filter.json',
@@ -203,26 +203,24 @@ if __name__ == "__main__":
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
         project_name='Garments-Reconstruction', 
-        run_name='MLP-pattern-small-Global-filt-Condenced', 
+        run_name='NeuralTailor-Train', 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
     # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=True)  # DEBUG
+    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
 
     data_config.update(data_folders=dataset_list)
     # dataset = data.Garment2DPatternDataset(
     #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
     dataset = data.Garment3DPatternFullDataset(
         Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    # dataset = data.GarmentStitchPairsDataset(system_info['datasets_path'], data_config, gt_caching=True, feature_caching=True)
-
     # DEBUG
     trainer = Trainer(experiment, dataset, split, batch_size=30, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     trainer.init_randomizer(net_seed)
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)  # MAIN
+    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
+    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)  # MAIN
     # model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 

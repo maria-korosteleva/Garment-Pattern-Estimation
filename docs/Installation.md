@@ -71,7 +71,6 @@ Add path to custom packages to PYTHONPATH for correct importing of our custom mo
 export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Data/packages
 ```
 
-
 ### Filesystem paths settings
 * Fill out system.json file
 Create system.json file in the root of this directory with your machine's file paths using system.template.json as a template. 
@@ -80,5 +79,15 @@ system.json should include the following:
     ```
     mkdir outputs
     ```
-* path to finalized garment datasets that could be used for training NN ('datasets_path')
+* path to finalized garment datasets that could be used for training\evaluating of NN ('datasets_path') -- see below
 * username for wandb tool for correct experiment tracking ('wandb_username')
+
+## 4. Dataset
+
+* Download the [Dataset of 3D Garments with Sewing Patterns](https://zenodo.org/record/5267549#.Yk__mMgzaUk) in order to train\evaluate NeuralTailor.
+    > NOTE: For evaluation of pre-trained NeuralTailor on unseen types you only need the _test.zip_ part of the dataset. 
+
+* Unpack all ZIP archives to the same directory, keeping the directory structure (every zip archive is a subfolder of your root). O
+
+* Add path to the downloaded and unpacked data to the system.json ('datasets_path')
+

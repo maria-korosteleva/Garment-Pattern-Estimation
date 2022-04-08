@@ -10,4 +10,11 @@ This NN training code uses dataset created with [Garment-Pattern-Generator](http
 
 ## Installation
 
-Installtion instructions are here: [Installation](Installation.md)
+Installtion instructions are here: [Installation](docs/Installation.md)
+
+
+## TODO
+* Documentation -- how to run training \ evaluation
+* Anonimous mode
+* Locally stored trained models
+* Clean configs

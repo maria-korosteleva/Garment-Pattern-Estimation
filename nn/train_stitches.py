@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     # Get training data from the shape experiment!
     shape_datawrapper, shape_model, shape_experiment = load_experiment(
-        'RNN-no-stitch-5000-filt-cond', '3857jk4g', in_batch_size=60, in_device='cuda:0')
+        'NeuralTailor-Train', '3857jk4g', in_batch_size=60, in_device='cuda:0')
     if train_on_predictions:
         # TODO save to original names!!
         prediction_path = shape_datawrapper.predict(
