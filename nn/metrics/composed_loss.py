@@ -295,10 +295,12 @@ class ComposedPatternLoss():
                         preds, gt_rotated, gt_num_edges, names, corr_mask)
                     loss_dict.update(quality_breakdown)
 
+        loss_update_ind = (epoch == self.config['epoch_with_stitches'] and any((el in self.l_components for el in ['stitch', 'stitch_supervised', 'free_class']))
+            or epoch == self.config['epoch_with_order_matching'] and self.config['panel_order_inariant_loss']
+            or epoch == self.config['epoch_with_cluster_checks'] and self.config['cluster_by'] is not None) 
+
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
-        return full_loss, loss_dict, (epoch == self.config['epoch_with_stitches'] 
-                                      or epoch == self.config['epoch_with_order_matching']
-                                      or epoch == self.config['epoch_with_cluster_checks'])
+        return full_loss, loss_dict, loss_update_ind
 
     def eval(self):
         """ Loss to evaluation mode """
