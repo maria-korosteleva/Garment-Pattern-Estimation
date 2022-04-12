@@ -1,0 +1,13 @@
+# Training configuration for Sitching infomration prediction model 
+# (part II of NeuralTailor)
+
+data_config:
+  stitched_edge_pairs_num: 200
+  non_stitched_edge_pairs_num: 200
+  shuffle_pairs: True
+  shuffle_pairs_order': True
+
+NN:
+  model: StitchOnEdge3DPairs
+  stitch_hidden_size: 200
+  stitch_mlp_n_layers: 3

@@ -1,7 +1,9 @@
+from distutils.command.config import config
 from pathlib import Path
 import argparse
 import numpy as np
 import torch.nn as nn
+import yaml
 
 # My modules
 import customconfig
@@ -20,196 +22,80 @@ def get_values_from_args():
     """command line arguments to control the run for running wandb Sweeps!"""
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
-    
-    # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
 
-    # basic
-    parser.add_argument('--mesh_samples_multiplier', '-m', help='number of samples per mesh as multiplier of 500', type=int, default=4)
-    parser.add_argument('--net_seed', '-ns', help='random seed for net initialization', type=float, default=916143406)
-    parser.add_argument('--obj_nametag', '-obj', help='substring to identify 3D model files to load', type=str, default='sim')
-    # Pattern decoder
-    parser.add_argument('--pattern_encoding_multiplier', '-pte', help='size of pattern encoding as multiplier of 10', type=int, default=25)  # larger model
-    parser.add_argument('--pattern_hidden_multiplier', '-phe', help='size of pattern encoding as multiplier of 10', type=int, default=25)  # DEBUG 25
-    parser.add_argument('--pattern_n_layers', '-ptl', help='number of layers in pattern decoder', type=int, default=2)
-    parser.add_argument('--panel_encoding_multiplier', '-pe', help='size of panel encoding as multiplier of 10', type=int, default=25)
-    parser.add_argument('--panel_hidden_multiplier', '-plhe', help='size of panel encoding as multiplier of 10', type=int, default=25)  # DEBUG 25 5
-    parser.add_argument('--panel_n_layers', '-pl', help='number of layers in panel decoder', type=int, default=3)
-    parser.add_argument('--pattern_decoder', '-rdec', help='type of pattern decoder module', type=str, default='LSTMDecoderModule')   # MLPDecoder  LSTMDecoderModule
-    parser.add_argument('--panel_decoder', '-ldec', help='type of panel decoder module', type=str, default='LSTMDecoderModule')   #  MLPDecoder
-    # stitches
-    parser.add_argument('--st_tag_len', '-stlen', help='size of the stitch tag', type=int, default=3)
-    parser.add_argument('--st_tag_margin', '-stmar', help='margin for stitch tags separation', type=float, default=0.3)
-    parser.add_argument('--st_tag_hardnet', '-sthard', help='weather to use hardnet in stitch loss', type=int, default=0)
-
-    # EdgeConv
-    parser.add_argument('--conv_depth', '-cd', help='number of convolutional layers in EdgeConv', type=int, default=2)
-    parser.add_argument('--k_multiplier', '-k', help='number of nearest neigbors for graph construction in EdgeConv as multiplier of 5', type=int, default=1)
-    parser.add_argument('--ec_hidden_multiplier', '-ech', help='size of EdgeConv hidden layers as multiplier of 10', type=int, default=20)
-    parser.add_argument('--ec_hidden_depth', '-echd', help='number of hidden layers in EdgeConv', type=int, default=2)
-    parser.add_argument('--ec_feature_multiplier', '-ecf', help='size of EdgeConv feature on each conv as multiplier of 10', type=int, default=15)
-    parser.add_argument('--ec_conv_aggr', '-ecca', help='type of feature aggregation in EdgeConv on edge level', type=str, default='max')
-    parser.add_argument('--ec_global_aggr', '-ecga', help='type of feature aggregation in EdgeConv on graph level', type=str, default='mean')
-    parser.add_argument('--ec_skip', '-ecsk', help='Wether to use skip connections in EdgeConv', type=int, default=1)
-    parser.add_argument('--ec_gpool', '-ecgp', help='Wether to use graph pooling after convolution in EdgeConv', type=int, default=0)
-    parser.add_argument('--ec_gpool_ratio', '-ecr', help='ratio of graph pooling in EdgeConv', type=float, default=0.1)
-
+    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./nn/train_configs/att.yaml')
     args = parser.parse_args()
-    print(args)
 
-    data_config = {
-        'mesh_samples': args.mesh_samples_multiplier * 500,
-        'obj_filetag': args.obj_nametag,
-        'stitched_edge_pairs_num': 200,
-        'non_stitched_edge_pairs_num': 200,
-        'shuffle_pairs': True, 
-        'shuffle_pairs_order': True,
-        'point_noise_w': 0
-    }
+    with open(args.config, 'r') as f:
+        config = yaml.load(f)
 
-    nn_config = {
-        # indep stitch config
-        'stitch_hidden_size': 200, 
-        'stitch_mlp_n_layers': 3,
-
-        # pattern decoders
-        'panel_encoding_size': args.panel_encoding_multiplier * 10,
-        'panel_hidden_size': args.panel_hidden_multiplier * 10,   # TODO Use in the Attention model too?
-        'panel_n_layers': args.panel_n_layers,
-        'pattern_encoding_size': args.pattern_encoding_multiplier * 10,
-        'pattern_hidden_size': args.pattern_hidden_multiplier * 10,
-        'pattern_n_layers': args.pattern_n_layers,
-        'panel_decoder': args.panel_decoder,
-        'pattern_decoder': args.pattern_decoder,
-        'local_attention': True,
-
-        # stitches
-        'stitch_tag_dim': args.st_tag_len, 
-
-        # EdgeConv params
-        'conv_depth': args.conv_depth, 
-        'k_neighbors': args.k_multiplier * 5, 
-        'EConv_hidden': args.ec_hidden_multiplier * 10, 
-        'EConv_hidden_depth': args.ec_hidden_depth, 
-        'EConv_feature': args.ec_feature_multiplier * 10, 
-        'EConv_aggr': args.ec_conv_aggr, 
-        'global_pool': args.ec_global_aggr, 
-        'skip_connections': bool(args.ec_skip),
-        'graph_pooling': bool(args.ec_gpool),
-        'pool_ratio': args.ec_gpool_ratio,  # only used when the graph pooling is enabled
-    }
-
-    loss_config = {
-        'loss_components': ['shape', 'loop', 'rotation', 'translation'],   # 'stitch', 'free_class'],  # , 'segmentation'],
-        'quality_components': ['shape', 'discrete', 'rotation', 'translation'],  # 'stitch', 'free_class'],
-
-        # Extra loss parameters
-        'stitch_tags_margin': args.st_tag_margin,
-        'stitch_hardnet_version': args.st_tag_hardnet,
-        'loop_loss_weight': 1.,
-        'segm_loss_weight': 0.05,
-        'stitch_tags_margin': 0.3,
-        'epoch_with_stitches': 1000,  # turn off stitches
-
-        'epoch_with_order_matching': 0,
-        'panel_origin_invariant_loss': False,
-        'panel_order_inariant_loss': False,  # False to use original order 
-        'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
-    }
-
-    return data_config, nn_config, loss_config, args.net_seed
+    return config 
 
 
-def get_data_config(in_config, old_stats=False):
+def get_old_data_config(in_config):
     """Shortcut to control data configuration
         Note that the old experiment is HARDCODED!!!!!"""
-    if old_stats:
-        # get data stats from older runs to save runtime
-        old_experiment = WandbRunWrappper(
-            system_info['wandb_username'],
-            project_name='Garments-Reconstruction', 
-            # run_name='All-predefined-order-att-max', run_id='s8fj6bqz'  
-            run_name='Filtered-att-data-condenced-classes', run_id='390wuxbm'  
-            # run_name='All-5000-condenced-classes', run_id='1plkspqt' 
-            # run_name='segmentation', run_id='pq1lcbo7'  # DEBUG
-        )
-        # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
-        split, _, data_config = old_experiment.data_info()
-        data_config = {
-            'standardize': data_config['standardize'],
-            'max_pattern_len': data_config['max_pattern_len'],
-            'max_panel_len': data_config['max_panel_len'],
-            'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
-            'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None,  # keep the numbers too
-            # 'filter_by_params': './nn/data_configs/param_filter.json'   # DEBUG Should be loaded too though!
-            'panel_classification': data_config['panel_classification'],
-            'filter_by_params': data_config['filter_by_params']
-        }
-    else:  # default split for reproducibility
-        # NOTE addining 'filename' property to the split will force the data to be loaded from that list, instead of being randomly generated
-        split = {'valid_per_type': 100, 'test_per_type': 100, 'random_seed': 10, 'type': 'count', 'filename': './wandb/data_split.json'}   # DEBUG 
-        data_config = {
-            'max_datapoints_per_type': 5000,  # upper limit of how much data to grab from each type
-            'max_pattern_len': 30,  # > then the total number of panel classes  
-            'max_panel_len': 14,  # > (jumpsuit front)
-            'max_num_stitches': 24,  # jumpsuit (with sleeves)
-            'panel_classification': './nn/data_configs/panel_classes_condenced.json',
-            'filter_by_params': './nn/data_configs/param_filter.json',
-            'obj_filetag':  'sim'  # 'sim' 'scan',
-        }  
-
+    # get data stats from older runs to save runtime
+    old_experiment = WandbRunWrappper(
+        system_info['wandb_username'],
+        project_name=in_config['old_experiment']['project_name'],
+        run_name=in_config['old_experiment']['run_name'],
+        run_id=in_config['old_experiment']['run_id']
+    )
+    # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
+    split, _, data_config = old_experiment.data_info()
+    data_config = {
+        'standardize': data_config['standardize'],
+        'max_pattern_len': data_config['max_pattern_len'],
+        'max_panel_len': data_config['max_panel_len'],
+        'max_num_stitches': data_config['max_num_stitches'],  # the rest of the info is not needed here
+        'max_datapoints_per_type': data_config['max_datapoints_per_type'] if 'max_datapoints_per_type' in data_config else None,  # keep the numbers too
+        'panel_classification': data_config['panel_classification'],
+        'filter_by_params': data_config['filter_by_params'],
+        'mesh_samples': data_config['mesh_samples'],
+        'obj_filetag': data_config['obj_filetag'],
+        'point_noise_w': data_config['point_noise_w'] if 'point_noise_w' in data_config else 0
+    }
     # update with freshly configured values
-    data_config.update(in_config)
+    in_config.update(data_config)
     
     print(split)
 
-    return split, data_config
+    return split, in_config
 
 
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
-    dataset_list = [
-        'dress_sleeveless_2550',
-        'jumpsuit_sleeveless_2000',
-        'skirt_8_panels_1000',
-        'wb_pants_straight_1500',
-        'skirt_2_panels_1200',
-        'jacket_2200',
-        'tee_sleeveless_1800',   # 'tee_sleeveless_short_extended_2500',   # 
-        'wb_dress_sleeveless_2600',
-        'jacket_hood_2700',
-        'pants_straight_sides_1000',
-        'tee_2300',  # 'tee_short_extended_3000',   # 
-        'skirt_4_panels_1600'
-    ]
-    in_data_config, in_nn_config, in_loss_config, net_seed = get_values_from_args()
+    config = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
     experiment = WandbRunWrappper(
         system_info['wandb_username'], 
-        project_name='Garments-Reconstruction', 
-        run_name='NeuralTailor-Train', 
+        project_name=config['experiment']['project_name'], 
+        run_name=config['experiment']['run_name'], 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
-    # NOTE this dataset involves point sampling SO data stats from previous runs might not be correct, especially if we change the number of samples
-    split, data_config = get_data_config(in_data_config, old_stats=False)  # DEBUG
+    # Data
+    if 'old_experiment' in config['data_config']:
+        config['split'], config['data_config'] = get_old_data_config(config['data_config'])
 
-    data_config.update(data_folders=dataset_list)
-    # dataset = data.Garment2DPatternDataset(
-    #    Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    dataset = data.Garment3DPatternFullDataset(
-        Path(system_info['datasets_path']), data_config, gt_caching=True, feature_caching=True)
-    # DEBUG
-    trainer = Trainer(experiment, dataset, split, batch_size=30, with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+    data_class = getattr(data, config['data_config']['class'])
+    dataset = data_class(Path(system_info['datasets_path']), config['data_config'], gt_caching=True, feature_caching=True)
 
-    trainer.init_randomizer(net_seed)
-    # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
-    # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
-    model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)  # MAIN
-    # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
+    # Trainer
+    trainer = Trainer(
+        experiment, dataset, config['split'], 
+        batch_size=config['trainer']['batch_size'], 
+        with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+
+    # Model
+    trainer.init_randomizer(config['NN']['seed'])
+    model_class = getattr(nets, config['NN']['model'])
+    model = model_class(dataset.config, config['NN'], config['loss'])
 
     # Multi-GPU!!!
-    model = nn.DataParallel(model, device_ids=['cuda:0', 'cuda:1'])  # , 'cuda:2'])
+    model = nn.DataParallel(model, device_ids=config['trainer']['devices'])
     model.module.config['device_ids'] = model.device_ids
 
     print(f'Using devices: {model.device_ids}')
@@ -219,6 +105,7 @@ if __name__ == "__main__":
     if hasattr(model.module, 'config'):
         trainer.update_config(NN=model.module.config)  # save NN configuration
 
+    # TRAIN
     trainer.fit(model)  # Magic happens here
 
     # --------------- Final evaluation -- same as in test.py --------------

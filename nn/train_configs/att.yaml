@@ -1,0 +1,115 @@
+# Training configuration for Pattern Shape prediction model 
+# (part I of NeuralTailor)
+
+experiment:
+  project_name: Test-Garments-Reconstruction
+  run_name: NeuralTailor-Train-config
+
+# ----- Dataset-related properties -----
+data_config:
+  class: Garment3DPatternFullDataset   # Garment2DPatternDataset
+
+  data_folders:
+    - dress_sleeveless_2550
+    - jumpsuit_sleeveless_2000
+    - skirt_8_panels_1000
+    - wb_pants_straight_1500
+    - skirt_2_panels_1200
+    - jacket_2200
+    - tee_sleeveless_1800
+    - wb_dress_sleeveless_2600
+    - jacket_hood_2700
+    - pants_straight_sides_1000
+    - tee_2300
+    - skirt_4_panels_1600
+
+  old_experiment:
+    project_name: Garments-Reconstruction
+    run_name: Filtered-att-data-condenced-classes
+    run_id: 390wuxbm
+
+  # Loadable parameters -- overrwitten if old_experiment is specified
+  mesh_samples: 2000
+  obj_filetag: sim  # scan
+  standardize: null
+  max_pattern_len: 30
+  max_panel_len: 14
+  max_num_stitches: 24   # when training with stitches
+  max_datapoints_per_type: 5000
+  panel_classification: ./nn/data_configs/panel_classes_condenced.json 
+  filter_by_params: ./nn/data_configs/param_filter.json
+  point_noise_w: 0
+
+split:
+  valid_per_type: 100
+  test_per_type: 100
+  random_seed: 10
+  type: count
+  # NOTE addining 'filename' property to the split will force the data 
+  # to be loaded from that list, instead of being randomly generated
+  filename: ./wandb/data_split.json
+
+
+# ----- Network Architecture --------
+NN:
+  model: GarmentSegmentPattern3D   # GarmentFullPattern3D for LSTM-based model  GarmentPanelsAE   StitchOnEdge3DPairs
+
+  seed: 916143406
+
+  # Point Cloud Encoder
+  feature_extractor: EdgeConvFeatures
+  conv_depth: 2
+  k_neighbors: 5
+  EConv_hidden: 200
+  EConv_hidden_depth: 2
+  EConv_feature: 150
+  EConv_aggr: max
+  global_pool: mean
+  skip_connections: True
+  graph_pooling: False
+  pool_ratio: 0.1
+
+  # Attention
+  local_attention: True
+
+  # Panel Decoder
+  panel_decoder: LSTMDecoderModule   # MLPDecoder
+  panel_encoding_size: 250
+  panel_hidden_size: 250
+  panel_n_layers: 3
+  lstm_init: kaiming_normal_
+
+  # Pattern decoder
+  # Only used in GarmentFullPattern3D
+  pattern_decoder: LSTMDecoderModule  # MLPDecoder
+  pattern_encoding_size: 250
+  pattern_hidden_size: 250
+  pattern_n_layers: 2
+
+  stitch_tag_dim: 3
+
+
+# ----- Losses ----
+loss:
+  loss_components:  [shape, loop, rotation, translation]  #  stitch, free_class, segmentation
+  quality_components:  [shape, discrete, rotation, translation]  # stitch, free_class
+
+  stitch_tags_margin: 0.3  
+  stitch_hardnet_version: False
+
+  loop_loss_weight: 1.
+  segm_loss_weight: 0.05
+
+  epoch_with_stitches: 40
+
+  panel_origin_invariant_loss: False
+
+  panel_order_inariant_loss: False  # False to use ordering as in the data_config
+  epoch_with_order_matching: 0
+  order_by: shape_translation   # placement, translation, stitches, shape_translation
+
+
+# ------- Trainer -----
+trainer: 
+  batch_size: 30
+  devices: [cuda:0]
