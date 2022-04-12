@@ -566,7 +566,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
 
         if 'loss_components' not in in_loss_config:
-            # with\wihtout attention losses!   , 'att_distribution', 'min_empty_att', 'stitch', 'free_class'
+            # 'stitch', 'free_class' for enabling stitch prediction
             in_loss_config.update(
                 loss_components=['shape', 'loop', 'rotation', 'translation'], 
                 quality_components=['shape', 'discrete', 'rotation', 'translation']
@@ -580,9 +580,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         # set to true to get attention weights with prediction -- for visualization or loss evaluation
         # Keep false in all unnecessary cases to save memory!
-        self.save_att_weights = (
-            'att_distribution' in self.loss.config['loss_components'] 
-            or 'segmentation' in self.loss.config['loss_components'])
+        self.save_att_weights = 'segmentation' in self.loss.config['loss_components']
 
         # defaults
         if 'local_attention' not in self.config:
@@ -703,7 +701,7 @@ class GarmentSegment2EncPattern3D(GarmentFullPattern3D):
     def __init__(self, data_config, config={}, in_loss_config={}):
 
         if 'loss_components' not in in_loss_config:
-            # with\wihtout attention losses!   , 'att_distribution', 'min_empty_att', 'stitch', 'free_class'
+            # 'stitch', 'free_class' for stitch prediction
             in_loss_config.update(
                 loss_components=['shape', 'loop', 'rotation', 'translation'], 
                 quality_components=['shape', 'discrete', 'rotation', 'translation']
@@ -715,9 +713,9 @@ class GarmentSegment2EncPattern3D(GarmentFullPattern3D):
 
         super().__init__(data_config, config, in_loss_config)
 
-        # set to true to get attention weights with prediction -- for visualization or loss evaluation
+        # set to true to get attention weights with prediction -- for visualization
         # Keep false in all unnecessary cases to save memory!
-        self.save_att_weights = 'att_distribution' in self.loss.config['loss_components'] or 'min_empty_att' in self.loss.config['loss_components']
+        self.save_att_weights = False
         # defaults
         if 'local_attention' not in self.config:
             # Has to be false for the old runs that don't have this setting and rely on global attention

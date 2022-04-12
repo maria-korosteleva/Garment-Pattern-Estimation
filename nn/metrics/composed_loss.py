@@ -158,10 +158,6 @@ class ComposedPatternLoss():
             'panel_order_inariant_loss': True,
             'order_by': 'placement',
             'epoch_with_order_matching': 0,
-
-            'att_empty_weight': 1,  # for empty panels zero attention loss
-            'att_distribution_saturation': 0.1,
-            'epoch_with_att_saturation': 0
         }
         self.config.update(in_config)  # override with requested settings
 
@@ -200,8 +196,6 @@ class ComposedPatternLoss():
             self.stitch_loss_supervised = nn.MSELoss()
         if 'free_class' in self.l_components:
             self.bce_logits_loss = nn.BCEWithLogitsLoss()  # binary classification loss
-        if 'att_distribution' in self.l_components:
-            self.att_distribution = AttentionDistributionLoss(self.config['att_distribution_saturation'])
         if 'segmentation' in self.l_components:
             # Segmenation output is Sparsemax scores (not SoftMax), hence using the appropriate loss
             self.segmentation = SparsemaxLoss()
@@ -329,11 +323,6 @@ class ComposedPatternLoss():
             translation_loss = self.regression_loss(preds['translations'], ground_truth['translations'])
             full_loss += translation_loss
             loss_dict.update(translation_loss=translation_loss)
-
-        if 'att_distribution' in self.l_components and self.epoch >= self.config['epoch_with_att_saturation']:
-            att_loss = self.att_distribution(preds['att_weights'])
-            full_loss += att_loss
-            loss_dict.update(att_distribution_loss=att_loss)
 
         if 'segmentation' in self.l_components:
 

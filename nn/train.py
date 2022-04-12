@@ -118,10 +118,6 @@ def get_values_from_args():
         'panel_origin_invariant_loss': False,
         'panel_order_inariant_loss': False,  # False to use original order 
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
-
-        'att_distribution_saturation': 0.03,
-        'att_empty_weight': 10,
-        'epoch_with_att_saturation': 1000,
     }
 
     return data_config, nn_config, loss_config, args.net_seed
