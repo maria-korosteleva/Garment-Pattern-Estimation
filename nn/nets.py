@@ -380,10 +380,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
                 quality_components=['shape', 'discrete', 'rotation', 'translation']
             )
 
-        # training control defaults
-        if 'freeze_on_clustering' not in config:
-            config.update(freeze_on_clustering=False)
-
         super().__init__(data_config, config, in_loss_config)
 
         # set to true to get attention weights with prediction -- for visualization or loss evaluation
@@ -477,12 +473,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         batch_size = positions_batch.shape[0]
 
-        epoch = kwargs['epoch'] if 'epoch' in kwargs else 0  # if not given -- go with default
-        if self.config['freeze_on_clustering'] and epoch >= self.loss.config['epoch_with_cluster_checks']:
-            self.freeze_panel_dec()
-        elif self.training:  # avoid accidential freezing from evaluation mode propagated to training
-            self.freeze_panel_dec(True)
-
         # attention-based panel encodings
         panel_encodings, att_weights = self.forward_panel_enc_from_3d(positions_batch)
 
@@ -494,10 +484,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
 
         return panels
 
-    def freeze_panel_dec(self, requires_grad=False):
-        """ freeze parameters of panel_decoder """
-        for param in self.panel_decoder.parameters():
-            param.requires_grad = requires_grad
 
 
 

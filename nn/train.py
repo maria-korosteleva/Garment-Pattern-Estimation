@@ -80,11 +80,7 @@ def get_values_from_args():
         'pattern_n_layers': args.pattern_n_layers,
         'panel_decoder': args.panel_decoder,
         'pattern_decoder': args.pattern_decoder,
-        'attention_token_size': 20,
         'local_attention': True,
-
-        # training control
-        'freeze_on_clustering': False,  # default is flase
 
         # stitches
         'stitch_tag_dim': args.st_tag_len, 
