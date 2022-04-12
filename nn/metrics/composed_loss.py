@@ -159,13 +159,6 @@ class ComposedPatternLoss():
             'order_by': 'placement',
             'epoch_with_order_matching': 0,
 
-            'cluster_by': 'order_feature',  # 'panel_encodings', 'order_feature''   -- default is to use the same feature as for order matching
-            'epoch_with_cluster_checks': 0,
-            'gap_cluster_threshold': 0.,  # differentiating single\multi class cases 
-            'diff_cluster_threshold': 0.,  # differentiating single\multi class cases 
-            'cluster_gap_nrefs': 20,   # reducing will speed up training
-            'cluster_with_singles': False, 
-
             'att_empty_weight': 1,  # for empty panels zero attention loss
             'att_distribution_saturation': 0.1,
             'epoch_with_att_saturation': 0
@@ -259,8 +252,7 @@ class ComposedPatternLoss():
             # NOTE: Not supported for 
             if 'segmentation' in self.l_components: 
                 raise NotImplementedError('Order matching not supported for training with segmentation losses')
-            gt_rotated, order_metrics = self._gt_order_match(preds, ground_truth) 
-            loss_dict.update(order_metrics)
+            gt_rotated = self._gt_order_match(preds, ground_truth) 
         else:  # keep original
             gt_rotated = ground_truth
         
@@ -296,8 +288,7 @@ class ComposedPatternLoss():
                     loss_dict.update(quality_breakdown)
 
         loss_update_ind = (epoch == self.config['epoch_with_stitches'] and any((el in self.l_components for el in ['stitch', 'stitch_supervised', 'free_class']))
-            or epoch == self.config['epoch_with_order_matching'] and self.config['panel_order_inariant_loss']
-            or epoch == self.config['epoch_with_cluster_checks'] and self.config['cluster_by'] is not None) 
+            or epoch == self.config['epoch_with_order_matching'] and self.config['panel_order_inariant_loss']) 
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
         return full_loss, loss_dict, loss_update_ind
@@ -532,22 +523,6 @@ class ComposedPatternLoss():
             # run the optimal permutation eval
             gt_permutation = self._panel_order_match(pred_feature, gt_feature)
 
-            collision_swaps_stats = {}
-            if self.epoch >= self.config['epoch_with_cluster_checks'] and self.config['cluster_by'] is not None:
-                # remove panel types collision even it's not the best match with net output
-                # enourages good separation of panel "classes" during training, but not needed at evaluation time
-
-                if self.config['cluster_by'] == 'panel_encodings':
-                    cluster_feature = preds['panel_encodings']
-                elif self.config['cluster_by'] == 'translation':
-                    cluster_feature = self._feature_permute(ground_truth['translations'], gt_permutation)  # !!
-                else:  # order_feature -- default by the same feature as ordering
-                    cluster_feature = self._feature_permute(gt_feature, gt_permutation)  # !!
-
-                gt_permutation, collision_swaps_stats = self._att_cluster_analysis(
-                    cluster_feature, gt_permutation, ground_truth['empty_panels_mask']
-                )
-
             # Update gt info according to the permutation
             gt_updated['outlines'] = self._feature_permute(ground_truth['outlines'], gt_permutation)
             gt_updated['num_edges'] = self._feature_permute(ground_truth['num_edges'], gt_permutation)
@@ -580,7 +555,7 @@ class ComposedPatternLoss():
                 if key not in gt_updated:
                     gt_updated[key] = ground_truth[key]
 
-        return gt_updated, collision_swaps_stats
+        return gt_updated
 
     def _panel_order_match(self, pred_features, gt_features):
         """
@@ -671,234 +646,6 @@ class ComposedPatternLoss():
                         stitches[pattern_id][side][i] = new_panel_id * max_panel_len + in_panel_edge_id
                 
         return stitches
-
-    # ------ Cluster analysis -------
-    def _att_cluster_analysis(self, features, permutation, empty_panel_mask):
-        """ (try) to find and resolve cases when multiple panel clusters 
-            were assigned to the same panel id (hence attention slot)
-            in the given batch
-            Clusters are evaluated in unsupervised manner based on fiven feature
-        """
-        # Apply permutation (since we need to check the quality of permutation, cap =))
-        empty_mask = self._feature_permute(empty_panel_mask, permutation)
-
-        # references to non-empty elements only
-        non_empty = ~empty_mask
-        non_empty_ids_per_slot = []
-        for panel_id in range(empty_mask.shape[-1]):
-            non_empty_ids_per_slot.append(torch.nonzero(non_empty[:, panel_id], as_tuple=False).squeeze(-1))
-
-        # evaluate clustering
-        single_class, multiple_classes, empty_att_slots = self._eval_clusters(
-            features, non_empty_ids_per_slot, max_k=self.max_pattern_size)
-
-        avg_classes = float(sum([multiple_classes[el][0] for el in multiple_classes]) + len(single_class)) \
-                      / (len(multiple_classes) + len(single_class))
-
-        # update permulation for multi-class cases
-        num_swaps = 0
-        if len(multiple_classes):
-            new_permutation, num_swaps = self._distribute_clusters(
-                single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation)
-        
-        # updated permutation (if in training mode!!) & logging info
-        return new_permutation if self.training and len(multiple_classes) else permutation, {
-            'order_collision_swaps': num_swaps, 
-            # Average "baddness" of the multi cluster cases, including zeros for single classes. 
-            'multi-class-diffs': sum([multiple_classes[el][1] for el in multiple_classes]) / (len(multiple_classes) + len(single_class)) if len(multiple_classes) else 0, 
-            'multiple_classes_on_cluster': float(len(multiple_classes)) / empty_mask.shape[-1],
-            'avg_clusters': avg_classes
-        }
-
-    def _eval_clusters(self, features, non_empty_ids_per_slot, max_k=2):
-        """
-            Evaluate clustering property of given feature distribution for each panel id
-        """
-        empty_att_slots = []
-        single_class = []  # TODO Single classes as dict too
-        multiple_classes = {}
-        for panel_id in range(features.shape[1]):
-            non_empty_ids = non_empty_ids_per_slot[panel_id]
-            if len(non_empty_ids) == 0:  
-                # all panels at this place are empty
-                empty_att_slots.append(panel_id)
-                continue
-
-            slot_features = features[non_empty_ids, panel_id, :]
-            if len(non_empty_ids) == 1:  # one example -- one cluster, Captain!
-                single_class.append((panel_id, slot_features[0], torch.cat((slot_features, slot_features))))
-                continue
-            
-            # Differentiate single cluster from multi-cluster cases based on gap statistic         
-            k_optimal, diff, labels, cluster_centers = gap.optimal_clusters(
-                slot_features,
-                max_k=max_k, 
-                sencitivity_threshold=self.config['diff_cluster_threshold'], 
-                logs=self.debug_prints
-            )
-
-            if k_optimal == 1:  # the last comes from gap stats formula
-                single_class.append((panel_id, cluster_centers[0], self._bbox(slot_features)))
-
-                if self.config['cluster_with_singles'] or panel_id in self.cluster_resolution_mapping:  
-                    # allow to map to this panel_id is singles are in use
-                    # AND make sure that this mapping is up-to-date when slot starts to be used
-                    self.cluster_resolution_mapping[panel_id] = single_class[-1][2]
-
-            else:
-                # TODO don't caculate this cdist twice!
-                # TODO Just max dist between features??
-                diff = torch.cdist(cluster_centers, cluster_centers).max()
-                bboxes = []
-                for label_id in range(k_optimal):
-                    if len(slot_features[labels == label_id]) == 0:  # happens, but rarely
-                        bboxes.append(None)
-                    else:
-                        bboxes.append(
-                            self._bbox(slot_features[labels == label_id])
-                        )
-                multiple_classes[panel_id] = (k_optimal, diff, labels, cluster_centers, bboxes)
-            
-            if self.debug_prints:
-                print(panel_id, ' -- ', k_optimal, ' ', diff)
-
-        if self.debug_prints:
-            print('Single class: {}; Multi-class: {}; Empty: {};'.format(
-                [el[0] for el in single_class], multiple_classes.keys(), empty_att_slots))
-
-        return single_class, multiple_classes, empty_att_slots
-
-    def _distribute_clusters(self, single_class, multiple_classes, empty_att_slots, non_empty_ids_per_slot, permutation):
-        """
-            Re-Distribute clusters of features in the dicovered multi-clustering cases
-        """
-        # Check if assignment could be reused 
-        assigned = set()
-
-        # Logging
-        single_slots = [elem[0] for elem in single_class]
- 
-        # check if multi-class could be assigned to the same slot \ used single slot as earlier
-        memory_slots = []
-        memory_bboxes = []
-        for k in self.cluster_resolution_mapping:
-            if k in empty_att_slots:
-                memory_slots.append(k)
-                memory_bboxes.append(self.cluster_resolution_mapping[k])
-        if len(memory_slots):
-            for current_slot in multiple_classes:
-                if current_slot not in assigned:
-                    k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
-
-                    # comparison of current slot clusters to single-cluster slots
-                    bb_comparion = torch.zeros((k, len(memory_slots)), device=permutation.device)
-                    for label_id, m_box in enumerate(m_bboxes):
-                        if m_box is None:  # skip
-                            continue
-                        for slot_idx in range(len(memory_slots)):
-                            bbox_iou = self._bbox_iou(m_box, memory_bboxes[slot_idx])  # with single mox
-                            bb_comparion[label_id, slot_idx] = bbox_iou
-
-                    if bb_comparion.max() > 0.8:  # TODO parameter??
-                        flat_idx = bb_comparion.argmax()
-                        label_id = flat_idx // bb_comparion.shape[1]
-                        single_slot_list_id = flat_idx - label_id * bb_comparion.shape[1]
-                        new_slot = memory_slots[single_slot_list_id]
-
-                        # Update
-                        try:
-                            permutation = self._swap_slots(
-                                permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
-                        except ValueError as e:
-                            if self.debug_prints:
-                                print(e)
-                            continue
-
-                        if self.debug_prints:
-                            tag = 'Using single' if new_slot in single_slots else 'Re-using'
-                            print(
-                                f'{tag} {current_slot}->{new_slot} with iou {bb_comparion[label_id, single_slot_list_id]:.4f}'
-                                f' by {m_bboxes[label_id]} with '
-                                f'original {memory_bboxes[single_slot_list_id]}')
-                        
-                        # Logging Info
-                        if new_slot in empty_att_slots:
-                            empty_att_slots.remove(new_slot)
-                        assigned.add(current_slot)
-
-        # All the others are put to the new slots
-        for current_slot in multiple_classes:
-            if current_slot not in assigned and len(empty_att_slots):  # have options
-                k, curr_quality, labels, m_cluster_centers, m_bboxes = multiple_classes[current_slot]
-
-                new_slot = empty_att_slots.pop(0)  # use first available empty slot
-                assigned.add(current_slot)
-                if self.debug_prints:
-                    print(f'Using Empty {current_slot}->{new_slot}')  # Trying string interpolation
-
-                # Choose elements to move
-                if k > 2:  # the cluster that is further away from others
-                    dists = torch.cdist(m_cluster_centers, m_cluster_centers).sum(dim=-1)
-                    label_id = dists.argmax()
-                else:  # or the one used the least -- in case of 2 classes
-                    histogram = torch.histc(labels, bins=k, max=(k - 1))
-                    label_id = histogram.argmin()
-
-                # record for re-use. The m_bbox should not be None here..
-                self.cluster_resolution_mapping[new_slot] = m_bboxes[label_id]
-
-                # Update
-                permutation = self._swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot)
-        
-        if self.debug_prints:
-            print('After upds: Single class: {}; Multi-class: {}; Assigned: {}, Empty: {};'.format(
-                [el[0] for el in single_class], multiple_classes.keys(), assigned, empty_att_slots))
-        
-        return (permutation, len(assigned))
-
-    @staticmethod
-    def _swap_slots(permutation, labels, non_empty_ids_per_slot, label_id, current_slot, new_slot):
-        # move non-empy panels from current_slot to empty_slot in permutation
-        indices = (labels == label_id).nonzero(as_tuple=False).squeeze(-1)
-        indices = non_empty_ids_per_slot[current_slot][indices]  # convert to ids in batch 
-
-        target_overlap = [idx for idx in indices if idx in non_empty_ids_per_slot[new_slot]]
-        if len(target_overlap) > 0:
-            raise ValueError(f'Tried to swap {current_slot}->{new_slot} with non-empty elements in {new_slot}: {target_overlap}. ')
-
-        permutation[indices, current_slot], permutation[indices, new_slot] = permutation[indices, new_slot], permutation[indices, current_slot]
-
-        return permutation
-
-    @staticmethod
-    def _bbox(features):
-        """Evalyate bbox for given features"""
-        return torch.stack((features.min(dim=0)[0], features.max(dim=0)[0]))
-
-    @staticmethod
-    def _bbox_iou(bbox_1, bbox_2, tol=0.001):
-        """ 
-            Compute IOU for 2 n-dimentional BBoxes (assuming they are aligned with coordinate frame)
-            bbox[0] -- min, bbox[1] -- max
-        """
-        min_max_tols = torch.tensor([-tol, tol], device=bbox_1.device).unsqueeze(1).expand(-1, bbox_1.shape[-1])
-
-        bbox_intersect = [torch.max(bbox_1[0], bbox_2[0]) - tol, torch.min(bbox_1[0], bbox_2[0]) + tol]
-        intersect_volume = ComposedPatternLoss._bbox_volume(bbox_intersect)
-
-        union_volume = (ComposedPatternLoss._bbox_volume(bbox_1 + min_max_tols)
-                        + ComposedPatternLoss._bbox_volume(bbox_2 + min_max_tols)
-                        - intersect_volume)
-        
-        return intersect_volume / union_volume
-
-    @staticmethod
-    def _bbox_volume(bboxs):
-        diffs = bboxs[1] - bboxs[0]
-        if (diffs < 0).any():  # inverted bbox
-            return 0.
-
-        return diffs.prod()
 
     # ------ Ground truth panel edge loop origin shift  ---------
     def _rotate_gt(self, preds, ground_truth, gt_num_edges, epoch):

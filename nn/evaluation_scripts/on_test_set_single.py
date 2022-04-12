@@ -24,11 +24,7 @@ def get_values_from_args():
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
     
-    # Default values from run 3cyu4gef, best accuracy\speed after sweep y1mmngej
-
     # basic
-    parser.add_argument('--cluster_by', '-cb', help='', type=str, default='translation')
-    parser.add_argument('--diff_cluster_threshold', '-d', help='', type=float, default=0.1)
     parser.add_argument('--version', '-v', help='Checkpoint version to request', type=int, default=-1)
 
     args = parser.parse_args()
@@ -39,14 +35,6 @@ def get_values_from_args():
         # 'panel_origin_invariant_loss': False,
         # 'panel_order_inariant_loss': True,
         # 'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
-
-        'cluster_by': args.cluster_by,  # 'panel_encodings', 'order_feature', 'translation'
-        'epoch_with_cluster_checks': 100,
-        'gap_cluster_threshold': 0.0,
-        'diff_cluster_threshold': args.diff_cluster_threshold,  # testing New!!
-        'cluster_gap_nrefs': 5,
-        'cluster_with_singles': True,
-        'cluster_memory_by_epoch': False,
 
         'loss_components': ['shape'],  # , 'loop', 'rotation', 'translation'],
         'quality_components': ['shape'],  #, 'discrete', 'rotation', 'translation'],

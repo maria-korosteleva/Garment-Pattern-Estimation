@@ -119,13 +119,6 @@ def get_values_from_args():
         'panel_order_inariant_loss': False,  # False to use original order 
         'order_by': 'shape_translation',   # placement, translation, stitches, shape_translation
 
-        'cluster_by': None,  # 'panel_encodings', 'order_feature', 'translation', None
-        'epoch_with_cluster_checks': 0,  # 100,
-        'gap_cluster_threshold': 0.0,
-        'diff_cluster_threshold': 0.1,  # testing New!!
-        'cluster_gap_nrefs': 5,
-        'cluster_with_singles': True,
-
         'att_distribution_saturation': 0.03,
         'att_empty_weight': 10,
         'epoch_with_att_saturation': 1000,

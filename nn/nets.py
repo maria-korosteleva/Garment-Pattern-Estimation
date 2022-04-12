@@ -583,7 +583,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         self.save_att_weights = (
             'att_distribution' in self.loss.config['loss_components'] 
             or 'segmentation' in self.loss.config['loss_components'])
-        self.save_panel_enc = self.loss.config['cluster_by'] == 'panel_encodings'
 
         # defaults
         if 'local_attention' not in self.config:
@@ -687,9 +686,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         if len(att_weights) > 0:
             panels.update(att_weights=att_weights)  # save attention weights if non-empty
 
-        if self.save_panel_enc:
-            panels.update(panel_encodings=panel_encodings)
-
         return panels
 
     def freeze_panel_dec(self, requires_grad=False):
@@ -722,8 +718,6 @@ class GarmentSegment2EncPattern3D(GarmentFullPattern3D):
         # set to true to get attention weights with prediction -- for visualization or loss evaluation
         # Keep false in all unnecessary cases to save memory!
         self.save_att_weights = 'att_distribution' in self.loss.config['loss_components'] or 'min_empty_att' in self.loss.config['loss_components']
-        self.save_panel_enc = self.loss.config['cluster_by'] == 'panel_encodings'
-
         # defaults
         if 'local_attention' not in self.config:
             # Has to be false for the old runs that don't have this setting and rely on global attention
@@ -836,9 +830,6 @@ class GarmentSegment2EncPattern3D(GarmentFullPattern3D):
 
         if len(att_weights) > 0:
             panels.update(att_weights=att_weights)  # save attention weights if non-empty
-
-        if self.save_panel_enc:
-            panels.update(panel_encodings=panel_encodings)
 
         return panels
 
