@@ -210,7 +210,6 @@ if __name__ == "__main__":
     # model = nets.GarmentPanelsAE(dataset.config, in_nn_config, in_loss_config)
     # model = nets.GarmentFullPattern3D(dataset.config, in_nn_config, in_loss_config)
     model = nets.GarmentSegmentPattern3D(dataset.config, in_nn_config, in_loss_config)  # MAIN
-    # model = nets.GarmentSegment2EncPattern3D(dataset.config, in_nn_config, in_loss_config)
     # model = nets.StitchOnEdge3DPairs(dataset.config, in_nn_config, in_loss_config)
 
     # Multi-GPU!!!

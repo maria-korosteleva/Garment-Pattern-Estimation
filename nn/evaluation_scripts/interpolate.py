@@ -72,7 +72,8 @@ if __name__ == "__main__":
     _, _, data_config = experiment.data_info()  # need to get data stats
 
     # ----- Model architecture -----
-    model = nets.GarmentFullPattern3DDisentangle(data_config, experiment.NN_config(), experiment.NN_config()['loss'])
+    # TODO load network architecture info
+    model = nets.GarmentFullPattern3D(data_config, experiment.NN_config(), experiment.NN_config()['loss'])
     if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
         model = nn.DataParallel(model, device_ids=['cuda:0'])
     model.load_state_dict(experiment.load_best_model()['model_state_dict'])
