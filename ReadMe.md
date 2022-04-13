@@ -15,7 +15,6 @@ This NN training code uses dataset created with [Garment-Pattern-Generator](http
 
 
 ## TODO
-* Documentation -- how to run training \ evaluation
 * Anonimous mode
 * Locally stored trained models
-* Clean configs
+* File\dirs structure
