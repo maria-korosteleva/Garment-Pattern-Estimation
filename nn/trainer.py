@@ -22,7 +22,7 @@ class Trainer():
         self.standardize_data = with_norm
         self.log_with_visualization = with_visualization
         
-        # default training setup
+        # training setup
         self.setup = setup
 
         if dataset is not None:
@@ -42,10 +42,6 @@ class Trainer():
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
-
-    def update_config(self, **kwargs):
-        """add given values to training config"""
-        self.setup.update(kwargs)
 
     def use_dataset(self, dataset, split_info):
         """Use specified dataset for training with given split settings"""
@@ -91,7 +87,7 @@ class Trainer():
         best_valid_loss = self.experiment.last_best_validation_loss()
         best_valid_loss = torch.tensor(best_valid_loss) if best_valid_loss is not None else None
         
-        for epoch in range(start_epoch, wb.config.epochs):
+        for epoch in range(start_epoch, wb.config.trainer['epochs']):
             model.train()
             for i, batch in enumerate(train_loader):
                 features, gt = batch['features'].to(self.device), batch['ground_truth']   # .to(self.device)
@@ -140,19 +136,23 @@ class Trainer():
                 break
 
     def _start_experiment(self, model):
-        self.experiment.init_run(self.setup)
+        self.experiment.init_run({'trainer': self.setup})
 
         if wb.run.resumed:
             start_epoch = self._restore_run(model)
             self.experiment.checkpoint_counter = start_epoch
             print('Trainer::Resumed run {} from epoch {}'.format(self.experiment.cloud_path(), start_epoch))
 
-            if self.device != wb.config.device:
+            if self.device != wb.config.trainer['devices'][0]:
                 # device doesn't matter much, so we just inform but do not crash
-                print('Trainer::Warning::Resuming run on different device. Was {}, now using {}'.format(wb.config.device, self.device))
+                print('Trainer::Warning::Resuming run on different device. Was {}, now using {}'.format(
+                    wb.config.trainer['devices'][0], self.device))
         else:
             start_epoch = 0
+            # record configurations of data and model
             self.datawraper.save_to_wandb(self.experiment)
+            if hasattr(model.module, 'config'):
+                self.experiment.add_config('NN', model.module.config)  # save NN configuration
 
         wb.watch(model, log='all')
         return start_epoch
@@ -222,14 +222,14 @@ class Trainer():
 
         # Target metric is not improving for some time
         self.es_tracking.append(last_tracking_loss.item())
-        if len(self.es_tracking) > (wb.config.early_stopping['patience'] + 1):  # number of last calls to consider plus current -> at least two
+        if len(self.es_tracking) > (wb.config.trainer['early_stopping']['patience'] + 1):  # number of last calls to consider plus current -> at least two
             self.es_tracking.pop(0)
             # if all values fit into a window, they don't change much
-            if abs(max(self.es_tracking) - min(self.es_tracking)) < wb.config.early_stopping['window']:
-                print('Trainer::EarlyStopping::Metric have not changed for {} epochs'.format(wb.config.early_stopping['patience']))
-                self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.early_stopping['patience']))
+            if abs(max(self.es_tracking) - min(self.es_tracking)) < wb.config.trainer['early_stopping']['window']:
+                print('Trainer::EarlyStopping::Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
+                self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
                 return True
-        # do not check untill wb.config.early_stopping.patience # of calls are gathered
+        # do not check untill wb.config.trainer['early_stopping'].patience # of calls are gathered
 
         # Learning rate vanished
         if last_lr < 1e-6:

@@ -40,7 +40,7 @@ data_config:
 
   filter_by_params: ./nn/data_configs/param_filter.json
 
-split:
+data_split:
   valid_per_type: 100
   test_per_type: 100
   random_seed: 10
@@ -56,11 +56,10 @@ NN:
   stitch_hidden_size: 200
   stitch_mlp_n_layers: 3
 
-
-# ----- Losses ----
-loss:
-  loss_components:  [edge_pair_class] 
-  quality_components:  [edge_pair_class, edge_pair_stitch_recall] 
+  # ----- Losses ----
+  loss:
+    loss_components:  [edge_pair_class] 
+    quality_components:  [edge_pair_class, edge_pair_stitch_recall] 
 
 
 # ------- Trainer -----

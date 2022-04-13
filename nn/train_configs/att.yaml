@@ -42,7 +42,7 @@ data_config:
   filter_by_params: ./nn/data_configs/param_filter.json
   point_noise_w: 0
 
-split:
+data_split:
   valid_per_type: 100
   test_per_type: 100
   random_seed: 10
@@ -88,25 +88,24 @@ NN:
 
   stitch_tag_dim: 3
 
+  # ----- Losses ----
+  loss:
+    loss_components:  [shape, loop, rotation, translation]  #  stitch, free_class, segmentation
+    quality_components:  [shape, discrete, rotation, translation]  # stitch, free_class
 
-# ----- Losses ----
-loss:
-  loss_components:  [shape, loop, rotation, translation]  #  stitch, free_class, segmentation
-  quality_components:  [shape, discrete, rotation, translation]  # stitch, free_class
+    stitch_tags_margin: 0.3  
+    stitch_hardnet_version: False
 
-  stitch_tags_margin: 0.3  
-  stitch_hardnet_version: False
+    loop_loss_weight: 1.
+    segm_loss_weight: 0.05
 
-  loop_loss_weight: 1.
-  segm_loss_weight: 0.05
+    epoch_with_stitches: 40
 
-  epoch_with_stitches: 40
+    panel_origin_invariant_loss: False
 
-  panel_origin_invariant_loss: False
-
-  panel_order_inariant_loss: False  # False to use ordering as in the data_config
-  epoch_with_order_matching: 0
-  order_by: shape_translation   # placement, translation, stitches, shape_translation
+    panel_order_inariant_loss: False  # False to use ordering as in the data_config
+    epoch_with_order_matching: 0
+    order_by: shape_translation   # placement, translation, stitches, shape_translation
 
 
 # ------- Trainer -----

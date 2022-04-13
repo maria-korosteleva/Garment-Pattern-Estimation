@@ -101,7 +101,7 @@ if __name__ == "__main__":
         system_info['datasets_path'] = merge_repos(prediction_path, ['train', 'validation', 'test'])
 
     if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['stats']:
-        config['split'], config['data_config'] = get_old_data_config(config['data_config'])
+        config['data_split'], config['data_config'] = get_old_data_config(config['data_config'])
 
     # Dataset Class
     data_class = getattr(data, config['data_config']['class'])
@@ -109,13 +109,13 @@ if __name__ == "__main__":
 
     # --- Trainer --- 
     trainer = Trainer(
-        config['trainer'], experiment, dataset, config['split'], 
+        config['trainer'], experiment, dataset, config['data_split'], 
         with_norm=True, with_visualization=config['trainer']['with_visualization'])  # only turn on visuals on custom garment data
 
     # --- Model ---
     trainer.init_randomizer()
     model_class = getattr(nets, config['NN']['model'])
-    model = model_class(dataset.config, config['NN'], config['loss'])
+    model = model_class(dataset.config, config['NN'], config['NN']['loss'])
 
     # Multi-GPU!!!
     model = nn.DataParallel(model, device_ids=config['trainer']['devices'])
@@ -125,8 +125,6 @@ if __name__ == "__main__":
 
     model.module.loss.with_quality_eval = True  # False to save compute time
     model.module.loss.debug_prints = True  # False to avoid extra prints
-    if hasattr(model.module, 'config'):
-        trainer.update_config(NN=model.module.config)  # save NN configuration
 
     # --- TRAIN --- 
     trainer.fit(model)  # Magic happens here
