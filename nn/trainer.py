@@ -13,8 +13,7 @@ import data as data
 class Trainer():
     def __init__(
             self, 
-            experiment_tracker, dataset=None, data_split={}, 
-            batch_size=30,
+            setup, experiment_tracker, dataset=None, data_split={}, 
             with_norm=True, with_visualization=False):
         """Initialize training and dataset split (if given)
             * with_visualization toggles image prediction logging to wandb board. Only works on custom garment datasets (with prediction -> image) conversion"""
@@ -24,20 +23,7 @@ class Trainer():
         self.log_with_visualization = with_visualization
         
         # default training setup
-        self.setup = dict(
-            model_random_seed=None,
-            device='cuda:0' if torch.cuda.is_available() else 'cpu',
-            epochs=350,  # DEBUG
-            batch_size=batch_size,
-            learning_rate=0.002,
-            optimizer='Adam',
-            weight_decay=0,
-            lr_scheduling={'mode': '1cyclic'},
-            early_stopping={
-                'window': 0.0001,
-                'patience': 50
-            }
-        )
+        self.setup = setup
 
         if dataset is not None:
             self.use_dataset(dataset, data_split)
@@ -48,12 +34,12 @@ class Trainer():
         """
         # see https://pytorch.org/docs/stable/notes/randomness.html
         if random_seed:
-            self.setup['model_random_seed'] = random_seed
-        elif not self.setup['model_random_seed']:
-            self.setup['model_random_seed'] = int(time.time())
+            self.setup['random_seed'] = random_seed
+        elif not self.setup['random_seed']:
+            self.setup['random_seed'] = int(time.time())
 
-        torch.manual_seed(self.setup['model_random_seed'])
-        if 'cuda' in self.setup['device']:
+        torch.manual_seed(self.setup['random_seed'])
+        if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 
@@ -77,7 +63,7 @@ class Trainer():
         if not self.datawraper:
             raise RuntimeError('Trainer::Error::fit before dataset was provided. run use_dataset() first')
 
-        self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['device']
+        self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['devices'][0]
         
         self._add_optimizer(model)
         self._add_scheduler(len(self.datawraper.loader_train))
@@ -286,6 +272,8 @@ class Trainer():
 
     def _save_checkpoint(self, model, epoch, best=False):
         """Save checkpoint that can be used to resume training"""
+        
+        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
         checkpoint_dict = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -300,4 +288,4 @@ class Trainer():
             wait_for_upload=best
         )
         
-        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
+       

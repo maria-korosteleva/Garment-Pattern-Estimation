@@ -2,8 +2,8 @@
 # (part I of NeuralTailor)
 
 experiment:
-  project_name: Garments-Reconstruction
-  run_name: NeuralTailor-Att
+  project_name: Test-Garments-Reconstruction
+  run_name: NeuralTailor-Debug
 
 # ----- Dataset-related properties -----
 data_config:
@@ -109,9 +109,9 @@ loss:
 
 # ------- Trainer -----
 trainer: 
-  batch_size: 30
+  batch_size: 3   # Suitable for laptop
   devices: [cuda:0]
-  epochs: 350
+  epochs: 3
   random_seed: 916143406
   learning_rate: 0.002
   optimizer: Adam

@@ -85,12 +85,11 @@ if __name__ == "__main__":
 
     # Trainer
     trainer = Trainer(
-        experiment, dataset, config['split'], 
-        batch_size=config['trainer']['batch_size'], 
+        config['trainer'], experiment, dataset, config['split'], 
         with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
 
     # Model
-    trainer.init_randomizer(config['NN']['seed'])
+    trainer.init_randomizer()
     model_class = getattr(nets, config['NN']['model'])
     model = model_class(dataset.config, config['NN'], config['loss'])
 
