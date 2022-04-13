@@ -176,13 +176,13 @@ class DatasetWrapper(object):
         self.split_info['size_valid'] = len(self.validation) if self.validation else 0
         self.split_info['size_test'] = len(self.test) if self.test else 0
         
-        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training', log_to_config=True)
+        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
         self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
         self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
 
         return self.training, self.validation, self.test
 
-    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name='', log_to_config=False):
+    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name='', log_to_config=True):
         """Print stats on the elements of each datafolder contained in given subset"""
         # gouped by data_folders
         if not total_len:
