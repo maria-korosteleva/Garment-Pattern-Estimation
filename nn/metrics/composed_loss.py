@@ -4,8 +4,6 @@ import torch.nn as nn
 
 from entmax import SparsemaxLoss  # https://github.com/deep-spin/entmax
 
-import gap
-
 # My modules
 from data import Garment3DPatternFullDataset as PatternDataset
 from pattern_converter import InvalidPatternDefError
