@@ -670,6 +670,7 @@ class PanelClasses():
 
 # ---------- test -------------
 if __name__ == "__main__":
+    # DEBUG the pattern converter
     from pathlib import Path
     from datetime import datetime
     import customconfig
@@ -680,9 +681,10 @@ if __name__ == "__main__":
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
 
+    # NOTE 
     pattern = NNSewingPattern(
-        Path(system_config['templates_path']) / 'basic tee' / 'tee.json', 
-        panel_classifier=PanelClasses('./nn/panel_classes.json'), 
+        Path(system_config['datasets_path']) / 'tee_2300' / 'tee_template_specification.json', 
+        panel_classifier=PanelClasses('./nn/data_configs/panel_classes.json'), 
         template_name='tee')
 
     empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/data_configs/panel_classes_extended.json'))
@@ -690,7 +692,6 @@ if __name__ == "__main__":
 
     # print(pattern.stitches_as_tags())
     # print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
-
 
     # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
 

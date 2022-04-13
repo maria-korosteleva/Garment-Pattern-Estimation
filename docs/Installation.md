@@ -2,7 +2,14 @@
 
 This file describes the process of setting up the environment from scratch (with the working versions). Skip to the relevant sections as needed
 
-## 1. Basic environment: Miniconda
+## 1. Dataset
+
+* Download the [Dataset of 3D Garments with Sewing Patterns](https://zenodo.org/record/5267549#.Yk__mMgzaUk) in order to train\evaluate NeuralTailor.
+    > NOTE: For evaluation of pre-trained NeuralTailor on unseen types you only need the _test.zip_ part of the dataset. 
+
+* Unpack all ZIP archives to the same directory, keeping the directory structure (every zip archive is a subfolder of your root). 
+
+## 2. Basic environment: Miniconda
 ```
 apt-get update && apt-get install -y wget
 
@@ -17,7 +24,7 @@ conda create -n Garments python=3.8.5
 conda activate Garments
 ```
 
-## 2. Dependencies
+## 3. Dependencies
 
 * For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` will likely fail
 
@@ -28,6 +35,7 @@ conda activate Garments
     conda install -c conda-forge igl
     ```
 * [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
+
 * Simple installation with `pip install <package_name>`: 
     * `wandb` 
     * `svglib` 
@@ -58,7 +66,16 @@ You might experience errors related with PIL (pillow) Image module. Those most o
     * Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
     * Python 3.8.5 + ReportLab 3.5.55 + pillow 7.1.1
 
-## 3. Custom dependencies access
+## 4. Weights & Biases account
+
+We are using [Weights & Biases](https://wandb.ai/) for experiment tracking. You'd need to create an account there to use our training script. 
+
+The prompt to authenticate will appear the first time you run any of the scripts that use w&b library.
+
+> NOTE: Anonimous runs are not yet supported by our tool. 
+
+
+## 5. Custom dependencies access
 
 Download [Garment-Pattern-Generator](https://github.com/maria-korosteleva/Garment-Pattern-Generator) code (for pattern loading)
 
@@ -71,7 +88,7 @@ Add path to custom packages to PYTHONPATH for correct importing of our custom mo
 export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Data/packages
 ```
 
-### Filesystem paths settings
+### Filesystem paths & W&B account settings
 * Fill out system.json file
 Create system.json file in the root of this directory with your machine's file paths using system.template.json as a template. 
 system.json should include the following: 
@@ -79,15 +96,6 @@ system.json should include the following:
     ```
     mkdir outputs
     ```
-* path to finalized garment datasets that could be used for training\evaluating of NN ('datasets_path') -- see below
-* username for wandb tool for correct experiment tracking ('wandb_username')
-
-## 4. Dataset
-
-* Download the [Dataset of 3D Garments with Sewing Patterns](https://zenodo.org/record/5267549#.Yk__mMgzaUk) in order to train\evaluate NeuralTailor.
-    > NOTE: For evaluation of pre-trained NeuralTailor on unseen types you only need the _test.zip_ part of the dataset. 
-
-* Unpack all ZIP archives to the same directory, keeping the directory structure (every zip archive is a subfolder of your root). O
-
-* Add path to the downloaded and unpacked data to the system.json ('datasets_path')
+* path to the root directory with downloaded and unpacked per-type garment datasets to be used for training\evaluating of NN ('datasets_path') 
+* username for wandb for correct experiment tracking ('wandb_username')
 

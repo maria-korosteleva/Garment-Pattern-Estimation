@@ -279,7 +279,8 @@ class ComposedPatternLoss():
                         preds, gt_rotated, gt_num_edges, names, corr_mask)
                     loss_dict.update(quality_breakdown)
 
-        loss_update_ind = (epoch == self.config['epoch_with_stitches'] and any((el in self.l_components for el in ['stitch', 'stitch_supervised', 'free_class']))
+        loss_update_ind = (
+            epoch == self.config['epoch_with_stitches'] and any((el in self.l_components for el in ['stitch', 'stitch_supervised', 'free_class']))
             or epoch == self.config['epoch_with_order_matching'] and self.config['panel_order_inariant_loss']) 
 
         # final loss; breakdown for analysis; indication if the loss structure has changed on this evaluation
