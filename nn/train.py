@@ -1,4 +1,4 @@
-from distutils.command.config import config
+from distutils import dir_util
 from pathlib import Path
 import argparse
 import numpy as np
@@ -11,7 +11,7 @@ import data
 import nets
 from metrics.eval_utils import eval_metrics
 from trainer import Trainer
-from experiment import WandbRunWrappper
+from experiment import WandbRunWrappper, load_experiment
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 import warnings
@@ -64,6 +64,19 @@ def get_old_data_config(in_config):
     return split, in_config
 
 
+def merge_repos(root, repos):
+    """ Create repository that merges the top ones"""
+
+    root = Path(root)
+    merge_target = root / 'merged'
+    merge_target.mkdir(exist_ok=True)
+
+    for repo in repos:
+        dir_util.copy_tree(str(root / repo), str(merge_target))
+    
+    return merge_target
+
+
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
@@ -76,19 +89,30 @@ if __name__ == "__main__":
         run_name=config['experiment']['run_name'], 
         run_id=None, no_sync=False)   # set run id to resume unfinished run!
 
-    # Data
-    if 'old_experiment' in config['data_config']:
+    # --- Data ---
+    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['predictions']:
+        # Use predictions of model from specified experiment as a dataset for training
+        info = config['data_config']['old_experiment']
+        shape_datawrapper, shape_model, shape_experiment = load_experiment(
+            info['run_name'], info['run_id'], project=info['project_name'], 
+            in_batch_size=config['trainer']['batch_size'], in_device=config['trainer']['devices'][0])
+        prediction_path = shape_datawrapper.predict(
+            shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'], orig_folder_names=True)
+        system_info['datasets_path'] = merge_repos(prediction_path, ['train', 'validation', 'test'])
+
+    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['stats']:
         config['split'], config['data_config'] = get_old_data_config(config['data_config'])
 
+    # Dataset Class
     data_class = getattr(data, config['data_config']['class'])
     dataset = data_class(Path(system_info['datasets_path']), config['data_config'], gt_caching=True, feature_caching=True)
 
-    # Trainer
+    # --- Trainer --- 
     trainer = Trainer(
         config['trainer'], experiment, dataset, config['split'], 
-        with_norm=True, with_visualization=True)  # only turn on visuals on custom garment data
+        with_norm=True, with_visualization=config['trainer']['with_visualization'])  # only turn on visuals on custom garment data
 
-    # Model
+    # --- Model ---
     trainer.init_randomizer()
     model_class = getattr(nets, config['NN']['model'])
     model = model_class(dataset.config, config['NN'], config['loss'])
@@ -104,10 +128,10 @@ if __name__ == "__main__":
     if hasattr(model.module, 'config'):
         trainer.update_config(NN=model.module.config)  # save NN configuration
 
-    # TRAIN
+    # --- TRAIN --- 
     trainer.fit(model)  # Magic happens here
 
-    # --------------- Final evaluation -- same as in test.py --------------
+    # --- Final evaluation ----
     # On the best-performing model
     try:
         model.load_state_dict(experiment.load_best_model()['model_state_dict'])

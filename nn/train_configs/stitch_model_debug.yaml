@@ -2,7 +2,7 @@
 # (part II of NeuralTailor)
 
 experiment:
-  project_name: Garments-Reconstruction
+  project_name: Test-Garments-Reconstruction
   run_name: NeuralTailor-Stitch-Model
 
 # ----- Dataset-related properties -----
@@ -65,7 +65,7 @@ loss:
 
 # ------- Trainer -----
 trainer: 
-  batch_size: 30   # For stitch experiments it corresponds to number of garment examples in a batch.
+  batch_size: 5   # For stitch experiments it corresponds to number of garment examples in a batch.
                    # Number of edge pairs in a batch would be (batch_size x (stitched_edge_pairs_num + non_stitched_edge_pairs_num))
   devices: [cuda:0]
   epochs: 350

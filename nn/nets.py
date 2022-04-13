@@ -485,8 +485,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         return panels
 
 
-
-
 # ----------- Stitches (independent) predictions ---------
 class StitchOnEdge3DPairs(BaseModule):
     """

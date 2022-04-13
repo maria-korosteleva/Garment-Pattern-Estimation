@@ -27,6 +27,9 @@ data_config:
     project_name: Garments-Reconstruction
     run_name: Filtered-att-data-condenced-classes
     run_id: 390wuxbm
+    stats: True   # Use data stats from previous training run in this one
+    predictions: False  # use predictions of the previously trained model to train this one
+
 
   # Loadable parameters -- overrwitten if old_experiment is specified
   mesh_samples: 2000
@@ -121,3 +124,4 @@ trainer:
   early_stopping:
     window: 0.0001
     patience: 50
+  with_visualization: True  # Log visualizations of predicted sewing patterns
