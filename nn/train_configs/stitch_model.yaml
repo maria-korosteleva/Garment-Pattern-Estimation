@@ -47,7 +47,7 @@ data_split:
   type: count
   # NOTE addining 'filename' property to the split will force the data 
   # to be loaded from that list, instead of being randomly generated
-  filename: ./wandb/data_split.json
+  filename: ./nn/data_configs/data_split_on_filtered_dataset.json
 
 
 # ----- Network Architecture --------
