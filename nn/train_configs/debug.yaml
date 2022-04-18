@@ -6,7 +6,7 @@ experiment:
   run_name: NeuralTailor-Debug
 
 # ----- Dataset-related properties -----
-data_config:
+dataset:
   class: Garment3DPatternFullDataset   # Garment2DPatternDataset
 
   data_folders:

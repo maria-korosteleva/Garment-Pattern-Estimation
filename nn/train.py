@@ -11,7 +11,7 @@ import data
 import nets
 from metrics.eval_utils import eval_metrics
 from trainer import Trainer
-from experiment import WandbRunWrappper, load_experiment
+from experiment import ExperimentWrappper, load_experiment
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 import warnings
@@ -23,7 +23,7 @@ def get_values_from_args():
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./nn/train_configs/att.yaml')
+    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./models/att/att.yaml')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
@@ -36,7 +36,7 @@ def get_old_data_config(in_config):
     """Shortcut to control data configuration
         Note that the old experiment is HARDCODED!!!!!"""
     # get data stats from older runs to save runtime
-    old_experiment = WandbRunWrappper(
+    old_experiment = ExperimentWrappper(
         system_info['wandb_username'],
         project_name=in_config['old_experiment']['project_name'],
         run_name=in_config['old_experiment']['run_name'],
@@ -83,16 +83,16 @@ if __name__ == "__main__":
     config = get_values_from_args()
 
     system_info = customconfig.Properties('./system.json')
-    experiment = WandbRunWrappper(
-        system_info['wandb_username'], 
-        project_name=config['experiment']['project_name'], 
-        run_name=config['experiment']['run_name'], 
-        run_id=None, no_sync=False)   # set run id to resume unfinished run!
+    
+    experiment = ExperimentWrappper(
+        config, # set run id in cofig to resume unfinished run!
+        system_info['wandb_username'],
+        no_sync=False)   
 
     # --- Data ---
-    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['predictions']:
+    if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['predictions']:
         # Use predictions of model from specified experiment as a dataset for training
-        info = config['data_config']['old_experiment']
+        info = config['dataset']['old_experiment']
         shape_datawrapper, shape_model, shape_experiment = load_experiment(
             info['run_name'], info['run_id'], project=info['project_name'], 
             in_batch_size=config['trainer']['batch_size'], in_device=config['trainer']['devices'][0])
@@ -100,12 +100,12 @@ if __name__ == "__main__":
             shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'], orig_folder_names=True)
         system_info['datasets_path'] = merge_repos(prediction_path, ['train', 'validation', 'test'])
 
-    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['stats']:
-        config['data_split'], config['data_config'] = get_old_data_config(config['data_config'])
+    if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['stats']:
+        config['data_split'], config['dataset'] = get_old_data_config(config['dataset'])
 
     # Dataset Class
-    data_class = getattr(data, config['data_config']['class'])
-    dataset = data_class(Path(system_info['datasets_path']), config['data_config'], gt_caching=True, feature_caching=True)
+    data_class = getattr(data, config['dataset']['class'])
+    dataset = data_class(Path(system_info['datasets_path']), config['dataset'], gt_caching=True, feature_caching=True)
 
     # --- Trainer --- 
     trainer = Trainer(

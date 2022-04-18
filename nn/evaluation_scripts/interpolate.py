@@ -19,7 +19,7 @@ sys.path.insert(0, parentdir)
 import customconfig
 import nets
 import data
-from experiment import WandbRunWrappper
+from experiment import ExperimentWrappper
 from pattern.wrappers import VisPattern
 from data import GarmentBaseDataset
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     num_in_between = 5
 
     # --------------- Experiment to evaluate on ---------
-    experiment = WandbRunWrappper(
+    experiment = ExperimentWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
         run_name='Tee-dress-orderl-placement-origin', 

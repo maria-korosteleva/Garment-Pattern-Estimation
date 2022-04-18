@@ -19,12 +19,12 @@ import data
 from metrics.eval_utils import eval_metrics
 import nets
 from trainer import Trainer
-from experiment import WandbRunWrappper
+from experiment import ExperimentWrappper
 
 
 # --------------- from experimnet ---------
 system_info = customconfig.Properties('./system.json')
-experiment = WandbRunWrappper(
+experiment = ExperimentWrappper(
     system_info['wandb_username'],
     project_name='Garments-Reconstruction', 
     run_name='Filtered-att-data-condenced-classes',

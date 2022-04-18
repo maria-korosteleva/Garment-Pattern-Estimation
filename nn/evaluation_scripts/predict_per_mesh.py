@@ -17,7 +17,7 @@ sys.path.insert(0, parentdir)
 
 # My modules
 import customconfig, nets, data
-from experiment import WandbRunWrappper
+from experiment import ExperimentWrappper
 from pattern.wrappers import VisPattern
 from pattern_converter import NNSewingPattern, InvalidPatternDefError
 
@@ -67,11 +67,11 @@ if __name__ == "__main__":
     mesh_paths, save_to = get_meshes_from_args()
 
     # --------------- Experiment to evaluate on ---------
-    experiment = WandbRunWrappper(system_info['wandb_username'],
+    experiment = ExperimentWrappper(system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
         run_name='multi-all-fin', 
         run_id='216nexgv')  # finished experiment
-    stitch_experiment = WandbRunWrappper(
+    stitch_experiment = ExperimentWrappper(
         system_info['wandb_username'],
         project_name='Garments-Reconstruction', 
         run_name='multi-all-fin', 

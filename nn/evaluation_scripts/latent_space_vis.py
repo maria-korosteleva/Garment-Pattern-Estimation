@@ -28,7 +28,7 @@ import customconfig
 import data
 import nets
 from trainer import Trainer
-from experiment import WandbRunWrappper
+from experiment import ExperimentWrappper
 
 
 def load_model_loader(experiment, datasets_path, subset='test'):
@@ -228,7 +228,7 @@ if __name__ == '__main__':
     system_info = customconfig.Properties('./system.json')
     from_experiment = True
     if from_experiment:
-        experiment = WandbRunWrappper(
+        experiment = ExperimentWrappper(
             system_info['wandb_username'],
             project_name='Test-Garments-Reconstruction', 
             run_name='attention-3d-ordered', 

@@ -3,10 +3,11 @@
 
 experiment:
   project_name: Garments-Reconstruction
-  run_name: NeuralTailor-Att
+  run_name: NeuralTailor-Train
+  run_id: uazmw1ro
 
 # ----- Dataset-related properties -----
-data_config:
+dataset:
   class: Garment3DPatternFullDataset   # Garment2DPatternDataset
 
   data_folders:
@@ -66,7 +67,7 @@ data_split:
 
 # ----- Network Architecture --------
 NN:
-  pre-trained: ./model/att/neural_tailor_panels.pth
+  pre-trained: ./models/att/neural_tailor_panels.pth
 
   model: GarmentSegmentPattern3D   # GarmentFullPattern3D for LSTM-based model 
 

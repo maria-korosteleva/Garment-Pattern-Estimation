@@ -6,7 +6,7 @@ experiment:
   run_name: NeuralTailor-Stitch-Model
 
 # ----- Dataset-related properties -----
-data_config:
+dataset:
   class: GarmentStitchPairsDataset  
 
   data_folders:
