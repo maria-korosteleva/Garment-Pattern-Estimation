@@ -24,6 +24,8 @@ data_config:
     - skirt_4_panels_1600
 
   old_experiment:
+    # Change project_name, run_name, run_id to the info of preferred panel shape prediction
+    # experiment on W&B cloud
     project_name: Garments-Reconstruction
     run_name: Filt-Att-Condenced-Retry
     run_id: 25g4d6si
@@ -31,8 +33,6 @@ data_config:
     predictions: True  # use predictions of the previously trained model to train this one
                        # Training on shape predictions gives more robust stitch model
     
-  use_old_exp_predictions: True    # use predictions of the previously trained model to train this one
-
   stitched_edge_pairs_num: 200
   non_stitched_edge_pairs_num: 200
   shuffle_pairs: True
