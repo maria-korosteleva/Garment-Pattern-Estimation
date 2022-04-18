@@ -156,7 +156,7 @@ class WandbRunWrappper(object):
             print(e)
             print('Experiment::Warning::Skipping loading parameter filter file..')
         
-        return split_config, run.config['batch_size'], data_config
+        return split_config, run.config['trainer']['batch_size'] if 'trainer' in run.config else run.config['batch_size'], data_config
 
     def last_best_validation_loss(self):
         run = self._run_object()
