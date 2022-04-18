@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import requests
 import time
+import json
 
 import torch
 import wandb as wb
@@ -126,6 +127,16 @@ class ExperimentWrappper(object):
         self.initialized = False
 
     # -------- run info ------
+    def full_name(self):
+        name = self.project if self.project else ''
+        name += ('-' + self.run_name) if self.run_name else ''
+        if self.run_id:
+            name += ('-' + self.run_id)
+        else:
+            name += self.in_config['NN']['pre-trained'] if 'pre-trained' in self.in_config['NN'] else ''
+        
+        return name
+
     def last_epoch(self):
         """Id of the last epoch processed
             NOTE: part of resuming functionality, only for wandb runs
@@ -177,9 +188,14 @@ class ExperimentWrappper(object):
         config = self._run_config()
         return config['NN']
 
-    def add_statistic(self, tag, info):
+    def add_statistic(self, tag, info, log=''):
         """Add info the run summary (e.g. stats on test set)"""
         
+        # Log
+        if log:
+            print(f'{self.__class__.__name__}::Saving statistic {log}:')
+            print(json.dumps(info, sort_keys=True, indent=2) if isinstance(info, dict) else info)
+
         if not self.run_id:
             print(f'{self.__class__.__name__}::Warning::Experiment not connected to the cloud. Statistic {tag} not synced')
             return 
