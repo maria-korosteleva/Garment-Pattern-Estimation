@@ -4,7 +4,7 @@
 experiment:
   project_name: Garments-Reconstruction
   run_name: NeuralTailor-Train
-  run_id: uazmw1ro
+  run_id: 
 
 # ----- Dataset-related properties -----
 dataset:

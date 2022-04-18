@@ -1,4 +1,5 @@
 """Evaluate a model on the data"""
+from pathlib import Path
 from torch import nn
 import argparse
 import yaml
@@ -23,13 +24,17 @@ def get_values_from_args():
     parser = argparse.ArgumentParser()
     
     # basic
-    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./models/att/att.yaml')
+    parser.add_argument('-c', '--config', help='YAML configuration file', type=str, default='./models/att/att.yaml')
+    parser.add_argument('-p', '--predict', help='if set, saves sewing pattern predictions to output folder and uploads them to the run', action='store_true')
+
+    # DEBUG
+    print(f'Command line args: {args}')
 
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
 
-    return config
+    return config, args
 
 
 def load_dataset(experiment, eval_config):
@@ -63,7 +68,7 @@ def load_model(experiment, data_config):
 
 if __name__ == "__main__":
 
-    config = get_values_from_args()
+    config, args = get_values_from_args()
     system_info = customconfig.Properties('./system.json')
 
     # from experiment
@@ -88,12 +93,14 @@ if __name__ == "__main__":
     experiment.add_statistic('test_on_best', test_metrics)
     experiment.add_statistic('test', test_breakdown)
 
-    # -------- Predict ---------
-    # save prediction for validation to file
-    # prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['validation', 'test'])
-    # print('Saved to {}'.format(prediction_path))
-    # # # reflect predictions info in expetiment
-    # experiment.add_statistic('test_pred_folder', prediction_path.name)
+    if args.predict:
+        # -------- Predict ---------
+        # save prediction for validation to file
+        prediction_path = datawrapper.predict(model, save_to=Path(system_info['output']), sections=['test'])
+        print('Saved to {}'.format(prediction_path))
 
-    # art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]  # + '-scan'
-    # experiment.add_artifact(prediction_path, art_name, 'result')
+        # reflect predictions info in expetiment
+        experiment.add_statistic('test_pred_folder', prediction_path.name)
+
+        art_name = 'multi-data' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
+        experiment.add_artifact(prediction_path, art_name, 'result')
