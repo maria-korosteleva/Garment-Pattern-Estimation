@@ -140,17 +140,10 @@ if __name__ == "__main__":
     datawrapper = trainer.datawraper
 
     final_metrics = eval_metrics(model, datawrapper, 'validation')
-    print('Validation metrics: {}'.format(final_metrics))
-    experiment.add_statistic('valid_on_best', final_metrics)
-
+    experiment.add_statistic('valid_on_best', final_metrics, log='Validation metrics')
     final_metrics = eval_metrics(model, datawrapper, 'valid_per_data_folder')
-    print('Validation metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('valid', final_metrics)
-
+    experiment.add_statistic('valid', final_metrics, log='Validation metrics breakdown')
     final_metrics = eval_metrics(model, datawrapper, 'test')
-    print('Test metrics: {}'.format(final_metrics))
-    experiment.add_statistic('test_on_best', final_metrics)
-
+    experiment.add_statistic('test_on_best', final_metrics, log='Test metrics')
     final_metrics = eval_metrics(model, datawrapper, 'test_per_data_folder')
-    print('Test metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('test', final_metrics)
+    experiment.add_statistic('test', final_metrics, 'Test metrics breakdown')

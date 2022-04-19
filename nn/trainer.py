@@ -216,8 +216,7 @@ class Trainer():
 
         # loss goes into nans
         if torch.isnan(last_loss):
-            print('Trainer::EarlyStopping::Detected nan training losses')
-            self.experiment.add_statistic('stopped early', 'Nan in losses')
+            self.experiment.add_statistic('stopped early', 'Nan in losses', log='Trainer::EarlyStopping')
             return True
 
         # Target metric is not improving for some time
@@ -226,14 +225,15 @@ class Trainer():
             self.es_tracking.pop(0)
             # if all values fit into a window, they don't change much
             if abs(max(self.es_tracking) - min(self.es_tracking)) < wb.config.trainer['early_stopping']['window']:
-                print('Trainer::EarlyStopping::Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
-                self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
+                self.experiment.add_statistic(
+                    'stopped early', 'Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']), 
+                    log='Trainer::EarlyStopping')
                 return True
         # do not check untill wb.config.trainer['early_stopping'].patience # of calls are gathered
 
         # Learning rate vanished
         if last_lr < 1e-6:
-            self.experiment.add_statistic('stopped early', 'Learning Rate vanished')
+            self.experiment.add_statistic('stopped early', 'Learning Rate vanished', log='Trainer::EarlyStopping')
             return True
         
         return False

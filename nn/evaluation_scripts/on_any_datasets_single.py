@@ -88,12 +88,12 @@ print('Saved to {}'.format(prediction_path))
 
 if experiment.is_finished():  # records won't be updates for unfinished experiment anyway
     # ---------- Log to the experiment -----------
-    experiment.add_statistic('unseen_full', loss)
-    experiment.add_statistic('unseen', breakdown)
-    experiment.add_statistic('unseen_folders', dataset_list)
+    experiment.add_statistic('unseen_full', loss, 'unseen_full')
+    experiment.add_statistic('unseen', breakdown, 'unseen')
+    experiment.add_statistic('unseen_folders', dataset_list, 'unseen_folders')
 
     # reflect predictions info in expetiment
-    experiment.add_statistic('unseen_scan_pred_folder', prediction_path.name)
+    experiment.add_statistic('unseen_scan_pred_folder', prediction_path.name, 'unseen_scan_pred_folder')
 
     art_name = 'multi-data-unseen' if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0] + '-unseen'
     experiment.add_artifact(prediction_path, art_name, 'result')
