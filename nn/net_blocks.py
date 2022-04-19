@@ -1,7 +1,6 @@
 """Basic building blocks for custom neural network architectures"""
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch_geometric.nn as geometric
 
 

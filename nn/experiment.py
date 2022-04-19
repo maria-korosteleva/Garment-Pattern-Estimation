@@ -9,7 +9,6 @@ from torch import nn
 import wandb as wb
 
 # My
-import customconfig
 import data
 import nets
 

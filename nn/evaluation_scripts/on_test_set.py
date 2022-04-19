@@ -4,10 +4,8 @@
 """
 
 from pathlib import Path
-from torch import nn
 import argparse
 import yaml
-import json
 
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys
@@ -19,7 +17,6 @@ sys.path.insert(0, parentdir)
 import customconfig
 import data
 from metrics.eval_utils import eval_metrics
-import nets
 from experiment import ExperimentWrappper
 
 

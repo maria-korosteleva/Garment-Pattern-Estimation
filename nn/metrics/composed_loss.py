@@ -1,12 +1,9 @@
 import torch
-from torch._C import import_ir_module
 import torch.nn as nn
 
 from entmax import SparsemaxLoss  # https://github.com/deep-spin/entmax
 
 # My modules
-from data import Garment3DPatternFullDataset as PatternDataset
-from pattern_converter import InvalidPatternDefError
 from metrics.losses import *
 from metrics.metrics import *
 

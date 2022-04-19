@@ -5,17 +5,14 @@
 
 import argparse
 from datetime import datetime
-import igl
 import numpy as np
 from pathlib import Path
-import shutil
 import torch
-import torch.nn as nn
 import traceback
 import yaml
 
 # Do avoid a need for changing Evironmental Variables outside of this script
-import os,sys,inspect
+import os,sys
 
 from nn.pattern_converter import NNSewingPattern
 currentdir = os.path.dirname(os.path.realpath(__file__))
@@ -23,7 +20,8 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir) 
 
 # My modules
-import customconfig, nets, data
+import customconfig
+import data
 from experiment import ExperimentWrappper
 from pattern.wrappers import VisPattern
 from pattern_converter import NNSewingPattern, InvalidPatternDefError

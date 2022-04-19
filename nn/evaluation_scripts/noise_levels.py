@@ -9,17 +9,14 @@ from datetime import datetime
 import yaml
 
 # Do avoid a need for changing Evironmental Variables outside of this script
-import os,sys,inspect
+import os,sys
 currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir) 
 
 # My modules
 import customconfig
-import data
 from metrics.eval_utils import eval_metrics
-import nets
-from trainer import Trainer
 from experiment import ExperimentWrappper
 
 noise_levels = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]  

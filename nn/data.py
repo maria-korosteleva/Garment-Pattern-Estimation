@@ -9,7 +9,6 @@ import time
 from datetime import datetime
 
 import torch
-from torch._C import Value
 from torch.utils.data import DataLoader, Dataset, Subset
 import igl
 # import meshplot  # when uncommented, could lead to problems with wandb run syncing

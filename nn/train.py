@@ -12,7 +12,6 @@ import nets
 from metrics.eval_utils import eval_metrics
 from trainer import Trainer
 from experiment import ExperimentWrappper
-import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 import warnings
 warnings.filterwarnings('ignore')  # , category='UserWarning'

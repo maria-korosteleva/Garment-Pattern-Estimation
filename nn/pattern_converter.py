@@ -1,15 +1,12 @@
-import contextlib
 import copy
 from collections import OrderedDict
 from datetime import datetime
 import json
 import numpy as np
-from numpy.lib.function_base import append
 from numpy.random import default_rng
 from pathlib import Path
 import sys
 import torch
-from torch._C import device
 
 if sys.version_info[0] >= 3:
     from scipy.spatial.transform import Rotation as scipy_rot  # Not available in scipy 0.19.1 installed for Maya

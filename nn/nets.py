@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from sparsemax import Sparsemax
-import wandb as wb
 
 # my modules
 from metrics.composed_loss import ComposedLoss, ComposedPatternLoss

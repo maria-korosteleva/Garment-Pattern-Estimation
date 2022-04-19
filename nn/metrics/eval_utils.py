@@ -3,10 +3,8 @@
 """
 
 import torch
-from torch.functional import Tensor
 
 # My modules
-from data import Garment3DPatternFullDataset as PatternDataset
 from pattern_converter import InvalidPatternDefError
 
 
