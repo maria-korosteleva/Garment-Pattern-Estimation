@@ -8,20 +8,19 @@ The training of NeuralTailor is two-step -- separately for Pattern Shape and Sti
 The training setup for both parts are given in [nn/train_configs/](../nn/train_configs/)
 
 1. Pattern Shape Regression Network training
-    To run with default setup simply run this command from the directory root : 
+    To run with our final NeuralTailor architecture setup simply run this command from the directory root: 
     ```
-    python nn/train.py -c ./nn/train_configs/att.yaml
+    python nn/train.py -c ./models/att/att.yaml
     ```
     > Training on the full dataset will take 2-4 days depending on your hardware. 
 2. Stitch training 
     * Runs after the Shape Regression Network
     * Update the name & id of the shape training run in the [Stitch model config file](../nn/train_configs/stitch_model.yaml), 'old_experiment' section. Setting this option enables training on the Pattern Shape predictions. 
-        To train the stitch model on Ground Truth panel shapes, simply put the 'old_experiment' -> 'predictions' to False, or remore the 'old expriment' section altogehter.
+        To train the stitch model on Ground Truth panel shapes, simply put the 'old_experiment' -> 'predictions' to False, or remove the 'old_experiment' section altogehter.
     * Run: 
     ```
-    python nn/train.py -c ./nn/train_configs/stitch_model.yaml
+    python nn/train.py -c ./models/att/stitch_model.yaml
     ```
-    > Currently the stitch training process loades the shape model from the W&B cloud (local models are not yet supported)
 
 ### Reproducing other experiments reported in the paper
 
