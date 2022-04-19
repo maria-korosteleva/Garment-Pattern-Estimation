@@ -46,6 +46,10 @@ dataset:
   max_pattern_len: 23   # Overridden if panel_classification is specified
   max_panel_len: 14
   max_num_stitches: 24   # when training with stitches
+  element_size: 4
+  rotation_size: 4
+  translation_size: 3
+  
   max_datapoints_per_type: 5000
   panel_classification: ./nn/data_configs/panel_classes_condenced.json 
   filter_by_params: ./nn/data_configs/param_filter.json
