@@ -27,14 +27,17 @@ def get_values_from_args():
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
     
-    # basic
     parser.add_argument('-sh', '--shape_config', help='YAML configuration file', type=str, default='./models/att/att.yaml')
+    parser.add_argument('-p', '--predict', help='if set, saves sewing pattern predictions to output folder and uploads them to the run', action='store_true')
+
+    # Test set subset
+    parser.add_argument('-u', '--unseen', help='if set, evaluates performance on unseen garment types, otherwise uses seen subset', action='store_true')
+
+    # stitches
     parser.add_argument('-st', '--stitch_config', help='YAML configuration file', type=str, default='')  # evaluates only the shape model by default
     parser.add_argument(
         '--pred_path', type=str, default='',
         help='Path to the sewing pattern prediction that can be used for stitch evaluations. Set to skip loading, eval & prediction on Pattern Shape module')
-
-    parser.add_argument('-p', '--predict', help='if set, saves sewing pattern predictions to output folder and uploads them to the run', action='store_true')
     parser.add_argument('-corr', '--correct_panels', help='if set, additionally evaluate stitch information only on the patterns with correctly predicted # of panels', action='store_true')
 
     args = parser.parse_args()
@@ -57,6 +60,7 @@ if __name__ == "__main__":
 
     shape_config, stitch_config, args = get_values_from_args()
     system_info = customconfig.Properties('./system.json')
+    tag = 'test' if not args.unseen else 'unseen'
 
     # ----- Panel Shape predictions & evals --------
     if not args.pred_path:
@@ -65,27 +69,29 @@ if __name__ == "__main__":
         if not shape_experiment.is_finished():
             print('Warning::Evaluating unfinished experiment')
         shape_dataset, shape_datawrapper = shape_experiment.load_dataset(
-            system_info['datasets_path'],
-            {'obj_filetag': 'sim', 'point_noise_w': 0})  # DEBUG -- example!
+            Path(system_info['datasets_path']) / 'test' if args.unseen else system_info['datasets_path'],   # assuming dataset root structure
+            {'obj_filetag': 'sim', 'point_noise_w': 0},  # DEBUG -- one can change some data configuration for evaluation purposes here!
+            unseen=args.unseen)  
         shape_model = shape_experiment.load_model(shape_dataset.config)
 
         # Evaluate
-        test_metrics = eval_metrics(shape_model, shape_datawrapper, 'test')
-        test_breakdown = eval_metrics(shape_model, shape_datawrapper, 'test_per_data_folder')
+        test_metrics = eval_metrics(shape_model, shape_datawrapper, 'full' if args.unseen else 'test')
+        test_breakdown = eval_metrics(shape_model, shape_datawrapper, 'full_per_data_folder' if args.unseen else 'test_per_data_folder')
 
-        shape_experiment.add_statistic('test_on_best', test_metrics, log='Test metrics')
-        shape_experiment.add_statistic('test', test_breakdown, log='Test metrics per dataset')
+        shape_experiment.add_statistic(f'{tag}_on_best', test_metrics, log=f'{tag} metrics')
+        shape_experiment.add_statistic(tag, test_breakdown, log=f'{tag} metrics per dataset')
 
         if args.predict or stitch_config:  # requested or needed for stitch prediction
             # Predict 
             shape_prediction_path = shape_experiment.prediction(
                 Path(system_info['output']), shape_model, shape_datawrapper, 
-                nick='test_pred')
+                nick=f'{tag}_pred')
 
     # ----- With stitches -- predictions & evals --------
     if stitch_config:  # skip if stitch model config is not specified
         # Update data path
-        in_datapath = Path(args.pred_path) / 'test' if args.pred_path else shape_prediction_path / 'test'
+        subfolder = 'full' if args.unseen else 'test'
+        in_datapath = Path(args.pred_path) / subfolder if args.pred_path else shape_prediction_path / subfolder
 
         # Load
         stitch_experiment = ExperimentWrappper(stitch_config, system_info['wandb_username'])  # finished experiment
@@ -98,8 +104,8 @@ if __name__ == "__main__":
         # Evaluate stitch prediction
         loss = eval_metrics(stitch_model, stitch_datawrapper, 'full')
         breakdown = eval_metrics(stitch_model, stitch_datawrapper, 'full_per_data_folder')
-        stitch_experiment.add_statistic('test_preds_full', loss, log='Sitch metrics')
-        stitch_experiment.add_statistic('test_preds', breakdown, log='Sitch metrics per dataset')
+        stitch_experiment.add_statistic(f'{tag}_preds_full', loss, log='Sitch metrics')
+        stitch_experiment.add_statistic(f'{tag}_preds', breakdown, log='Sitch metrics per dataset')
         try:
             stitch_experiment.add_statistic('shape_model', shape_experiment.full_name())
         except NameError as e:
@@ -107,7 +113,7 @@ if __name__ == "__main__":
 
         if args.predict:
             stitch_prediction_path = stitch_experiment.prediction(
-                Path(system_info['output']), stitch_model, stitch_datawrapper, nick='test_pred')
+                Path(system_info['output']), stitch_model, stitch_datawrapper, nick=f'{tag}_pred')
 
         if args.correct_panels:
             # only on examples with correctly predicted number of panels
@@ -120,5 +126,5 @@ if __name__ == "__main__":
             corr_breakdown = eval_metrics(stitch_model, corr_stitch_datawrapper, 'full_per_data_folder')
 
             # Upload
-            stitch_experiment.add_statistic('test_corr_full', corr_metrics_values, 'Metrics on correct patterns')
-            stitch_experiment.add_statistic('test_corr', corr_breakdown, 'Metrics on correct patterns per dataset')
+            stitch_experiment.add_statistic(f'{tag}_corr_full', corr_metrics_values, 'Metrics on correct patterns')
+            stitch_experiment.add_statistic(f'{tag}_corr', corr_breakdown, 'Metrics on correct patterns per dataset')

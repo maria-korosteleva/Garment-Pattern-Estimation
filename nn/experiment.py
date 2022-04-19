@@ -254,15 +254,19 @@ class ExperimentWrappper(object):
         return run.state == 'finished'
 
     # ----- finished runs -- help with evaluation ----
-    def load_dataset(self, data_root, eval_config={}, batch_size=5, load_all=False):
+    def load_dataset(self, data_root, eval_config={}, unseen=False, batch_size=5, load_all=False):
         """Shortcut to load dataset
         
             NOTE: small default batch size for evaluation even on lightweights machines
         """
-
+        
         # data_config also contains the names of datasets to use
         split, _, data_config = self.data_info()  # note that run is not initialized -- we use info from finished run
+        if unseen:
+            load_all = True  # load data as a whole without splitting
+            data_config.update(data_folders=data_config['unseen_data_folders'])  # use the unseen folders list
         split = split if not load_all else None
+
         # Extra evaluation configuration
         data_config.update(eval_config)
 

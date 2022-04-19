@@ -22,6 +22,15 @@ dataset:
     - pants_straight_sides_1000
     - tee_2300
     - skirt_4_panels_1600
+    
+  unseen_data_folders:
+    - jacket_hood_sleeveless_150
+    - skirt_waistband_150
+    - tee_hood_150
+    - jacket_sleeveless_150
+    - dress_150
+    - jumpsuit_150
+    - wb_jumpsuit_sleeveless_150
 
   old_experiment:
     # Change project_name, run_name, run_id to the info of preferred panel shape prediction
