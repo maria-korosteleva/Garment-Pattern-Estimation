@@ -74,7 +74,7 @@ model = model_class(dataset.config, experiment.NN_config(), experiment.NN_config
 
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
     model = nn.DataParallel(model, device_ids=['cuda:0'])
-model.load_state_dict(experiment.load_best_model(device='cuda:0')['model_state_dict'])
+model.load_state_dict(experiment.get_best_model(device='cuda:0')['model_state_dict'])
 
 # ------- Evaluate --------
 loss = eval_metrics(model, datawrapper, 'full')

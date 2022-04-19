@@ -132,7 +132,7 @@ if __name__ == "__main__":
     # --- Final evaluation ----
     # On the best-performing model
     try:
-        model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+        model.load_state_dict(experiment.get_best_model()['model_state_dict'])
     except BaseException as e:  # not the best to catch all the exceptions here, but should work for most of cases foe now
         print(e)
         print('Train::Warning::Proceeding to evaluation with the current (final) model state')

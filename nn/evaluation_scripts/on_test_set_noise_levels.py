@@ -46,7 +46,7 @@ model_class = getattr(nets, experiment.NN_config()['model'])
 model = model_class(data_config, experiment.NN_config(), loss_config)
 if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
     model = nn.DataParallel(model, device_ids=['cuda:0'])
-state_dict = experiment.load_best_model(device='cuda:0')['model_state_dict']
+state_dict = experiment.get_best_model(device='cuda:0')['model_state_dict']
 model.load_state_dict(state_dict)
 model.module.loss.debug_prints = True
 

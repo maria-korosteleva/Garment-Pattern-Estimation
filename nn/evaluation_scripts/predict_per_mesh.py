@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     # ----- Model architecture -----
     model = nets.GarmentFullPattern3D(data_config, experiment.NN_config(), experiment.NN_config()['loss'])
-    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    model.load_state_dict(experiment.get_best_model()['model_state_dict'])
     model = model.to(device=device)
     model.eval()
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     _, _, data_config = stitch_experiment.data_info()  # need to get data stats
     model_class = getattr(nets, stitch_experiment.NN_config()['model'])
     stitch_model = model_class(data_config, stitch_experiment.NN_config(), stitch_experiment.NN_config()['loss'])
-    stitch_model.load_state_dict(stitch_experiment.load_best_model()['model_state_dict'])
+    stitch_model.load_state_dict(stitch_experiment.get_best_model()['model_state_dict'])
     stitch_model = stitch_model.to(device=device)
     stitch_model.eval()
 

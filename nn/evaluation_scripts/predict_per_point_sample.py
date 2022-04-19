@@ -117,7 +117,7 @@ if __name__ == "__main__":
     model = model_class(data_config, shape_experiment.NN_config(), shape_experiment.NN_config()['loss'])
     if 'device_ids' in shape_experiment.NN_config():  # model from multi-gpu training case
         model = nn.DataParallel(model, device_ids=['cuda:0'])
-    model.load_state_dict(shape_experiment.load_best_model()['model_state_dict'])
+    model.load_state_dict(shape_experiment.get_best_model()['model_state_dict'])
     model = model.to(device=device)
     model.eval()
 
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     if 'device_ids' in stitch_experiment.NN_config():  # model from multi-gpu training case
         stitch_model = nn.DataParallel(stitch_model, device_ids=['cuda:0'])
 
-    stitch_model.load_state_dict(stitch_experiment.load_best_model()['model_state_dict'])
+    stitch_model.load_state_dict(stitch_experiment.get_best_model()['model_state_dict'])
     # stitch_model = stitch_model.to(device=device)
     stitch_model.eval()
 

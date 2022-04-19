@@ -5,6 +5,7 @@ import time
 import json
 
 import torch
+from torch import nn
 import wandb as wb
 
 # My
@@ -65,9 +66,9 @@ def load_experiment(
     # TODO propagate device decision to the data at evaluation time, if not using Data Parallel?
     
     if checkpoint_idx is not None: 
-        state_dict = experiment.load_checkpoint_file(version=checkpoint_idx, device=device)['model_state_dict'] 
+        state_dict = experiment.get_checkpoint_file(version=checkpoint_idx, device=device)['model_state_dict'] 
     else:
-        state_dict = experiment.load_best_model(device=device)['model_state_dict']
+        state_dict = experiment.get_best_model(device=device)['model_state_dict']
     
     model.load_state_dict(state_dict)
 
@@ -152,26 +153,26 @@ class ExperimentWrappper(object):
         data_config = config['dataset']
 
         try:
-            self.load_file('data_split.json', './wandb')
+            self.get_file('data_split.json', './wandb')
             split_config['filename'] = './wandb/data_split.json'
             # NOTE!!!! this is a sub-optimal workaround fix since the proper fix would require updates in class archtecture
             data_config['max_datapoints_per_type'] = None   # avoid slicing for correct loading of split on any machine
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
-            print(e)
+            # print(e)
             print(f'{self.__class__.__name__}::Warning::Skipping loading split file from cloud..')
         
         try:
-            self.load_file('panel_classes.json', './wandb')
+            self.get_file('panel_classes.json', './wandb')
             data_config['panel_classification'] = './wandb/panel_classes.json'
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
-            print(e)
+            # print(e)
             print(f'{self.__class__.__name__}::Warning::Skipping loading panel classes file from cloud..')
 
         try:
-            self.load_file('param_filter.json', './wandb')
+            self.get_file('param_filter.json', './wandb')
             data_config['filter_by_params'] = './wandb/param_filter.json'
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with given setup
-            print(e)
+            # print(e)
             print(f'{self.__class__.__name__}::Warning::Skipping loading parameter filter file from cloud..')
         
         return split_config, config['trainer']['batch_size'] if 'trainer' in config else config['batch_size'], data_config
@@ -252,6 +253,51 @@ class ExperimentWrappper(object):
         run = self._run_object()
         return run.state == 'finished'
 
+    # ----- finished runs -- help with evaluation ----
+    def load_dataset(self, data_root, eval_config={}, batch_size=5, load_all=False):
+        """Shortcut to load dataset
+        
+            NOTE: small default batch size for evaluation even on lightweights machines
+        """
+
+        # data_config also contains the names of datasets to use
+        split, _, data_config = self.data_info()  # note that run is not initialized -- we use info from finished run
+        split = split if not load_all else None
+        # Extra evaluation configuration
+        data_config.update(eval_config)
+
+        # Dataset
+        data_class = getattr(data, data_config['class'])
+        dataset = data_class(data_root, data_config, gt_caching=True, feature_caching=True)
+
+        datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
+
+        return dataset, datawrapper
+
+    def load_model(self, data_config):
+        model_class = getattr(nets, self.NN_config()['model'])
+        model = model_class(data_config, self.NN_config(), self.NN_config()['loss'])
+        model = nn.DataParallel(model, device_ids=['cuda:0'])   # Assuming all models trained as DataParallel
+
+        # Load model weights
+        state_dict = self.get_best_model(device='cuda:0')['model_state_dict']
+        model.load_state_dict(state_dict)
+        model.module.loss.debug_prints = True
+
+        return model
+
+    def prediction(self, save_to, model, datawrapper, nick='test', sections=['test'], art_name='multi-data'):
+        """Perform inference and save predictions for a given model on a given dataset"""
+        prediction_path = datawrapper.predict(model, save_to=save_to, sections=sections, orig_folder_names=True)
+
+        self.add_statistic(nick + '_folder', prediction_path.name, log='Prediction save path')
+
+        art_name = art_name if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
+        self.add_artifact(prediction_path, art_name, 'result')
+
+        return prediction_path
+
+
     # ---- file info -----
     def checkpoint_filename(self, check_id=None):
         """Produce filename for the checkpoint of given epoch"""
@@ -293,7 +339,7 @@ class ExperimentWrappper(object):
         return path
 
     # ----- working with files -------
-    def load_checkpoint_file(self, to_path=None, version=None, device=None):
+    def get_checkpoint_file(self, to_path=None, version=None, device=None):
         """Load checkpoint file for given epoch from the cloud"""
         if not self.run_id:
             raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore specific checkpoint from the could')
@@ -306,7 +352,7 @@ class ExperimentWrappper(object):
             print('ExperimentWrappper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
             raise e
     
-    def load_best_model(self, to_path=None, device=None):
+    def get_best_model(self, to_path=None, device=None):
         """Load model parameters (model with best performance) file from the cloud or from locally saved model file if it exists
 
             NOTE: cloud has a priority as it might contain up-to-date information
@@ -357,7 +403,7 @@ class ExperimentWrappper(object):
         if wait_for_upload:
             self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter - 1))
 
-    def load_file(self, filename, to_path='.'):
+    def get_file(self, filename, to_path='.'):
         """Download a file from the wandb experiment to given path or to currect directory"""
         if not self.run_id:
             raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore a file from the could')

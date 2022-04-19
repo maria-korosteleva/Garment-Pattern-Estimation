@@ -76,7 +76,7 @@ if __name__ == "__main__":
     model = nets.GarmentFullPattern3D(data_config, experiment.NN_config(), experiment.NN_config()['loss'])
     if 'device_ids' in experiment.NN_config():  # model from multi-gpu training case
         model = nn.DataParallel(model, device_ids=['cuda:0'])
-    model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+    model.load_state_dict(experiment.get_best_model()['model_state_dict'])
     model = model.to(device=device)
     model.eval()
 
