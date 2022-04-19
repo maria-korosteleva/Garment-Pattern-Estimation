@@ -48,6 +48,7 @@ dataset:
   non_stitched_edge_pairs_num: 200
   shuffle_pairs: True
   shuffle_pairs_order': True
+  element_size: 16
 
   filter_by_params: ./nn/data_configs/param_filter.json
 

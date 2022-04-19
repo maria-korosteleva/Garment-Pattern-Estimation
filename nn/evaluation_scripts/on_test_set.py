@@ -99,7 +99,7 @@ if __name__ == "__main__":
             print('Warning::Evaluating unfinished experiment')
         stitch_dataset, stitch_datawrapper = stitch_experiment.load_dataset(in_datapath, batch_size=1, load_all=True)  # Num of edge pairs at test time is different for each sewing pattern 
         stitch_datawrapper.dataset.config.update(random_pairs_mode=False)  # use all edge pairs in evaluation
-        stitch_model =stitch_experiment.load_model(stitch_dataset.config)
+        stitch_model = stitch_experiment.load_model(stitch_dataset.config)
 
         # Evaluate stitch prediction
         loss = eval_metrics(stitch_model, stitch_datawrapper, 'full')

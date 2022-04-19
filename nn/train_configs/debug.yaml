@@ -49,11 +49,12 @@ dataset:
   element_size: 4
   rotation_size: 4
   translation_size: 3
+  explicit_stitch_tags: False
+  point_noise_w: 0
   
   max_datapoints_per_type: 5000
   panel_classification: ./nn/data_configs/panel_classes_condenced.json 
   filter_by_params: ./nn/data_configs/param_filter.json
-  point_noise_w: 0
   standardize:     # Remove this key to re-calculate data stats at training time
     f_scale: [16.351303100585938, 30.945703506469727, 9.60141944885254]
     f_shift: [0.037076108157634735, -28.06070327758789, 1.0775548219680786]
