@@ -1398,32 +1398,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         return mask
 
 
-class Garment2DPatternDataset(Garment3DPatternFullDataset):
-    """Dataset definition for 2D pattern autoencoder
-        * features: a 'front' panel edges represented as a sequence
-        * ground_truth is not used as in Panel dataset"""
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
-    
-    def _get_features(self, datapoint_name, folder_elements):
-        """Get mesh vertices for given datapoint with given file list of datapoint subfolder"""
-        return self._get_ground_truth(datapoint_name, folder_elements)['outlines']
-        
-    def _pred_to_pattern(self, prediction, dataname):
-        """Convert given predicted value to pattern object"""
-        prediction = prediction['outlines'].cpu().numpy()
-
-        gt_shifts = self.config['standardize']['gt_shift']['outlines']
-        gt_scales = self.config['standardize']['gt_scale']['outlines']
-        prediction = prediction * gt_scales + gt_shifts
-
-        return self._pattern_from_tenzor(
-            dataname, 
-            prediction, 
-            std_config={}, 
-            supress_error=True)
-
-
 class GarmentStitchPairsDataset(GarmentBaseDataset):
     """
         Dataset targets the task of predicting if a particular pair of edges is connected by a stitch or not
