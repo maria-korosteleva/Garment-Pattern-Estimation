@@ -58,12 +58,12 @@ class GarmentFullPattern3D(BaseModule):
 
         # ---- Net configuration ----
         self.config.update({
-            'panel_encoding_size': 70, 
-            'panel_hidden_size': 70,
-            'panel_n_layers': 4, 
-            'pattern_encoding_size': 130, 
-            'pattern_hidden_size': 130, 
-            'pattern_n_layers': 3, 
+            'panel_encoding_size': 250, 
+            'panel_hidden_size': 250,
+            'panel_n_layers': 3, 
+            'pattern_encoding_size': 250, 
+            'pattern_hidden_size': 250, 
+            'pattern_n_layers': 2, 
             'dropout': 0,
             'lstm_init': 'kaiming_normal_', 
             'feature_extractor': 'EdgeConvFeatures',
@@ -83,7 +83,7 @@ class GarmentFullPattern3D(BaseModule):
         self.config['loss'] = {
             'loss_components': ['shape', 'loop', 'rotation', 'translation'],  # , 'stitch', 'free_class'],
             'quality_components': ['shape', 'discrete', 'rotation', 'translation'],  #, 'stitch', 'free_class'],
-            'panel_origin_invariant_loss': True,
+            'panel_origin_invariant_loss': False,
             'loop_loss_weight': 1.,
             'stitch_tags_margin': 0.3,
             'epoch_with_stitches': 40, 
@@ -232,7 +232,7 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         self.panel_dec_lin = nn.Linear(
             panel_att_out_size, self.feature_extractor.config['panel_encoding_size'])
 
-        # pattern decoder is not needed any more
+        # pattern decoder is not needed in this acrchitecture
         del self.pattern_decoder
 
     def forward_panel_enc_from_3d(self, positions_batch):
@@ -316,7 +316,7 @@ class StitchOnEdge3DPairs(BaseModule):
 
         # ---- Net configuration ----
         self.config.update({
-            'stitch_hidden_size': 20, 
+            'stitch_hidden_size': 200, 
             'stitch_mlp_n_layers': 3
         })
         # update with input settings
