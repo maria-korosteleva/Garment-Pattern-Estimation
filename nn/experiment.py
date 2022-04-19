@@ -194,7 +194,7 @@ class ExperimentWrappper(object):
         
         # Log
         if log:
-            print(f'{self.__class__.__name__}::Saving statistic {log}:')
+            print(f'{self.__class__.__name__}::Saving statistic <{log}>:')
             print(json.dumps(info, sort_keys=True, indent=2) if isinstance(info, dict) else info)
 
         if not self.run_id:
