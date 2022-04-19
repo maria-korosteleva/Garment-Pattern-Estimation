@@ -8,7 +8,6 @@ import net_blocks as blocks
 
 
 # ------ Basic Interface --------
-# TODO no need for this class except for the model name!!
 class BaseModule(nn.Module):
     """Base interface for my neural nets"""
     def __init__(self):
@@ -27,7 +26,6 @@ class BaseModule(nn.Module):
         loss = self.regression_loss(preds, ground_truth)
         return loss, {'regression loss': loss}, False  # second term is for compound losses, third -- to indicate dynamic update of loss structure
 
-
     def train(self, mode=True):
         super().train(mode)
         if isinstance(self.loss, object):
@@ -37,184 +35,6 @@ class BaseModule(nn.Module):
         super().eval()
         if isinstance(self.loss, object):
             self.loss.eval()
-
-
-# -------- Nets architectures -----------
-# -------- AEs--------------
-class GarmentPanelsAE(BaseModule):
-    """
-        Model to test encoding & decoding of garment 2D panels (sewing patterns components)
-        * Follows similar structure of GarmentFullPattern3D
-        
-    """
-    def __init__(self, data_config, config={}, in_loss_config={}):
-        super().__init__()
-
-        # data props
-        self.panel_elem_len = data_config['element_size']
-        self.max_panel_len = data_config['max_panel_len']
-        self.max_pattern_size = data_config['max_pattern_len']
-
-        # ---- Net configuration ----
-        self.config.update({
-            'panel_encoding_size': 20, 
-            'panel_n_layers': 3, 
-            'pattern_encoding_size': 40, 
-            'pattern_n_layers': 3,
-            'dropout': 0,
-            'lstm_init': 'kaiming_normal_', 
-            'decoder': 'LSTMDecoderModule'
-        })
-        # update with input settings
-        self.config.update(config) 
-
-        # --- Losses ---
-        self.config['loss'] = {
-            'loss_components': ['shape', 'loop'],
-            'quality_components': ['shape', 'discrete'],
-            'panel_origin_invariant_loss': True,
-            'loop_loss_weight': 0.1
-        }
-        self.config['loss'].update(in_loss_config)  # apply input settings 
-
-        # create loss!
-        self.loss = ComposedPatternLoss(data_config, self.config['loss'])
-        self.config['loss'] = self.loss.config  # sync
-
-        # ------ Modules ----
-        decoder_module = getattr(blocks, self.config['decoder'])
-
-        # --- panel-level ---- 
-        self.panel_encoder = blocks.LSTMEncoderModule(
-            self.panel_elem_len, 
-            self.config['panel_encoding_size'], 
-            self.config['panel_n_layers'], 
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-        self.panel_decoder = decoder_module(
-            self.config['panel_encoding_size'], 
-            self.config['panel_encoding_size'], 
-            self.panel_elem_len, 
-            self.config['panel_n_layers'], 
-            out_len=self.max_panel_len,
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )   
-
-    def forward_encode(self, patterns_batch):
-        """
-            Predict garment encodings for input batch
-            In this case it's just a concatenation of the panel encodings
-        """
-        self.batch_size = patterns_batch.size(0)
-        self.max_pattern_size = patterns_batch.size(1)
-
-        # flatten -- view simply as a list of panels to apply encoding per panel
-        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
-        panel_encodings = self.panel_encoder(all_panels)
-
-        # group by patterns -- garments encoding as concatenated panel encodings
-        panel_encodings = panel_encodings.contiguous().view(self.batch_size, -1) 
-
-        return panel_encodings 
-
-    def forward_pattern_decode(self, garment_encodings):
-        """
-            Unfold provided garment encodings into per-panel encodings
-            Useful for obtaining the latent space for Panels
-            NOTE In this class, garment is represented as concatenation of panel encodings already, 
-            so it just needs re-shaping it
-        """
-        return garment_encodings.contiguous().view(-1, self.config['panel_encoding_size'])
-
-    def forward(self, patterns_batch, **kwargs):
-        self.device = patterns_batch.device
-        self.batch_size = patterns_batch.size(0)
-
-        # --- Encode ---
-        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
-        flat_panel_encodings = self.panel_encoder(all_panels)
-
-        # --- Decode ---
-        flat_panels_dec = self.panel_decoder(flat_panel_encodings, self.max_panel_len)
-
-        # back to patterns and panels structure
-        prediction = flat_panels_dec.contiguous().view(self.batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        
-        return {'outlines': prediction}
-
-
-class GarmentPatternAE(GarmentPanelsAE):
-    """
-        Hierarchical Sewing pattern AE -- defines garment-level pattern 
-        * loss evaluation is the same for both AE models
-    """
-    def __init__(self, data_config, config={}, in_loss_config={}):
-        super().__init__(data_config, config, in_loss_config)
-        # loss objects & config already defined
-
-        # adding patten-level encoders\decoders
-        # ----- patten level ------
-        self.pattern_encoder = blocks.LSTMEncoderModule(
-            self.config['panel_encoding_size'], 
-            self.config['pattern_encoding_size'], 
-            self.config['pattern_n_layers'], 
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-        decoder_module = getattr(blocks, self.config['decoder'])
-        self.pattern_decoder = decoder_module(
-            self.config['pattern_encoding_size'], 
-            self.config['pattern_encoding_size'], 
-            self.config['panel_encoding_size'], 
-            self.config['pattern_n_layers'], 
-            out_len=self.max_pattern_size,
-            dropout=self.config['dropout'],
-            custom_init=self.config['lstm_init']
-        )
-
-    def forward_encode(self, patterns_batch):
-        """
-            Predict garment encodings for input batch
-        """
-        self.batch_size = patterns_batch.size(0)
-        self.max_pattern_size = patterns_batch.size(1)
-
-        # flatten -- view simply as a list of panels to apply encoding per panel
-        all_panels = patterns_batch.contiguous().view(-1, patterns_batch.shape[-2], patterns_batch.shape[-1])
-        panel_encodings = self.panel_encoder(all_panels)
-
-        panel_encodings = panel_encodings.contiguous().view(self.batch_size, self.max_pattern_size, -1)  # group by patterns
-        pattern_encoding = self.pattern_encoder(panel_encodings)   # YAAAAY Pattern hidden representation!!
-
-        return pattern_encoding 
-
-    def forward_pattern_decode(self, garment_encodings):
-        """
-            Unfold provided garment encodings into per-panel encodings
-            Useful for obtaining the latent space for Panels
-        """
-        panel_encodings = self.pattern_decoder(garment_encodings, self.max_pattern_size)
-        flat_panel_encodings = panel_encodings.contiguous().view(-1, panel_encodings.shape[-1])
-
-        return flat_panel_encodings
-
-    def forward(self, patterns_batch, **kwargs):
-        self.device = patterns_batch.device
-        self.batch_size = patterns_batch.size(0)
-
-        # --- Encode ---
-        pattern_encoding = self.forward_encode(patterns_batch)
-
-        # --- Decode ---
-        flat_panel_encodings_dec = self.forward_pattern_decode(pattern_encoding)
-        flat_panels_dec = self.panel_decoder(flat_panel_encodings_dec, self.max_panel_len)
-
-        # back to patterns and panels
-        prediction = flat_panels_dec.contiguous().view(self.batch_size, self.max_pattern_size, self.max_panel_len, -1)
-        
-        return {'outlines': prediction}
 
 
 # ------------ Pattern predictions ----------
