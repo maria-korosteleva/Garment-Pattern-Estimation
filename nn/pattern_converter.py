@@ -435,7 +435,6 @@ class NNSewingPattern(VisPattern):
         # record stitches
         stitched_ids = preds_class.nonzero(as_tuple=False).squeeze().cpu().tolist()
         if len(stitched_ids) > 0:  # some stitches found!
-            # print(stitched_ids)
             for stitch_idx in range(len(stitched_ids)):
                 edge_pair = pairs_mapping[stitch_idx]
 
@@ -673,7 +672,7 @@ if __name__ == "__main__":
     import customconfig
     from pattern.wrappers import VisPattern
 
-    # np.set_printoptions(precision=4, suppress=True)
+    np.set_printoptions(precision=4, suppress=True)
 
     system_config = customconfig.Properties('./system.json')
     base_path = system_config['output']
@@ -687,17 +686,11 @@ if __name__ == "__main__":
     empty_pattern = NNSewingPattern(panel_classifier=PanelClasses('./nn/data_configs/panel_classes_extended.json'))
     print(pattern.panel_order())
 
-    # print(pattern.stitches_as_tags())
-    # print(pattern.stitches_as_3D_pairs(total_pairs=30, randomize_edges=True, randomize_list_order=True))
-
-    # print(len(pattern.pattern_as_tensors(with_placement=True, with_stitches=True, with_stitch_tags=True)))
-
     tensor, edge_lens, num_panels, rot, transl, stitches, stitch_num, stitch_tags = pattern.pattern_as_tensors(
         with_placement=True, with_stitches=True, with_stitch_tags=True)
 
     empty_pattern.pattern_from_tensors(tensor, rot, transl, stitches, padded=True)
     print(empty_pattern.pattern['stitches'])
-    # print(empty_pattern.panel_order())
 
     # Save
     empty_pattern.name = pattern.name + 'from_empty_with_class' + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S')

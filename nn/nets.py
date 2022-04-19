@@ -403,7 +403,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
         self.point_segment_mlp = nn.Sequential(
             blocks.MLP([attention_input_size, attention_input_size, attention_input_size, self.max_pattern_size]),
             Sparsemax(dim=1)  # in the feature dimention
-            # nn.Softmax(dim=1)   # DEBUG temporary solution for segmentation losses
         )
 
         # additional panel encoding post-procedding
@@ -439,9 +438,6 @@ class GarmentSegmentPattern3D(GarmentFullPattern3D):
                 [-1, init_pattern_encodings.shape[-1]])
 
             points_weights = self.point_segment_mlp(torch.cat([global_enc_propagated, point_features_flat], dim=-1))
-
-        # DEBUG 
-        # print(f'Point Weights', points_weights)
 
         # ----- Getting per-panel features after attention application ------
         all_panel_features = []
@@ -540,13 +536,13 @@ class StitchOnEdge3DPairs(BaseModule):
 
 if __name__ == "__main__":
 
+    # DEBUG Basic debug of the net classes
+
     torch.manual_seed(125)
 
     a = torch.arange(1, 25, dtype=torch.float)
     dataset_gt = a.view(-1, 2, 3)
-    # print(dataset_gt)
     gt_batch = a.view(2, -1, 2, 3)  # ~ 2 examples in batch
-    # print(gt_batch)
     net = GarmentFullPattern3D(
         gt_batch.shape[3], gt_batch.shape[2], gt_batch.shape[1], 6, 3)  # {'shift': dataset_gt.mean(), 'scale': dataset_gt.std()})
 

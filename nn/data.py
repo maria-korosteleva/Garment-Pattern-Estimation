@@ -459,9 +459,6 @@ class BaseDataset(Dataset):
                 # hence, simple slicing of elements would be equivalent to sampling them randomly from the list
                 clean_list = clean_list[:self.config['max_datapoints_per_type']] 
 
-                # DEBUG
-                print(f'Final number: {data_folder}: {len(clean_list)}')
-
             self.datapoints_names += clean_list
         self.dataset_start_ids.append((None, len(self.datapoints_names)))  # add the total len as item for easy slicing
         self.config['size'] = len(self)
@@ -869,7 +866,6 @@ class GarmentBaseDataset(BaseDataset):
             for fail in fails_dict[subsection]:
                 try:
                     datapoints_names.remove(dataset_folder + '/' + fail)
-                    # DEBUG print('Dataset {}:: {} ignored'.format(dataset_folder, fail))
                 except ValueError:  # if fail was already removed based on previous failure subsection
                     pass
         
@@ -903,7 +899,6 @@ class GarmentBaseDataset(BaseDataset):
             if to_add:
                 final_list.append(datapoint_name)
         
-        # DEBUG
         print(f'{self.__class__.__name__}::Filtering::{dataset_folder}::{len(final_list)} of {len(datapoint_names)}')
 
         return final_list
@@ -1291,7 +1286,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             vert_labels = np.array([line.rstrip() for line in f])  # remove \n
         map_list, _, _ = igl.snap_points(points, verts)
 
-        # DEBUG
         if len(verts) > len(vert_labels):
             point_segmentation = np.zeros(len(map_list))
             print(f'{self.__class__.__name__}::{datapoint_name}::WARNING::Not enough segmentation labels -- {len(vert_labels)} for {len(verts)} vertices. Setting segmenations to zero')
@@ -1308,8 +1302,6 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             point_segmentation_names != 'stitch', point_segmentation_names != 'None')
 
         map_stitches, _, _ = igl.snap_points(points[stitch_points_ids], points[non_stitch_points_ids])
-
-        # DEBUG print(f'Mapped to stitches {stitch_points_ids.sum()} with non-stitched {non_stitch_points_ids.sum()}')
 
         non_stitch_points_ids = np.flatnonzero(non_stitch_points_ids)
         point_segmentation_names[stitch_points_ids] = point_segmentation_names[non_stitch_points_ids[map_stitches]]
@@ -1677,99 +1669,19 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
 
 if __name__ == "__main__":
 
-    # data_location = r'D:\Data\CLOTHING\Learning Shared Shape Space_shirt_dataset_rest'
+    # DEBUG Basic debug of the data classes
     system = Properties('./system.json')
-    # dataset_folder = 'data_1000_skirt_4_panels_200616-14-14-40'
-    dataset_folder = 'data_1000_tee_200527-14-50-42_regen_200612-16-56-43'
-
-    data_location = Path(system['datasets_path']) / dataset_folder
-
     dataset = Garment3DPatternFullDataset(system['datasets_path'], {
         'data_folders': [
-            'data_1000_tee_200527-14-50-42_regen_200612-16-56-43',
-            'data_1000_skirt_4_panels_200616-14-14-40'
+            'tee_2300',
+            'skirt_4_panels_1000'
         ]
     })
 
     print(len(dataset), dataset.config)
-    # print(dataset[0]['name'], dataset[0]['data_folder'])
-    # print(dataset[0]['ground_truth'])
-    # print(dataset[-1]['name'], dataset[-1]['data_folder'])
-    # print(dataset[-1]['ground_truth'])
-
-    # print(dataset[5]['ground_truth'])
 
     datawrapper = DatasetWrapper(dataset)
     datawrapper.new_split(10, 10, 3000)
+    datawrapper.standardize_data()
 
-    # datawrapper.standardize_data()
-
-    # print(dataset.config['standardize'])
-
-    # print(dataset[0]['ground_truth'])
-    # print(dataset[5]['features'])
-
-    # stitch_tags = torch.Tensor(
-    #     [[
-    #         [-5.20318419e+01,  2.28511632e+01, -2.51693441e-01],
-    #         [-3.37806229e+01,  1.83484274e+01, -1.34557098e+01],
-    #         [-4.78298848e+01, -3.23568072e+00,  5.23204596e-01],
-    #         [-2.24093100e+00,  2.60038064e+00, -3.99605272e-01],
-    #         [-2.63538333e+00, -1.33136284e+00, -2.10666308e-01],
-    #         [-1.63031343e+00, -2.54933174e-01, -3.51316654e-01],
-    #         [-1.39121696e+00, -3.99988596e-01, -2.81176007e-01],
-    #         [-2.30340490e+00, -8.96057867e-01, -2.23693146e-01],
-    #         [-1.34838584e+00, -7.02625742e-01, -1.68379548e-01]],
-
-    #         # [[-3.76714804e+01, -7.83406514e-01,  4.21872022e+00],
-    #         # [-3.36618020e+01, 2.02843384e+01,  1.38874859e+01],
-    #         # [-2.98077958e+01, 1.76473066e+01, -2.72662691e-01],
-    #         # [-1.16667320e+01, -2.32238589e-01, -2.70201479e-01],
-    #         # [-4.62600892e+00, -1.03453005e+00, -3.87780018e-01],
-    #         # [-1.12707816e+00, -9.99629252e-01, -4.63383672e-01],
-    #         # [-1.36449657e+00, -1.40015080e+00, -3.52761674e-01],
-    #         # [-2.49496085e+00, -9.37499225e-01,  1.75160368e-02],
-    #         # [-1.82691709e+00, -9.67022458e-01, -2.44112010e-02]],
-
-    #     # [[-3.08226939e+01, -4.40332624e+01,  5.20345150e-02],
-    #     # [-2.57602088e+01,  9.90067487e+00, -1.46536128e+01],
-    #     # [-1.71379921e+01,  2.79928684e+01,  1.99508048e+00],
-    #     # [-2.83926761e+00, -1.74896668e+00, -5.10048808e-01],
-    #     # [ 1.69106852e+01,  2.67701350e+01,  1.92687865e+00],
-    #     # [ 2.33531630e+01,  1.87797418e+01, -1.42510374e+01],
-    #     # [ 2.93172584e+01, -4.47819890e+01,  3.36183070e-02],
-    #     # [ 1.33929771e+00, -7.66815033e-01,  3.39337064e-01],
-    #     # [-2.58251768e+00, -3.01449654e+00, -8.38604599e-01]],
-
-    #     # [[ 7.60947669e+00, -2.93252076e+00,  1.52037176e-01],
-    #     # [ 3.81844651e+01, -4.00190576e+01,  3.03353006e+00],
-    #     # [ 2.92371784e+01,  1.43307176e+01,  1.46076412e+01],
-    #     # [ 1.18328286e+01,  2.77603316e+01,  1.56419596e+00],
-    #     # [-2.90668095e+00,  8.09845111e-01,  2.66955523e-02],
-    #     # [-2.56676557e+00,  4.74590501e-01, -5.36622275e-01],
-    #     # [-1.68190322e+01,  2.80625313e+01,  2.39942965e+00],
-    #     # [-2.54365294e+01,  1.39684045e+01,  1.59379294e+01],
-    #     # [-2.91702785e+01, -4.18118565e+01,  9.33112066e-01]],
-
-    #     # [[ 4.14145748e+01,  3.80079295e+00, -5.11258303e+00],
-    #     # [ 3.60885075e+01, 2.16267973e+01, -9.39987246e+00],
-    #     # [ 3.18748450e+01,  2.12366894e+01,  4.64202212e-01],
-    #     # [ 1.24644558e+01,  1.05895206e+00,  5.83006592e-01],
-    #     # [ 4.96519200e-01,  1.38524990e-01,  1.54455938e-01],
-    #     # [-1.03008224e+00, -6.21098086e-01, -1.10430334e-02],
-    #     # [-1.33714690e+00, -5.25571702e-01, -1.00064235e-01],
-    #     # [-1.87922790e+00, -7.71050929e-01, -2.45438618e-01],
-    #     # [-1.45271650e+00, -4.56986468e-01, -2.65114454e-01]],
-
-    #     # [[ 3.84707164e+01,  2.86529960e+01,  8.99072663e-01],
-    #     # [ 3.08633876e+01,  1.25824877e+01,  1.59490529e+01],
-    #     # [ 4.77875079e+01, -4.37732398e+00,  1.27716544e+00],
-    #     # [ 1.48898335e+00, -4.72142368e-02, -4.45565817e-02],
-    #     # [-7.72547412e-01, -1.78853016e+00,  1.03305003e-01],
-    #     # [-1.33450125e+00, -1.22900781e+00, -4.36989260e-02],
-    #     # [-1.32287662e+00, -2.99308717e-01, -1.39927901e-01],
-    #     # [-1.73496211e+00, -4.85474734e-01, -1.33751047e-01],
-    #     # [-8.70132007e-01, -2.93109585e-01, -2.64518426e-01]]
-    #     ])
-
-    # print(Garment3DPatternFullDataset.tags_to_stitches(stitch_tags, torch.full((stitch_tags.shape[0], stitch_tags.shape[1]), 0.)))
+    print(dataset.config['standardize'])

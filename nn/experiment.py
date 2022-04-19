@@ -96,21 +96,19 @@ class ExperimentWrappper(object):
             # NOTE!!!! this is a sub-optimal workaround fix since the proper fix would require updates in class archtecture
             data_config['max_datapoints_per_type'] = None   # avoid slicing for correct loading of split on any machine
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
-            # print(e)
+
             print(f'{self.__class__.__name__}::Warning::Skipping loading split file from cloud..')
         
         try:
             self.get_file('panel_classes.json', './wandb')
             data_config['panel_classification'] = './wandb/panel_classes.json'
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
-            # print(e)
             print(f'{self.__class__.__name__}::Warning::Skipping loading panel classes file from cloud..')
 
         try:
             self.get_file('param_filter.json', './wandb')
             data_config['filter_by_params'] = './wandb/param_filter.json'
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with given setup
-            # print(e)
             print(f'{self.__class__.__name__}::Warning::Skipping loading parameter filter file from cloud..')
         
         return split_config, config['trainer']['batch_size'] if 'trainer' in config else config['batch_size'], data_config

@@ -255,8 +255,6 @@ class EdgeConvPoolingFeatures(nn.Module):
         self.lin = nn.Linear(self.config['n_features3'], out_size)
 
     def forward(self, positions):
-        # batch_size = positions.size(0)
-        # n_vertices = positions.size(1)
         # flatten the batch for torch-geometric batch format
         pos_flat = positions.view(-1, positions.size(-1))
         batch = torch.cat([
@@ -265,13 +263,10 @@ class EdgeConvPoolingFeatures(nn.Module):
 
         # Vertex features
         out = self.conv1(pos_flat, batch)
-        # print(out.shape)
         out, batch = self.pool1(out, batch)
-        # print(out.shape)
 
         out = self.conv2(out, batch)
         out, batch = self.pool2(out, batch)
-        # print(out.shape)
 
         out = self.conv3(out, batch)
 

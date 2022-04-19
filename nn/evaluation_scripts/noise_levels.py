@@ -33,7 +33,6 @@ def get_values_from_args():
     with open(args.shape_config, 'r') as f:
         shape_config = yaml.safe_load(f)
 
-    # DEBUG
     print(f'Command line args: {args}')
 
     return shape_config, args

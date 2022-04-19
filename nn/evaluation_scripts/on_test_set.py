@@ -47,7 +47,6 @@ def get_values_from_args():
     else:
         stitch_config = None
 
-    # DEBUG
     print(f'Command line args: {args}')
 
     return shape_config, stitch_config, args
@@ -67,7 +66,7 @@ if __name__ == "__main__":
             print('Warning::Evaluating unfinished experiment')
         shape_dataset, shape_datawrapper = shape_experiment.load_dataset(
             Path(system_info['datasets_path']) / 'test' if args.unseen else system_info['datasets_path'],   # assuming dataset root structure
-            {'obj_filetag': 'sim', 'point_noise_w': 0},  # DEBUG -- one can change some data configuration for evaluation purposes here!
+            {'obj_filetag': 'sim', 'point_noise_w': 0},    # NOTE: one can change some data configuration for evaluation purposes here!
             unseen=args.unseen)  
         shape_model = shape_experiment.load_model(shape_dataset.config)
 
