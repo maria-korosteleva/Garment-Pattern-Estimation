@@ -14,68 +14,7 @@ import data
 import nets
 
 
-# -------- Working with existing experiments ------
-# TODO use in all subroutines
-def load_experiment(
-        name, run_id, project='Garments-Reconstruction', 
-        in_data_folders=None, in_datapath=None,
-        in_batch_size=None, in_device=None, checkpoint_idx=None):
-    """
-        Load information (dataset, wrapper, model) associated with a particular experiment
-
-        Parameters re-write corresponding information from experiment, if set
-
-        NOTE: if in_data_folders is provided then all data is loaded in a single loader instead of being splitted
-            (since original split may not make sense for new data folders )
-    """
-
-    system_info = customconfig.Properties('./system.json')
-    experiment = ExperimentWrappper(
-        system_info['wandb_username'],
-        project_name=project, 
-        run_name=name, 
-        run_id=run_id)  # finished experiment
-
-    if not experiment.is_finished():
-        print('Warning::Evaluating unfinished experiment')
-
-    # -------- data -------
-    # data_config also contains the names of datasets to use
-    split, batch_size, data_config = experiment.data_info()  
-    if in_batch_size is not None:
-        batch_size = in_batch_size
-    if in_data_folders is not None:
-        data_config.update(data_folders=in_data_folders)
-        split = None  # Just use all the data if the base set of datafolders is updated
-
-    data_path = in_datapath if in_datapath is not None else system_info['datasets_path']
-
-
-    data_class = getattr(data, data_config['class'] if 'class' in data_config else 'Garment3DPatternFullDataset')  # TODO check if it works!!
-    dataset = data_class(data_path, data_config, gt_caching=True, feature_caching=True)
-    datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
-
-    # ----- Model -------
-    nn_config = experiment.NN_config()
-    model_class = getattr(nets, nn_config['model'])
-    model = model_class(dataset.config, nn_config, nn_config['loss'])
- 
-    device = in_device if in_device is not None else nn_config['device_ids'][0]
-    model = torch.nn.DataParallel(model, device_ids=[device])
-
-    # TODO propagate device decision to the data at evaluation time, if not using Data Parallel?
-    
-    if checkpoint_idx is not None: 
-        state_dict = experiment.get_checkpoint_file(version=checkpoint_idx, device=device)['model_state_dict'] 
-    else:
-        state_dict = experiment.get_best_model(device=device)['model_state_dict']
-    
-    model.load_state_dict(state_dict)
-
-    return datawrapper, model, experiment
-
-
-# ------- Class for experiment tracking with wandb -------
+# ------- Class for experiment tracking and information storage -------
 class ExperimentWrappper(object):
     """Class provides 
         * a convenient way to store & load experiment info with integration to wandb 
@@ -294,10 +233,12 @@ class ExperimentWrappper(object):
         """Perform inference and save predictions for a given model on a given dataset"""
         prediction_path = datawrapper.predict(model, save_to=save_to, sections=sections, orig_folder_names=True)
 
-        self.add_statistic(nick + '_folder', prediction_path.name, log='Prediction save path')
+        if nick:
+            self.add_statistic(nick + '_folder', prediction_path.name, log='Prediction save path')
 
-        art_name = art_name if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
-        self.add_artifact(prediction_path, art_name, 'result')
+        if art_name:
+            art_name = art_name if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
+            self.add_artifact(prediction_path, art_name, 'result')
 
         return prediction_path
 

@@ -206,7 +206,7 @@ class DatasetWrapper(object):
         split_datanames['training'] = [self.dataset.datapoints_names[idx] for idx in self.training.indices]
         split_datanames['validation'] = [self.dataset.datapoints_names[idx] for idx in self.validation.indices]
         split_datanames['test'] = [self.dataset.datapoints_names[idx] for idx in self.test.indices]
-        with open(experiment.local_path() / 'data_split.json', 'w') as f_json:
+        with open(experiment.local_wandb_path() / 'data_split.json', 'w') as f_json:
             json.dump(split_datanames, f_json, indent=2, sort_keys=True)
 
         # data info
@@ -822,7 +822,7 @@ class GarmentBaseDataset(BaseDataset):
             try:
                 shutil.copy(
                     self.root_path / dataset_folder / 'dataset_properties.json', 
-                    experiment.local_path() / (dataset_folder + '_properties.json'))
+                    experiment.local_wandb_path() / (dataset_folder + '_properties.json'))
             except FileNotFoundError:
                 pass
         
@@ -830,13 +830,13 @@ class GarmentBaseDataset(BaseDataset):
         if self.panel_classifier is not None:
             shutil.copy(
                 self.panel_classifier.filename, 
-                experiment.local_path() / ('panel_classes.json'))
+                experiment.local_wandb_path() / ('panel_classes.json'))
 
         # param filter file
         if 'filter_by_params' in self.config and self.config['filter_by_params']:
             shutil.copy(
                 self.config['filter_by_params'], 
-                experiment.local_path() / ('param_filter.json'))
+                experiment.local_wandb_path() / ('param_filter.json'))
     
     # ------ Garment Data-specific basic functions --------
     def _clean_datapoint_list(self, datapoints_names, dataset_folder):

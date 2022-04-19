@@ -11,7 +11,7 @@ import data
 import nets
 from metrics.eval_utils import eval_metrics
 from trainer import Trainer
-from experiment import ExperimentWrappper, load_experiment
+from experiment import ExperimentWrappper
 import nn.evaluation_scripts.latent_space_vis as tsne_plot
 
 import warnings
@@ -81,7 +81,6 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     config = get_values_from_args()
-
     system_info = customconfig.Properties('./system.json')
     
     experiment = ExperimentWrappper(
@@ -93,12 +92,18 @@ if __name__ == "__main__":
     if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['predictions']:
         # Use predictions of model from specified experiment as a dataset for training
         info = config['dataset']['old_experiment']
-        shape_datawrapper, shape_model, shape_experiment = load_experiment(
-            info['run_name'], info['run_id'], project=info['project_name'], 
-            in_batch_size=config['trainer']['batch_size'], in_device=config['trainer']['devices'][0])
-        prediction_path = shape_datawrapper.predict(
-            shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'], orig_folder_names=True)
-        system_info['datasets_path'] = merge_repos(prediction_path, ['train', 'validation', 'test'])
+        if 'run_id' in info and info['run_id']:  # cloud runs have priority over local ones
+            info = {'experiment': info}
+        else:
+            with open(info['local_path'], 'r') as f:
+                info = yaml.safe_load(f)
+
+        shape_experiment = ExperimentWrappper(info, system_info['wandb_username'])  # finished experiment
+        shape_dataset, shape_datawrapper = shape_experiment.load_dataset(Path(system_info['datasets_path']))  
+        shape_model = shape_experiment.load_model(shape_dataset.config)
+        shape_prediction_path = shape_experiment.prediction(
+            Path(system_info['output']), shape_model, shape_datawrapper, nick='', sections=['train', 'validation', 'test'], art_name='')
+        system_info['datasets_path'] = merge_repos(shape_prediction_path, ['train', 'validation', 'test'])
 
     if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['stats']:
         config['data_split'], config['dataset'] = get_old_data_config(config['dataset'])

@@ -34,10 +34,12 @@ dataset:
 
   old_experiment:
     # Change project_name, run_name, run_id to the info of preferred panel shape prediction
-    # experiment on W&B cloud
-    project_name: Garments-Reconstruction
-    run_name: Filt-Att-Condenced-Retry  
-    run_id: 25g4d6si
+    # experiment on W&B cloud (prioritized if both options given)
+    # Or give the path to the locally saved experiment (config should contain path to the model file)
+    local_path: ./models/att/att.yaml 
+    project_name: null
+    run_name: null
+    run_id: null
     stats: False   # Use data stats from previous training run in this one
     predictions: True  # use predictions of the previously trained model to train this one
                        # Training on shape predictions gives more robust stitch model
