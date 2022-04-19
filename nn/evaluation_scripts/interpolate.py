@@ -1,4 +1,7 @@
-"""Interpolate sewing patterns from the two input 3D garments"""
+"""Interpolate sewing patterns from the two input 3D garments
+
+    NOTE: Only for experiments with LSTM-based architecture that actually has a latent space 
+"""
 
 import argparse
 from datetime import datetime
