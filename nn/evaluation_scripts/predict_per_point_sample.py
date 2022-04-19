@@ -121,7 +121,7 @@ if __name__ == "__main__":
         points_list.append(torch.tensor(points).float())
 
     # ----- Model (Pattern Shape) architecture -----
-    shape_model = shape_experiment.load_model(data_config)
+    shape_model = shape_experiment.load_model()
     shape_model.eval()
 
     # -------- Predict Shape ---------
@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
     # ----- Model (Stitch Prediction) ------
     _, _, stitch_data_config = stitch_experiment.data_info()  # need to get data stats
-    stitch_model = stitch_experiment.load_model(stitch_data_config)
+    stitch_model = stitch_experiment.load_model()
     stitch_model.eval()
 
     # ----- predict & save stitches ------

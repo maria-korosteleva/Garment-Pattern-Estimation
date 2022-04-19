@@ -48,7 +48,7 @@ if __name__ == "__main__":
     tag = 'seen' if not args.unseen else 'unseen'
 
     shape_experiment = ExperimentWrappper(shape_config, system_info['wandb_username'])  # finished experiment
-    shape_model = shape_experiment.load_model(shape_experiment.data_info()[-1])
+    shape_model = shape_experiment.load_model()
 
     # Eval for different noise levels
     noise_summaries = {'noise_levels': noise_levels}

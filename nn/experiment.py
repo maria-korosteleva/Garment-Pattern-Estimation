@@ -217,7 +217,11 @@ class ExperimentWrappper(object):
 
         return dataset, datawrapper
 
-    def load_model(self, data_config):
+    def load_model(self, data_config=None):
+
+        if not data_config:
+            data_config = self.data_info()[-1]
+
         model_class = getattr(nets, self.NN_config()['model'])
         model = model_class(data_config, self.NN_config(), self.NN_config()['loss'])
         model = nn.DataParallel(model, device_ids=['cuda:0'])   # Assuming all models trained as DataParallel
@@ -291,7 +295,7 @@ class ExperimentWrappper(object):
         try:
             art_path = self._load_artifact(self.artifactname('checkpoint', version=version), to_path=to_path)
             for file in art_path.iterdir(): # only one file per checkpoint anyway
-                return self._load_model(file, device)
+                return self._load_model_from_file(file, device)
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
             print('ExperimentWrappper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
@@ -306,7 +310,7 @@ class ExperimentWrappper(object):
             if 'pre-trained' in self.in_config['NN']:
                 # local model available
                 print(f'{self.__class__.__name__}::Info::Loading locally saved model')
-                return self._load_model(self.in_config['NN']['pre-trained'], device)
+                return self._load_model_from_file(self.in_config['NN']['pre-trained'], device)
             else:
                 raise RuntimeError('ExperimentWrappper:Error:Need to know run_id to restore best model from the could OR path to the locally saved model ')
         try:
@@ -396,7 +400,7 @@ class ExperimentWrappper(object):
         if attempt > max_attempts:
             print('Experiment::Warning::artifact {} is still not syncronized'.format(artifact_name))
 
-    def _load_model(self, file, device=None):
+    def _load_model_from_file(self, file, device=None):
         print(file)
         if device is not None:
             return torch.load(file, map_location=device)
