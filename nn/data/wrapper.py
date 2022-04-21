@@ -1,3 +1,4 @@
+from argparse import Namespace
 import json
 import numpy as np
 import random
@@ -28,10 +29,16 @@ class DatasetWrapper(object):
         self.full_per_datafolder = None
 
         self.batch_size = None
-        self.loader_full = None
-        self.loader_train = None
-        self.loader_validation = None
-        self.loader_test = None
+
+        self.loaders = Namespace(
+            full=None,
+            full_per_data_folder=None,
+            train=None,
+            test=None,
+            test_per_data_folder=None,
+            validation=None,
+            valid_per_data_folder=None
+        )
 
         self.split_info = {
             'random_seed': None, 
@@ -47,62 +54,53 @@ class DatasetWrapper(object):
     
     def get_loader(self, data_section='full'):
         """Return loader that corresponds to given data section. None if requested loader does not exist"""
-        if data_section == 'full':
-            return self.loader_full
-        elif data_section == 'full_per_data_folder':
-            return self.loader_full_per_data
-        elif data_section == 'train':
-            return self.loader_train
-        elif data_section == 'test':
-            return self.loader_test
-        elif data_section == 'validation':
-            return self.loader_validation
-        elif data_section == 'valid_per_data_folder':
-            return self.loader_validation_per_data
-        elif data_section == 'test_per_data_folder':
-            return self.loader_test_per_data
+        try:
+            return getattr(self.loaders, data_section)
+        except AttributeError:
+            raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
         
-        raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
 
     def new_loaders(self, batch_size=None, shuffle_train=True):
-        """Create loaders for current data split. Note that result depends on the random number generator!"""
+        """Create loaders for current data split. Note that result depends on the random number generator!
+        
+            if the data split was not specified, only the 'full' loaders are created
+        """
         if batch_size is not None:
             self.batch_size = batch_size
         if self.batch_size is None:
             raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
 
-        try:
-            self.dataset.config['balanced_batch_sampling'] = True
-            # indices IN the training set breakdown per type
-            _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
-            batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
-            self.loader_train = DataLoader(self.training, batch_sampler=batch_sampler)
-        except (AttributeError, NotImplementedError) as e:  # cannot create balanced batches
-            print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
-            self.dataset.config['balanced_batch_sampling'] = False
-            self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
-        # no need for breakdown per datafolder for training -- for now
-
-        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
-        self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
-        # loader with per-data folder examples for visualization
-        if self.validation:
-            # indices_breakdown, _ = self.dataset.indices_by_data_folder(self.validation.indices)
-            single_sample_ids = [folder_ids.indices[0] for folder_ids in self.validation_per_datafolder.values()]
-            self.loader_valid_single_per_data = DataLoader(
-                Subset(self.dataset, single_sample_ids), batch_size=self.batch_size, shuffle=False) 
-        else:
-            self.loader_valid_single_per_data = None
-
-        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
-        self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
-
-        self.loader_full = DataLoader(self.dataset, self.batch_size)
+        self.loaders.full = DataLoader(self.dataset, self.batch_size)
         if self.full_per_datafolder is None:
             self.full_per_datafolder = self.dataset.subsets_per_datafolder()
-        self.loader_full_per_data = self._loaders_dict(self.full_per_datafolder, self.batch_size)
+        self.loaders.full_per_data_folder = self._loaders_dict(self.full_per_datafolder, self.batch_size)
 
-        return self.loader_train, self.loader_validation, self.loader_test
+        if self.validation is not None and self.test is not None:
+            # we have a loaded split!
+            try:
+                self.dataset.config['balanced_batch_sampling'] = True
+                # indices IN the training set breakdown per type
+                _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
+                batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
+                self.loaders.train = DataLoader(self.training, batch_sampler=batch_sampler)
+            except (AttributeError, NotImplementedError) as e:  # cannot create balanced batches
+                print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
+                self.dataset.config['balanced_batch_sampling'] = False
+                self.loaders.train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
+            # no need for breakdown per datafolder for training -- for now
+
+            self.loaders.validation = DataLoader(self.validation, self.batch_size)
+            self.loaders.valid_per_data_folder = self._loaders_dict(self.validation_per_datafolder, self.batch_size) 
+
+            # loader with one example per garment type -- for visualization of the training process
+            single_sample_ids = [folder_ids.indices[0] for folder_ids in self.validation_per_datafolder.values()]
+            self.loaders.valid_single_per_data = DataLoader(
+                Subset(self.dataset, single_sample_ids), batch_size=self.batch_size, shuffle=False) 
+
+            self.loaders.test = DataLoader(self.test, self.batch_size)
+            self.loaders.test_per_data_folder = self._loaders_dict(self.test_per_datafolder, self.batch_size)
+
+        return self.loaders.train, self.loaders.validation, self.loaders.test
 
     def _loaders_dict(self, subsets_dict, batch_size, shuffle=False):
         """Create loaders for all subsets in dict"""
