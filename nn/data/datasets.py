@@ -520,28 +520,6 @@ class GarmentBaseDataset(BaseDataset):
             with_placement=with_placement, with_stitches=with_stitches, 
             with_stitch_tags=with_stitch_tags)
 
-    def _pattern_from_tenzor(self, dataname, 
-                             tenzor, 
-                             rotations=None, translations=None, stitches=None,
-                             std_config={}, supress_error=True):
-        """Shortcut to create a pattern object from given tenzor and suppress exceptions if those arize"""
-        if std_config and 'standardize' in std_config:
-            tenzor = tenzor * self.config['standardize']['scale'] + self.config['standardize']['shift']
-
-        pattern = NNSewingPattern(view_ids=False, panel_classifier=self.panel_classifier)
-        pattern.name = dataname
-        try: 
-            pattern.pattern_from_tensors(
-                tenzor, panel_rotations=rotations, panel_translations=translations, stitches=stitches,
-                padded=True)   
-        except (RuntimeError, InvalidPatternDefError) as e:
-            if not supress_error:
-                raise e
-            print('Garment3DPatternDataset::Warning::{}: {}'.format(dataname, e))
-            pass
-
-        return pattern
-
     # -------- Generalized Utils -----
     def _unpad(self, element, tolerance=1.e-5):
         """Return copy of input element without padding from given element. Used to unpad edge sequences in pattern-oriented datasets"""
@@ -763,6 +741,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 continue
             prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
+        # recover stitches
         if 'stitches' in prediction:  # if somehow prediction already has an answer
             stitches = prediction['stitches']
         else:  # stitch tags to stitch list
@@ -771,11 +750,21 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
                 prediction['free_edges_mask']
             )
 
-        return self._pattern_from_tenzor(
-            dataname, 
-            prediction['outlines'], prediction['rotations'], prediction['translations'], 
-            stitches, 
-            std_config={}, supress_error=True)
+        # Construct the pattern from the data
+        pattern = NNSewingPattern(view_ids=False, panel_classifier=self.panel_classifier)
+        pattern.name = dataname
+        try: 
+            pattern.pattern_from_tensors(
+                prediction['outlines'], 
+                panel_rotations=prediction['rotations'],
+                panel_translations=prediction['translations'], 
+                stitches=stitches,
+                padded=True)   
+        except (RuntimeError, InvalidPatternDefError) as e:
+            print('Garment3DPatternDataset::Warning::{}: {}'.format(dataname, e))
+            pass
+
+        return pattern
 
     # ----- Sample -----
     def _get_sample_info(self, datapoint_name):
@@ -1010,10 +999,10 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         init_config = {
             'data_folders': [],
             'random_pairs_mode': True,   # False to use all possible pairs
-            'stitched_edge_pairs_num': 100,
-            'non_stitched_edge_pairs_num': 100,
-            'shuffle_pairs': False, 
-            'shuffle_pairs_order': False
+            'stitched_edge_pairs_num': 200,
+            'non_stitched_edge_pairs_num': 200,
+            'shuffle_pairs': True, 
+            'shuffle_pairs_order': True
         }
         init_config.update(start_config)  # values from input
 
