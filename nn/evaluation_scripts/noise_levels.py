@@ -46,6 +46,7 @@ if __name__ == "__main__":
 
     # Eval for different noise levels
     noise_summaries = {'noise_levels': noise_levels}
+    filename = f'{tag}_noise_levels_{datetime.now().strftime("%y%m%d-%H-%M-%S")}.json'
     for noise in noise_levels:
         shape_dataset, shape_datawrapper = shape_experiment.load_dataset(
             Path(system_info['datasets_path']) / 'test' if args.unseen else system_info['datasets_path'],   # assuming dataset root structure
@@ -60,7 +61,10 @@ if __name__ == "__main__":
             else:
                 noise_summaries[key] = [value]
         
+        # save results up to this point 
+        with open(os.path.join(system_info['output'], filename), 'w') as f_json:
+            json.dump(noise_summaries, f_json, sort_keys=False, indent=2)
+        
     print('Noise levels: ')
     print(json.dumps(noise_summaries, sort_keys=False, indent=2))
-    with open(os.path.join(system_info['output'], f'{tag}_noise_levels_{datetime.now().strftime("%y%m%d-%H-%M-%S")}.json'), 'w') as f_json:
-        json.dump(noise_summaries, f_json, sort_keys=False, indent=2)
+    
