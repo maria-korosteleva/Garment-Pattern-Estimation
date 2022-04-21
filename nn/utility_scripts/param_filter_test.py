@@ -1,9 +1,7 @@
 """In simulated dataset, filter only samples which parameter passes the filter """
 
-import shutil
 import os
 
-from torch.utils import data
 import customconfig
 from pattern.wrappers import VisPattern
 import json

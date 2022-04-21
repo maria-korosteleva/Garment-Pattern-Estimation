@@ -7,7 +7,7 @@ import torch
 import wandb as wb
 
 # My modules
-import data as data
+import data
 
 
 class Trainer():

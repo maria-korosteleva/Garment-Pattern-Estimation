@@ -1,8 +1,6 @@
 """Evaluate a model on the data"""
 
 from pathlib import Path
-import torch
-from torch import nn
 import argparse
 import json
 from datetime import datetime

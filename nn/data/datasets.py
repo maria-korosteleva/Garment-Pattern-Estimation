@@ -1,12 +1,8 @@
 import json
-import copy
 import numpy as np
 import os
 from pathlib import Path
-import random
 import shutil
-import time
-from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
@@ -16,409 +12,7 @@ import igl
 # My modules
 from customconfig import Properties
 from pattern_converter import NNSewingPattern, InvalidPatternDefError, PanelClasses
-
-
-# ---------------------- Main Wrapper ------------------
-class DatasetWrapper(object):
-    """Resposible for keeping dataset, its splits, loaders & processing routines.
-        Allows to reproduce earlier splits
-    """
-    def __init__(self, in_dataset, known_split=None, batch_size=None, shuffle_train=True):
-        """Initialize wrapping around provided dataset. If splits/batch_size is known """
-
-        self.dataset = in_dataset
-        self.data_section_list = ['full', 'train', 'validation', 'test']
-
-        self.training = in_dataset
-        self.validation = None
-        self.test = None
-        self.full_per_datafolder = None
-
-        self.batch_size = None
-        self.loader_full = None
-        self.loader_train = None
-        self.loader_validation = None
-        self.loader_test = None
-
-        self.split_info = {
-            'random_seed': None, 
-            'valid_per_type': None, 
-            'test_per_type': None
-        }
-
-        if known_split is not None:
-            self.load_split(known_split)
-        if batch_size is not None:
-            self.batch_size = batch_size
-            self.new_loaders(batch_size, shuffle_train)
-    
-    def get_loader(self, data_section='full'):
-        """Return loader that corresponds to given data section. None if requested loader does not exist"""
-        if data_section == 'full':
-            return self.loader_full
-        elif data_section == 'full_per_data_folder':
-            return self.loader_full_per_data
-        elif data_section == 'train':
-            return self.loader_train
-        elif data_section == 'test':
-            return self.loader_test
-        elif data_section == 'validation':
-            return self.loader_validation
-        elif data_section == 'valid_per_data_folder':
-            return self.loader_validation_per_data
-        elif data_section == 'test_per_data_folder':
-            return self.loader_test_per_data
-        
-        raise ValueError('DataWrapper::requested loader on unknown data section {}'.format(data_section))
-
-    def new_loaders(self, batch_size=None, shuffle_train=True):
-        """Create loaders for current data split. Note that result depends on the random number generator!"""
-        if batch_size is not None:
-            self.batch_size = batch_size
-        if self.batch_size is None:
-            raise RuntimeError('DataWrapper:Error:cannot create loaders: batch_size is not set')
-
-        try:
-            self.dataset.config['balanced_batch_sampling'] = True
-            # indices IN the training set breakdown per type
-            _, train_indices_per_type = self.dataset.indices_by_data_folder(self.training.indices)
-            batch_sampler = BalancedBatchSampler(train_indices_per_type, batch_size=batch_size)
-            self.loader_train = DataLoader(self.training, batch_sampler=batch_sampler)
-        except (AttributeError, NotImplementedError) as e:  # cannot create balanced batches
-            print('{}::Warning::Failed to create balanced batches for training. Using default sampling'.format(self.__class__.__name__))
-            self.dataset.config['balanced_batch_sampling'] = False
-            self.loader_train = DataLoader(self.training, self.batch_size, shuffle=shuffle_train)
-        # no need for breakdown per datafolder for training -- for now
-
-        self.loader_validation = DataLoader(self.validation, self.batch_size) if self.validation else None
-        self.loader_validation_per_data = self._loaders_dict(self.validation_per_datafolder, self.batch_size) if self.validation else None
-        # loader with per-data folder examples for visualization
-        if self.validation:
-            # indices_breakdown, _ = self.dataset.indices_by_data_folder(self.validation.indices)
-            single_sample_ids = [folder_ids.indices[0] for folder_ids in self.validation_per_datafolder.values()]
-            self.loader_valid_single_per_data = DataLoader(
-                Subset(self.dataset, single_sample_ids), batch_size=self.batch_size, shuffle=False) 
-        else:
-            self.loader_valid_single_per_data = None
-
-        self.loader_test = DataLoader(self.test, self.batch_size) if self.test else None
-        self.loader_test_per_data = self._loaders_dict(self.test_per_datafolder, self.batch_size) if self.test else None
-
-        self.loader_full = DataLoader(self.dataset, self.batch_size)
-        if self.full_per_datafolder is None:
-            self.full_per_datafolder = self.dataset.subsets_per_datafolder()
-        self.loader_full_per_data = self._loaders_dict(self.full_per_datafolder, self.batch_size)
-
-        return self.loader_train, self.loader_validation, self.loader_test
-
-    def _loaders_dict(self, subsets_dict, batch_size, shuffle=False):
-        """Create loaders for all subsets in dict"""
-        loaders_dict = {}
-        for name, subset in subsets_dict.items():
-            loaders_dict[name] = DataLoader(subset, batch_size, shuffle=shuffle)
-        return loaders_dict
-
-    # -------- Reproducibility ---------------
-    def new_split(self, valid, test=None, random_seed=None):
-        """Creates train/validation or train/validation/test splits
-            depending on provided parameters
-            """
-        self.split_info['random_seed'] = random_seed if random_seed else int(time.time())
-        self.split_info.update(valid_per_type=valid, test_per_type=test, type='count')
-        
-        return self.load_split()
-
-    def load_split(self, split_info=None, batch_size=None):
-        """Get the split by provided parameters. Can be used to reproduce splits on the same dataset.
-            NOTE this function re-initializes torch random number generator!
-        """
-        if split_info:
-            self.split_info = split_info
-
-        if 'random_seed' not in self.split_info or self.split_info['random_seed'] is None:
-            self.split_info['random_seed'] = int(time.time())
-        # init for all libs =)
-        torch.manual_seed(self.split_info['random_seed'])
-        random.seed(self.split_info['random_seed'])
-        np.random.seed(self.split_info['random_seed'])
-
-        # if file is provided
-        if 'filename' in self.split_info and self.split_info['filename'] is not None:
-            print('DataWrapper::Loading data split from {}'.format(self.split_info['filename']))
-            with open(self.split_info['filename'], 'r') as f_json:
-                split_dict = json.load(f_json)
-            self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.split_from_dict(
-                split_dict, 
-                with_breakdown=True)
-        else:
-            keys_required = ['test_per_type', 'valid_per_type', 'type']
-            if any([key not in self.split_info for key in keys_required]):
-                raise ValueError('Specified split information is not full: {}. It needs to contain: {}'.format(split_info, keys_required))
-            print('DataWrapper::Loading data split from split config: {}: valid per type {} / test per type {}'.format(
-                self.split_info['type'], self.split_info['valid_per_type'], self.split_info['test_per_type']))
-            self.training, self.validation, self.test, self.training_per_datafolder, self.validation_per_datafolder, self.test_per_datafolder = self.dataset.random_split_by_dataset(
-                self.split_info['valid_per_type'], 
-                self.split_info['test_per_type'],
-                self.split_info['type'],
-                with_breakdown=True)
-
-        if batch_size is not None:
-            self.batch_size = batch_size
-        if self.batch_size is not None:
-            self.new_loaders()  # s.t. loaders could be used right away
-
-        print('DatasetWrapper::Dataset split: {} / {} / {}'.format(
-            len(self.training) if self.training else None, 
-            len(self.validation) if self.validation else None, 
-            len(self.test) if self.test else None))
-        self.split_info['size_train'] = len(self.training) if self.training else 0
-        self.split_info['size_valid'] = len(self.validation) if self.validation else 0
-        self.split_info['size_test'] = len(self.test) if self.test else 0
-        
-        self.print_subset_stats(self.training_per_datafolder, len(self.training), 'Training')
-        self.print_subset_stats(self.validation_per_datafolder, len(self.validation), 'Validation')
-        self.print_subset_stats(self.test_per_datafolder, len(self.test), 'Test')
-
-        return self.training, self.validation, self.test
-
-    def print_subset_stats(self, subset_breakdown_dict, total_len, subset_name='', log_to_config=True):
-        """Print stats on the elements of each datafolder contained in given subset"""
-        # gouped by data_folders
-        if not total_len:
-            print('{}::Warning::Subset {} is empty, no stats printed'.format(self.__class__.__name__, subset_name))
-            return
-        self.split_info[subset_name] = {}
-        message = ''
-        for data_folder, subset in subset_breakdown_dict.items():
-            if log_to_config:
-                self.split_info[subset_name][data_folder] = len(subset)
-            message += '{} : {:.1f}%;\n'.format(data_folder, 100 * len(subset) / total_len)
-        
-        print('DatasetWrapper::{} subset breakdown::\n{}'.format(subset_name, message))
-
-    def save_to_wandb(self, experiment):
-        """Save current data info to the wandb experiment"""
-        # Split
-        experiment.add_config('data_split', self.split_info)
-        # save serialized split s.t. it's loaded to wandb
-        split_datanames = {}
-        split_datanames['training'] = [self.dataset.datapoints_names[idx] for idx in self.training.indices]
-        split_datanames['validation'] = [self.dataset.datapoints_names[idx] for idx in self.validation.indices]
-        split_datanames['test'] = [self.dataset.datapoints_names[idx] for idx in self.test.indices]
-        with open(experiment.local_wandb_path() / 'data_split.json', 'w') as f_json:
-            json.dump(split_datanames, f_json, indent=2, sort_keys=True)
-
-        # data info
-        self.dataset.save_to_wandb(experiment)
-
-    # ---------- Standardinzation ----------------
-    def standardize_data(self):
-        """Apply data normalization based on stats from training set"""
-        self.dataset.standardize(self.training)
-
-    # --------- Managing predictions on this data ---------
-    def predict(self, model, save_to, sections=['test'], single_batch=False, orig_folder_names=False):
-        """Save model predictions on the given dataset section"""
-        # Main path
-        prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
-        prediction_path.mkdir(parents=True, exist_ok=True)
-
-        for section in sections:
-            # Section path
-            section_dir = prediction_path / section
-            section_dir.mkdir(parents=True, exist_ok=True)
-
-            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-            model.to(device)
-            model.eval()
-
-            # turn on att weights saving during prediction!
-            if hasattr(model, 'module'):
-                model.module.save_att_weights = True
-            else:
-                model.save_att_weights = True   # model that don't have this poperty will just ignore it
-
-            with torch.no_grad():
-                loader = self.get_loader(section)
-                if loader:
-                    for batch in loader:
-                        features_device = batch['features'].to(device)
-                        preds = model(features_device)
-                        self.dataset.save_prediction_batch(
-                            preds, batch['name'], batch['data_folder'], section_dir, features=batch['features'].numpy(), 
-                            model=model, orig_folder_names=orig_folder_names)
-                        
-                        if single_batch:  # stop after first iteration
-                            break
-            
-            # Turn of to avoid wasting time\memory diring other operations
-            if hasattr(model, 'module'):
-                model.module.save_att_weights = False
-            else:
-                model.save_att_weights = False   # model that don't have this poperty will just ignore it
-
-        return prediction_path
-
-
-# ------------------ Transforms ----------------
-def _dict_to_tensors(dict_obj):  # helper
-    """convert a dictionary with numeric values into a new dictionary with torch tensors"""
-    new_dict = dict.fromkeys(dict_obj.keys())
-    for key, value in dict_obj.items():
-        if value is None:
-            new_dict[key] = torch.Tensor()
-        elif isinstance(value, dict):
-            new_dict[key] = _dict_to_tensors(value)
-        elif isinstance(value, str):  # no changes for strings
-            new_dict[key] = value
-        elif isinstance(value, np.ndarray):
-            new_dict[key] = torch.from_numpy(value)
-
-            # TODO more stable way of converting the types (or detecting ints)
-            if value.dtype not in [np.int, np.int64, np.bool]:
-                new_dict[key] = new_dict[key].float()  # cast all doubles and ofther stuff to floats
-        else:
-            new_dict[key] = torch.tensor(value)  # just try directly, if nothing else works
-    return new_dict
-
-
-# Custom transforms -- to tensor
-class SampleToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
-    
-    def __call__(self, sample):        
-        return _dict_to_tensors(sample)
-
-
-class FeatureStandartization():
-    """Normalize features of provided sample with given stats"""
-    def __init__(self, shift, scale):
-        self.shift = torch.Tensor(shift)
-        self.scale = torch.Tensor(scale)
-    
-    def __call__(self, sample):
-        updated_sample = {}
-        for key, value in sample.items():
-            if key == 'features':
-                updated_sample[key] = (sample[key] - self.shift) / self.scale
-            else: 
-                updated_sample[key] = sample[key]
-
-        return updated_sample
-
-
-class GTtandartization():
-    """Normalize features of provided sample with given stats
-        * Supports multimodal gt represented as dictionary
-        * For dictionary gts, only those values are updated for which the stats are provided
-    """
-    def __init__(self, shift, scale):
-        """If ground truth is a dictionary in itself, the provided values should also be dictionaries"""
-        
-        self.shift = _dict_to_tensors(shift) if isinstance(shift, dict) else torch.Tensor(shift)
-        self.scale = _dict_to_tensors(scale) if isinstance(scale, dict) else torch.Tensor(scale)
-    
-    def __call__(self, sample):
-        gt = sample['ground_truth']
-        if isinstance(gt, dict):
-            new_gt = dict.fromkeys(gt.keys())
-            for key, value in gt.items():
-                new_gt[key] = value
-                if key in self.shift:
-                    new_gt[key] = new_gt[key] - self.shift[key]
-                if key in self.scale:
-                    new_gt[key] = new_gt[key] / self.scale[key]
-                # if shift and scale are not set, the value is kept as it is
-        else:
-            new_gt = (gt - self.shift) / self.scale
-
-        # gather sample
-        updated_sample = {}
-        for key, value in sample.items():
-            updated_sample[key] = new_gt if key == 'ground_truth' else sample[key]
-
-        return updated_sample
-
-
-# -------------- Samplers ----------
-class BalancedBatchSampler():
-    """ Sampler creates batches that have the same class distribution as in given subset"""
-    # https://stackoverflow.com/questions/66065272/customizing-the-batch-with-specific-elements
-    def __init__(self, ids_by_type, batch_size=10, drop_last=True):
-        """
-            * ids_by_type provided as dictionary of torch.Subset() objects
-            * drop_last is True by default to better guarantee that all batches are well-balanced
-        """
-        if len(ids_by_type) > batch_size:
-            raise NotImplementedError('{}::Error::Creating batches that are smaller then total number of data classes is not implemented!'.format(
-                self.__class__.__name__
-            ))
-
-        print('{}::Using custom balanced batch data sampler'.format(self.__class__.__name__))
-
-        # represent as lists of ids for simplicity
-        self.data_ids_by_type = dict.fromkeys(ids_by_type)
-        for data_class in self.data_ids_by_type:
-            self.data_ids_by_type[data_class] = ids_by_type[data_class].tolist()
-
-        self.class_names = list(self.data_ids_by_type.keys())
-        self.batch_size = batch_size
-        self.data_size = sum(len(self.data_ids_by_type[i]) for i in ids_by_type)
-        self.num_full_batches = self.data_size // batch_size  # int division
-        
-        # extra batch left?
-        last_batch_len = self.data_size - self.batch_size * self.num_full_batches
-        self.drop_last = drop_last or last_batch_len == 0  # by request or because there is no batch with leftovers 
-        
-        # num of elements per type in each batch
-        self.batch_len_per_type = dict.fromkeys(ids_by_type)
-        for data_class in self.class_names:
-            self.batch_len_per_type[data_class] = int((len(ids_by_type[data_class]) / self.data_size) * batch_size)  # always rounds down
-        
-        if sum(self.batch_len_per_type.values()) > self.batch_size:
-            raise('BalancedBatchSampler::Error:: Failed to evaluate per-type length correctly')
-
-
-    def __iter__(self):
-        ids_by_type = copy.deepcopy(self.data_ids_by_type)
-
-        # shuffle
-        for data_class in ids_by_type:
-            random.shuffle(ids_by_type[data_class])
-
-        batches = []
-        for _ in range(self.num_full_batches):
-            batch = []
-            for data_class in self.class_names:
-                
-                for _ in range(self.batch_len_per_type[data_class]):
-                    if not len(ids_by_type[data_class]):  # exausted
-                        break
-                    batch.append(ids_by_type[data_class].pop())
-
-            # Fill the rest of the batch randomly if needed
-            diff = self.batch_size - len(batch)
-            for _ in range(diff):
-                non_empty_class_names = [name for name in self.class_names if len(ids_by_type[name])]
-                batch.append(ids_by_type[random.choice(non_empty_class_names)].pop())
-            
-            random.shuffle(batch)  # to avoid grouping by type in case it matters
-            batches.append(batch)
-
-        if not self.drop_last:  
-            # put the rest of elements in the last batch
-            batch = []
-            for ids_list in ids_by_type.values():
-                batch += ids_list
-
-            random.shuffle(batch)  # to avoid grouping by type in case it matters
-            batches.append(batch)
-        
-        return iter(batches)
-
-    def __len__(self):
-        return self.num_full_batches + (not self.drop_last)
-
+import data.transforms as transforms
 
 # --------------------- Datasets -------------------------
 
@@ -428,7 +22,7 @@ class BaseDataset(Dataset):
         * Implements routines for datapoint retrieval, structure & cashing 
         (agnostic of the desired feature & GT structure representation)
     """
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, in_transforms=[]):
         """Kind of Universal init for my datasets
             * Expects that all incoming datasets are located in the same root directory
             * The names of dataset_folders to use should be provided in start_config
@@ -474,7 +68,7 @@ class BaseDataset(Dataset):
             print('BaseDataset::Info::Storing datapoints feature info in memory')
 
         # Use default tensor transform + the ones from input
-        self.transforms = [SampleToTensor()] + transforms
+        self.transforms = [transforms.SampleToTensor()] + in_transforms
 
         # statistics already there --> need to apply it
         if 'standardize' in self.config:
@@ -746,7 +340,7 @@ class BaseDataset(Dataset):
 class GarmentBaseDataset(BaseDataset):
     """Base class to work with data from custom garment datasets"""
         
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, in_transforms=[]):
         """
             Initialize dataset of garments with patterns
             * the list of dataset folders to use should be supplied in start_config!!!
@@ -768,7 +362,7 @@ class GarmentBaseDataset(BaseDataset):
             start_config['panel_classification'] = None
         self.panel_classifier = None
 
-        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+        super().__init__(root_dir, start_config, gt_caching=gt_caching, feature_caching=feature_caching, in_transforms=in_transforms)
 
         # To make sure the datafolder names are unique after updates
         all_nicks = self.data_folders_nicknames.values()
@@ -1000,7 +594,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         * it includes not only every panel outline geometry, but also 3D placement and stitches information
         Defines 3D samples from the point cloud as features
     """
-    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, transforms=[]):
+    def __init__(self, root_dir, start_config={'data_folders': []}, gt_caching=False, feature_caching=False, in_transforms=[]):
         if 'mesh_samples' not in start_config:
             start_config['mesh_samples'] = 2000  # default value if not given -- a bettern gurantee than a default value in func params
         if 'point_noise_w' not in start_config:
@@ -1010,7 +604,7 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
         self.segm_cached = {}
 
         super().__init__(root_dir, start_config, 
-                         gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+                         gt_caching=gt_caching, feature_caching=feature_caching, in_transforms=in_transforms)
         
         self.config.update(
             element_size=self[0]['ground_truth']['outlines'].shape[2],
@@ -1075,10 +669,10 @@ class Garment3DPatternFullDataset(GarmentBaseDataset):
             raise ValueError('Garment3DPatternFullDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
 
         # clean-up tranform list to avoid duplicates
-        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
+        self.transforms = [t for t in self.transforms if not isinstance(t, transforms.GTtandartization) and not isinstance(t, transforms.FeatureStandartization)]
 
-        self.transforms.append(GTtandartization(stats['gt_shift'], stats['gt_scale']))
-        self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
+        self.transforms.append(transforms.GTtandartization(stats['gt_shift'], stats['gt_scale']))
+        self.transforms.append(transforms.FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
     # ----- Saving predictions -----
     def save_prediction_batch(
@@ -1405,7 +999,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
     def __init__(
             self, 
             root_dir, start_config={'data_folders': []}, 
-            gt_caching=False, feature_caching=False, transforms=[], 
+            gt_caching=False, feature_caching=False, in_transforms=[], 
             filter_correct_n_panels=False):
         if gt_caching or feature_caching:
             gt_caching = feature_caching = True  # ensure that both are simulataneously True or False
@@ -1423,7 +1017,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         init_config.update(start_config)  # values from input
 
         super().__init__(root_dir, init_config, 
-                         gt_caching=gt_caching, feature_caching=feature_caching, transforms=transforms)
+                         gt_caching=gt_caching, feature_caching=feature_caching, in_transforms=in_transforms)
 
         self.config.update(
             element_size=self[0]['features'].shape[-1],
@@ -1459,9 +1053,9 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             raise ValueError('Garment3DPatternFullDataset::Error::Standardization cannot be applied: supply either stats in config or training set to use standardization')
 
         # clean-up tranform list to avoid duplicates
-        self.transforms = [transform for transform in self.transforms if not isinstance(transform, GTtandartization) and not isinstance(transform, FeatureStandartization)]
+        self.transforms = [t for t in self.transforms if not isinstance(t, transforms.GTtandartization) and not isinstance(t, transforms.FeatureStandartization)]
 
-        self.transforms.append(FeatureStandartization(stats['f_shift'], stats['f_scale']))
+        self.transforms.append(transforms.FeatureStandartization(stats['f_shift'], stats['f_scale']))
 
 
     def save_prediction_batch(
@@ -1576,72 +1170,8 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
         return final_list
 
 
-# ------------------------- Utils for non-dataset examples --------------------------
-def sample_points_from_meshes(mesh_paths, data_config):
-    """
-        Sample points from the given list of triangle meshes (as .obj files -- or other file formats supported by libigl)
-    """
-    points_list = []
-    for mesh in mesh_paths:
-        verts, faces = igl.read_triangle_mesh(str(mesh))
-        points = Garment3DPatternFullDataset.sample_mesh_points(data_config['mesh_samples'], verts, faces)
-        if 'standardize' in data_config:
-            points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
-        points_list.append(torch.Tensor(points))
-    return points_list
-
-
-def save_garments_prediction(predictions, save_to, data_config=None, datanames=None):
-    """ 
-        Saving arbitrary sewing pattern predictions that
-        
-        * They do NOT have to be coming from garmet dataset samples.
-    """
-
-    save_to = Path(save_to)
-    batch_size = predictions['outlines'].shape[0]
-
-    if datanames is None:
-        datanames = ['pred_{}'.format(i) for i in range(batch_size)]
-        
-    for idx, name in enumerate(datanames):
-        # "unbatch" dictionary
-        prediction = {}
-        for key in predictions:
-            prediction[key] = predictions[key][idx]
-
-        if data_config is not None and 'standardize' in data_config:
-            # undo standardization  (outside of generinc conversion function due to custom std structure)
-            gt_shifts = data_config['standardize']['gt_shift']
-            gt_scales = data_config['standardize']['gt_scale']
-            for key in gt_shifts:
-                if key == 'stitch_tags' and not data_config['explicit_stitch_tags']:  
-                    # ignore stitch tags update if explicit tags were not used
-                    continue
-                prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
-
-        # stitch tags to stitch list
-        stitches = Garment3DPatternFullDataset.tags_to_stitches(
-            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edges_mask']
-        )
-
-        pattern = NNSewingPattern(view_ids=False)
-        pattern.name = name
-        try:
-            pattern.pattern_from_tensors(
-                prediction['outlines'], prediction['rotations'], prediction['translations'], 
-                stitches=stitches,
-                padded=True)   
-            # save
-            pattern.serialize(save_to, to_subfolder=True)
-        except (RuntimeError, InvalidPatternDefError, TypeError) as e:
-            print(e)
-            print('Saving predictions::Skipping pattern {}'.format(name))
-            pass
-
-
 if __name__ == "__main__":
+    from wrapper import DatasetWrapper
 
     # DEBUG Basic debug of the data classes
     system = Properties('./system.json')
