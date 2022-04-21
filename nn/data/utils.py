@@ -8,7 +8,7 @@ import igl
 # import meshplot  # when uncommented, could lead to problems with wandb run syncing
 
 # My modules
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
+from data.pattern_converter import NNSewingPattern, InvalidPatternDefError
 from data.datasets import Garment3DPatternFullDataset
 
 

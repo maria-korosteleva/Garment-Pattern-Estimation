@@ -11,7 +11,7 @@ import igl
 
 # My modules
 from customconfig import Properties
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
+from data.pattern_converter import NNSewingPattern, InvalidPatternDefError
 import data.transforms as transforms
 from data.panel_classes import PanelClasses
 

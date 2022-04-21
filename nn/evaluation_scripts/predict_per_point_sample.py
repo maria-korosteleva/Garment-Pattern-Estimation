@@ -16,7 +16,6 @@ import yaml
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys
 
-from nn.pattern_converter import NNSewingPattern
 currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir) 
@@ -26,7 +25,6 @@ import customconfig
 import data
 from experiment import ExperimentWrappper
 from pattern.wrappers import VisPattern
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
 
 
 def get_values_from_args():
@@ -162,7 +160,7 @@ if __name__ == "__main__":
                     continue
                 prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
-        pattern = NNSewingPattern(view_ids=False)
+        pattern = data.NNSewingPattern(view_ids=False)
         pattern.name = name
         try:
             pattern.pattern_from_tensors(
@@ -171,7 +169,7 @@ if __name__ == "__main__":
             pattern.stitches_from_pair_classifier(stitch_model, stitch_data_config['standardize'])
             pattern.serialize(save_to / 'stitched', to_subfolder=True)
 
-        except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+        except (RuntimeError, data.InvalidPatternDefError, TypeError) as e:
             print(traceback.format_exc())
             print(e)
             print('Saving predictions::Skipping pattern {}'.format(name))

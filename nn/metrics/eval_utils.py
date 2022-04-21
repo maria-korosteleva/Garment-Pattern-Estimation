@@ -5,7 +5,7 @@
 import torch
 
 # My modules
-from pattern_converter import InvalidPatternDefError
+from data import InvalidPatternDefError
 
 
 # ------- Model evaluation shortcut -------------
