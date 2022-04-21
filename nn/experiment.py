@@ -53,8 +53,12 @@ class ExperimentWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
+        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, anonymous='allow')
         self.run_id = wb.run.id
+
+        if not self.wandb_username:
+            self.wandb_username = wb.run.entity
+            print(f'{self.__class__.__name__}::WARNING::Running wandb in Anonymous Mode. Your temporary account is: {self.wandb_username}')
 
         self.initialized = True
         self.checkpoint_counter = 0
