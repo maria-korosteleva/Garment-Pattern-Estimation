@@ -1,6 +1,8 @@
-"""Predicting a 2D pattern for the given 3D point clouds of garments -- not necessarily from the garment dataset of this project
+"""Predicting a 2D pattern for the given 3D point clouds of garments -- 
+    not necessarily from the garment dataset of this project
 
-    NOTE: the point cloud files are expected to be just the .txt files with every line containing three world coordinates for a point
+    NOTE: the point cloud files are expected to be just the .txt files 
+          with the first three numbers in every line containing three world coordinates for a point.
 """
 
 import argparse
@@ -37,10 +39,10 @@ def get_values_from_args():
     parser.add_argument('-st', '--stitch_config', help='YAML configuration file', type=str, default='./models/att/stitch_model.yaml') 
 
     parser.add_argument(
-        '--file', '-f', help='Path to a garment geometry file', type=str, 
+        '--file', '-f', help='Path to a garment point cloud file (.txt)', type=str, 
         default=None) 
     parser.add_argument(
-        '--directory', '-dir', help='Path to a directory with geometry files to evaluate on', type=str, 
+        '--directory', '-dir', help='Path to a directory with point cloud files (.txt) to evaluate on', type=str, 
         default=None)
     parser.add_argument(
         '--save_tag', '-s', help='Tag the output directory name with this str', type=str, 
