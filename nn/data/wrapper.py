@@ -214,21 +214,17 @@ class DatasetWrapper(object):
         prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
         prediction_path.mkdir(parents=True, exist_ok=True)
 
+        device = model.device_ids[0] if hasattr(model, 'device_ids') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+        model.eval()
+
+        # turn on att weights saving during prediction!
+        model.module.save_att_weights = True  # model that don't have this poperty will just ignore it
+
         for section in sections:
             # Section path
             section_dir = prediction_path / section
             section_dir.mkdir(parents=True, exist_ok=True)
-
-            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-            model.to(device)
-            model.eval()
-
-            # turn on att weights saving during prediction!
-            if hasattr(model, 'module'):
-                model.module.save_att_weights = True
-            else:
-                model.save_att_weights = True   # model that don't have this poperty will just ignore it
-
             with torch.no_grad():
                 loader = self.get_loader(section)
                 if loader:
@@ -242,11 +238,8 @@ class DatasetWrapper(object):
                         if single_batch:  # stop after first iteration
                             break
             
-            # Turn of to avoid wasting time\memory diring other operations
-            if hasattr(model, 'module'):
-                model.module.save_att_weights = False
-            else:
-                model.save_att_weights = False   # model that don't have this poperty will just ignore it
+        # Turn of to avoid wasting time\memory diring other operations
+        model.module.save_att_weights = False
 
         return prediction_path
 
