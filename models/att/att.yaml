@@ -52,7 +52,9 @@ dataset:
   explicit_stitch_tags: False
   point_noise_w: 0
 
-  max_datapoints_per_type: 5000
+  max_datapoints_per_type: 5000  # 5000 > more then any type has, so it basically means using all the data.
+                                 # This value can be reduced to reduce the training dataset size and hence 
+                                 # the training time.
   panel_classification: ./nn/data_configs/panel_classes_condenced.json 
   filter_by_params: ./nn/data_configs/param_filter.json
   

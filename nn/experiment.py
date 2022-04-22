@@ -53,8 +53,12 @@ class ExperimentWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
+        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, anonymous='allow')
         self.run_id = wb.run.id
+
+        if not self.wandb_username:
+            self.wandb_username = wb.run.entity
+            print(f'{self.__class__.__name__}::WARNING::Running wandb in Anonymous Mode. Your temporary account is: {self.wandb_username}')
 
         self.initialized = True
         self.checkpoint_counter = 0
@@ -110,6 +114,10 @@ class ExperimentWrappper(object):
             data_config['filter_by_params'] = './wandb/param_filter.json'
         except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with given setup
             print(f'{self.__class__.__name__}::Warning::Skipping loading parameter filter file from cloud..')
+
+        # This part might be missing from the configs loaded from W&B runs
+        if 'unseen_data_folders' not in data_config and 'unseen_data_folders' in self.in_config['dataset']:
+            data_config['unseen_data_folders'] = self.in_config['dataset']['unseen_data_folders']
         
         return split_config, config['trainer']['batch_size'] if 'trainer' in config else config['batch_size'], data_config
 
@@ -232,6 +240,7 @@ class ExperimentWrappper(object):
 
     def prediction(self, save_to, model, datawrapper, nick='test', sections=['test'], art_name='multi-data'):
         """Perform inference and save predictions for a given model on a given dataset"""
+        
         prediction_path = datawrapper.predict(model, save_to=save_to, sections=sections, orig_folder_names=True)
 
         if nick:

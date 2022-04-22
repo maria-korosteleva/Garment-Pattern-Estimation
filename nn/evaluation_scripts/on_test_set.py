@@ -81,7 +81,7 @@ if __name__ == "__main__":
             # Predict 
             shape_prediction_path = shape_experiment.prediction(
                 Path(system_info['output']), shape_model, shape_datawrapper, 
-                nick=f'{tag}_pred')
+                nick=f'{tag}_pred', sections=['full' if args.unseen else 'test'])
 
     # ----- With stitches -- predictions & evals --------
     if stitch_config:  # skip if stitch model config is not specified
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         stitch_experiment = ExperimentWrappper(stitch_config, system_info['wandb_username'])  # finished experiment
         if not stitch_experiment.is_finished():
             print('Warning::Evaluating unfinished experiment')
-        stitch_dataset, stitch_datawrapper = stitch_experiment.load_dataset(in_datapath, batch_size=1, load_all=True)  # Num of edge pairs at test time is different for each sewing pattern 
+        stitch_dataset, stitch_datawrapper = stitch_experiment.load_dataset(in_datapath, unseen=args.unseen, batch_size=1, load_all=True)  # Num of edge pairs at test time is different for each sewing pattern 
         stitch_datawrapper.dataset.config.update(random_pairs_mode=False)  # use all edge pairs in evaluation
         stitch_model = stitch_experiment.load_model(stitch_dataset.config)
 
@@ -109,7 +109,7 @@ if __name__ == "__main__":
 
         if args.predict:
             stitch_prediction_path = stitch_experiment.prediction(
-                Path(system_info['output']), stitch_model, stitch_datawrapper, nick=f'{tag}_pred')
+                Path(system_info['output']), stitch_model, stitch_datawrapper, nick=f'{tag}_pred', sections=['full'])
 
         if args.correct_panels:
             # only on examples with correctly predicted number of panels

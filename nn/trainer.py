@@ -7,7 +7,7 @@ import torch
 import wandb as wb
 
 # My modules
-import data as data
+import data
 
 
 class Trainer():
@@ -62,7 +62,7 @@ class Trainer():
         self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['devices'][0]
         
         self._add_optimizer(model)
-        self._add_scheduler(len(self.datawraper.loader_train))
+        self._add_scheduler(len(self.datawraper.loaders.train))
         self.es_tracking = []  # early stopping init
 
         start_epoch = self._start_experiment(model)
@@ -74,7 +74,7 @@ class Trainer():
             self.folder_for_preds = Path('./wandb') / 'intermediate_preds'
             self.folder_for_preds.mkdir(exist_ok=True)
         
-        self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
+        self._fit_loop(model, self.datawraper.loaders.train, self.datawraper.loaders.validation, start_epoch=start_epoch)
 
         print("Trainer::Finished training")
         # self.experiment.stop() -- not stopping the run for convenice for further processing outside of the training routines
@@ -243,7 +243,7 @@ class Trainer():
             If the loader does not shuffle batches, logged image is the same on every step"""
         with torch.no_grad():
             # using one-sample-from-each-of-the-base-folders loader
-            single_sample_loader = self.datawraper.loader_valid_single_per_data
+            single_sample_loader = self.datawraper.loaders.valid_single_per_data
             if single_sample_loader is None:
                 print('Trainer::Error::Suitable loader is not available. Nothing logged')
 

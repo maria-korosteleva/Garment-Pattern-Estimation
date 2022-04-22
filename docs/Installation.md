@@ -66,9 +66,11 @@ You might experience errors related with PIL (pillow) Image module. Those most o
     * Python 3.8.5 + ReportLab 3.5.53 + pillow 7.1.1
     * Python 3.8.5 + ReportLab 3.5.55 + pillow 7.1.1
 
-## 4. Weights & Biases account
+## 4. (Optional) Weights & Biases account
 
-We are using [Weights & Biases](https://wandb.ai/) for experiment tracking. You'd need to create an account there to use our training script. 
+We are using [Weights & Biases](https://wandb.ai/) for experiment tracking. 
+
+You can use evalution scripts on provided models or train new models without having your own W&B account, but we recommend to create one -- then all the information of your training runs will be fully private and will be stored in your account forever. Anonymous runs are only retained for 7 days (as of April 2022).
 
 The prompt to authenticate will appear the first time you run any of the scripts that use w&b library.
 
@@ -97,5 +99,5 @@ system.json should include the following:
     mkdir outputs
     ```
 * path to the root directory with downloaded and unpacked per-type garment datasets to be used for training\evaluating of NN ('datasets_path') 
-* username for wandb for correct experiment tracking ('wandb_username')
+* username for wandb for correct experiment tracking ('wandb_username'). This is optional for evaluating saved models or running training (training will fall into anonymous mode). However, if you were using anonymous mode for training and want to use evaluation scripts with that run, please specify the temporary account name (printed when training and can be found in the run URL) in this field for correct URL construction.
 
