@@ -116,7 +116,7 @@ class ExperimentWrappper(object):
             print(f'{self.__class__.__name__}::Warning::Skipping loading parameter filter file from cloud..')
 
         # This part might be missing from the configs loaded from W&B runs
-        if 'unseen_data_folders' not in data_config and 'unseen_data_folders' in self.in_config['dataset']:
+        if 'unseen_data_folders' not in data_config and 'dataset' in self.in_config and 'unseen_data_folders' in self.in_config['dataset']:
             data_config['unseen_data_folders'] = self.in_config['dataset']['unseen_data_folders']
         
         return split_config, config['trainer']['batch_size'] if 'trainer' in config else config['batch_size'], data_config
