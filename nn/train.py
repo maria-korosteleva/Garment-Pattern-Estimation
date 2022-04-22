@@ -35,14 +35,13 @@ def get_old_data_config(in_config):
     """Shortcut to control data configuration
         Note that the old experiment is HARDCODED!!!!!"""
     # get data stats from older runs to save runtime
-    old_experiment = ExperimentWrappper(
-        system_info['wandb_username'],
-        project_name=in_config['old_experiment']['project_name'],
-        run_name=in_config['old_experiment']['run_name'],
-        run_id=in_config['old_experiment']['run_id']
-    )
+    old_experiment = ExperimentWrappper({'experiment': in_config['old_experiment']}, system_info['wandb_username'])
     # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
     split, _, data_config = old_experiment.data_info()
+
+    # Use only minimal set of settings
+    # NOTE: you can remove elements for which the in_config should be a priority
+    #       from the list below
     data_config = {
         'standardize': data_config['standardize'],
         'max_pattern_len': data_config['max_pattern_len'],
