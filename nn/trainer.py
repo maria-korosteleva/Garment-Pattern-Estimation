@@ -7,7 +7,7 @@ import torch
 import wandb as wb
 
 # My modules
-import data as data
+import data
 
 
 class Trainer():
@@ -62,7 +62,7 @@ class Trainer():
         self.device = model.device_ids[0] if hasattr(model, 'device_ids') else self.setup['devices'][0]
         
         self._add_optimizer(model)
-        self._add_scheduler(len(self.datawraper.loader_train))
+        self._add_scheduler(len(self.datawraper.loaders.train))
         self.es_tracking = []  # early stopping init
 
         start_epoch = self._start_experiment(model)
@@ -74,7 +74,7 @@ class Trainer():
             self.folder_for_preds = Path('./wandb') / 'intermediate_preds'
             self.folder_for_preds.mkdir(exist_ok=True)
         
-        self._fit_loop(model, self.datawraper.loader_train, self.datawraper.loader_validation, start_epoch=start_epoch)
+        self._fit_loop(model, self.datawraper.loaders.train, self.datawraper.loaders.validation, start_epoch=start_epoch)
 
         print("Trainer::Finished training")
         # self.experiment.stop() -- not stopping the run for convenice for further processing outside of the training routines
@@ -216,8 +216,7 @@ class Trainer():
 
         # loss goes into nans
         if torch.isnan(last_loss):
-            print('Trainer::EarlyStopping::Detected nan training losses')
-            self.experiment.add_statistic('stopped early', 'Nan in losses')
+            self.experiment.add_statistic('stopped early', 'Nan in losses', log='Trainer::EarlyStopping')
             return True
 
         # Target metric is not improving for some time
@@ -226,14 +225,15 @@ class Trainer():
             self.es_tracking.pop(0)
             # if all values fit into a window, they don't change much
             if abs(max(self.es_tracking) - min(self.es_tracking)) < wb.config.trainer['early_stopping']['window']:
-                print('Trainer::EarlyStopping::Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
-                self.experiment.add_statistic('stopped early', 'Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']))
+                self.experiment.add_statistic(
+                    'stopped early', 'Metric have not changed for {} epochs'.format(wb.config.trainer['early_stopping']['patience']), 
+                    log='Trainer::EarlyStopping')
                 return True
         # do not check untill wb.config.trainer['early_stopping'].patience # of calls are gathered
 
         # Learning rate vanished
         if last_lr < 1e-6:
-            self.experiment.add_statistic('stopped early', 'Learning Rate vanished')
+            self.experiment.add_statistic('stopped early', 'Learning Rate vanished', log='Trainer::EarlyStopping')
             return True
         
         return False
@@ -243,7 +243,7 @@ class Trainer():
             If the loader does not shuffle batches, logged image is the same on every step"""
         with torch.no_grad():
             # using one-sample-from-each-of-the-base-folders loader
-            single_sample_loader = self.datawraper.loader_valid_single_per_data
+            single_sample_loader = self.datawraper.loaders.valid_single_per_data
             if single_sample_loader is None:
                 print('Trainer::Error::Suitable loader is not available. Nothing logged')
 

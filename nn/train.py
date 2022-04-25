@@ -11,8 +11,7 @@ import data
 import nets
 from metrics.eval_utils import eval_metrics
 from trainer import Trainer
-from experiment import WandbRunWrappper, load_experiment
-import nn.evaluation_scripts.latent_space_vis as tsne_plot
+from experiment import ExperimentWrappper
 
 import warnings
 warnings.filterwarnings('ignore')  # , category='UserWarning'
@@ -23,7 +22,7 @@ def get_values_from_args():
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./nn/train_configs/att.yaml')
+    parser.add_argument('--config', '-c', help='YAML configuration file', type=str, default='./models/att/att.yaml')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
@@ -36,14 +35,13 @@ def get_old_data_config(in_config):
     """Shortcut to control data configuration
         Note that the old experiment is HARDCODED!!!!!"""
     # get data stats from older runs to save runtime
-    old_experiment = WandbRunWrappper(
-        system_info['wandb_username'],
-        project_name=in_config['old_experiment']['project_name'],
-        run_name=in_config['old_experiment']['run_name'],
-        run_id=in_config['old_experiment']['run_id']
-    )
+    old_experiment = ExperimentWrappper({'experiment': in_config['old_experiment']}, system_info['wandb_username'])
     # NOTE data stats are ONLY correct for a specific data split, so these two need to go together
     split, _, data_config = old_experiment.data_info()
+
+    # Use only minimal set of settings
+    # NOTE: you can remove elements for which the in_config should be a priority
+    #       from the list below
     data_config = {
         'standardize': data_config['standardize'],
         'max_pattern_len': data_config['max_pattern_len'],
@@ -81,31 +79,36 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)  # for readability
 
     config = get_values_from_args()
-
     system_info = customconfig.Properties('./system.json')
-    experiment = WandbRunWrappper(
-        system_info['wandb_username'], 
-        project_name=config['experiment']['project_name'], 
-        run_name=config['experiment']['run_name'], 
-        run_id=None, no_sync=False)   # set run id to resume unfinished run!
+    
+    experiment = ExperimentWrappper(
+        config, # set run id in cofig to resume unfinished run!
+        system_info['wandb_username'],
+        no_sync=False)   
 
     # --- Data ---
-    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['predictions']:
+    if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['predictions']:
         # Use predictions of model from specified experiment as a dataset for training
-        info = config['data_config']['old_experiment']
-        shape_datawrapper, shape_model, shape_experiment = load_experiment(
-            info['run_name'], info['run_id'], project=info['project_name'], 
-            in_batch_size=config['trainer']['batch_size'], in_device=config['trainer']['devices'][0])
-        prediction_path = shape_datawrapper.predict(
-            shape_model, save_to=Path(system_info['output']), sections=['train', 'validation', 'test'], orig_folder_names=True)
-        system_info['datasets_path'] = merge_repos(prediction_path, ['train', 'validation', 'test'])
+        info = config['dataset']['old_experiment']
+        if 'run_id' in info and info['run_id']:  # cloud runs have priority over local ones
+            info = {'experiment': info}
+        else:
+            with open(info['local_path'], 'r') as f:
+                info = yaml.safe_load(f)
 
-    if 'old_experiment' in config['data_config'] and config['data_config']['old_experiment']['stats']:
-        config['data_split'], config['data_config'] = get_old_data_config(config['data_config'])
+        shape_experiment = ExperimentWrappper(info, system_info['wandb_username'])  # finished experiment
+        shape_dataset, shape_datawrapper = shape_experiment.load_dataset(Path(system_info['datasets_path']))  
+        shape_model = shape_experiment.load_model(shape_dataset.config)
+        shape_prediction_path = shape_experiment.prediction(
+            Path(system_info['output']), shape_model, shape_datawrapper, nick='', sections=['train', 'validation', 'test'], art_name='')
+        system_info['datasets_path'] = merge_repos(shape_prediction_path, ['train', 'validation', 'test'])
+
+    if 'old_experiment' in config['dataset'] and config['dataset']['old_experiment']['stats']:
+        config['data_split'], config['dataset'] = get_old_data_config(config['dataset'])
 
     # Dataset Class
-    data_class = getattr(data, config['data_config']['class'])
-    dataset = data_class(Path(system_info['datasets_path']), config['data_config'], gt_caching=True, feature_caching=True)
+    data_class = getattr(data, config['dataset']['class'])
+    dataset = data_class(Path(system_info['datasets_path']), config['dataset'], gt_caching=True, feature_caching=True)
 
     # --- Trainer --- 
     trainer = Trainer(
@@ -132,7 +135,7 @@ if __name__ == "__main__":
     # --- Final evaluation ----
     # On the best-performing model
     try:
-        model.load_state_dict(experiment.load_best_model()['model_state_dict'])
+        model.load_state_dict(experiment.get_best_model()['model_state_dict'])
     except BaseException as e:  # not the best to catch all the exceptions here, but should work for most of cases foe now
         print(e)
         print('Train::Warning::Proceeding to evaluation with the current (final) model state')
@@ -140,17 +143,10 @@ if __name__ == "__main__":
     datawrapper = trainer.datawraper
 
     final_metrics = eval_metrics(model, datawrapper, 'validation')
-    print('Validation metrics: {}'.format(final_metrics))
-    experiment.add_statistic('valid_on_best', final_metrics)
-
+    experiment.add_statistic('valid_on_best', final_metrics, log='Validation metrics')
     final_metrics = eval_metrics(model, datawrapper, 'valid_per_data_folder')
-    print('Validation metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('valid', final_metrics)
-
+    experiment.add_statistic('valid', final_metrics, log='Validation metrics breakdown')
     final_metrics = eval_metrics(model, datawrapper, 'test')
-    print('Test metrics: {}'.format(final_metrics))
-    experiment.add_statistic('test_on_best', final_metrics)
-
+    experiment.add_statistic('test_on_best', final_metrics, log='Test metrics')
     final_metrics = eval_metrics(model, datawrapper, 'test_per_data_folder')
-    print('Test metrics breakdown: {}'.format(final_metrics))
-    experiment.add_statistic('test', final_metrics)
+    experiment.add_statistic('test', final_metrics, 'Test metrics breakdown')

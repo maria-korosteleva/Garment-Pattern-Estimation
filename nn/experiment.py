@@ -2,87 +2,29 @@ import os
 from pathlib import Path
 import requests
 import time
+import json
 
 import torch
+from torch import nn
 import wandb as wb
 
 # My
-import customconfig
 import data
 import nets
 
 
-# -------- Working with existing experiments ------
-# TODO use in all subroutines
-def load_experiment(
-        name, run_id, project='Garments-Reconstruction', 
-        in_data_folders=None, in_datapath=None,
-        in_batch_size=None, in_device=None, checkpoint_idx=None):
-    """
-        Load information (dataset, wrapper, model) associated with a particular experiment
-
-        Parameters re-write corresponding information from experiment, if set
-
-        NOTE: if in_data_folders is provided then all data is loaded in a single loader instead of being splitted
-            (since original split may not make sense for new data folders )
-    """
-
-    system_info = customconfig.Properties('./system.json')
-    experiment = WandbRunWrappper(
-        system_info['wandb_username'],
-        project_name=project, 
-        run_name=name, 
-        run_id=run_id)  # finished experiment
-
-    if not experiment.is_finished():
-        print('Warning::Evaluating unfinished experiment')
-
-    # -------- data -------
-    # data_config also contains the names of datasets to use
-    split, batch_size, data_config = experiment.data_info()  
-    if in_batch_size is not None:
-        batch_size = in_batch_size
-    if in_data_folders is not None:
-        data_config.update(data_folders=in_data_folders)
-        split = None  # Just use all the data if the base set of datafolders is updated
-
-    data_path = in_datapath if in_datapath is not None else system_info['datasets_path']
-
-
-    data_class = getattr(data, data_config['class'] if 'class' in data_config else 'Garment3DPatternFullDataset')  # TODO check if it works!!
-    dataset = data_class(data_path, data_config, gt_caching=True, feature_caching=True)
-    datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
-
-    # ----- Model -------
-    nn_config = experiment.NN_config()
-    model_class = getattr(nets, nn_config['model'])
-    model = model_class(dataset.config, nn_config, nn_config['loss'])
- 
-    device = in_device if in_device is not None else nn_config['device_ids'][0]
-    model = torch.nn.DataParallel(model, device_ids=[device])
-
-    # TODO propagate device decision to the data at evaluation time, if not using Data Parallel?
-    
-    if checkpoint_idx is not None: 
-        state_dict = experiment.load_checkpoint_file(version=checkpoint_idx, device=device)['model_state_dict'] 
-    else:
-        state_dict = experiment.load_best_model(device=device)['model_state_dict']
-    
-    model.load_state_dict(state_dict)
-
-    return datawrapper, model, experiment
-
-
-# ------- Class for experiment tracking with wandb -------
-class WandbRunWrappper(object):
+# ------- Class for experiment tracking and information storage -------
+class ExperimentWrappper(object):
     """Class provides 
-        * a convenient way to store wandb run info 
+        * a convenient way to store & load experiment info with integration to wandb 
         * some functions & params shortcuts to access wandb functionality
         * for implemented functions, transparent workflow for finished and active (initialized) run 
+        * for finished experiments, if w&b run info is specified, it has priority over the localy stored information
 
         Wrapper currently does NOT wrap one-liners routinely called for active runs like wb.log(), wb.watch()  
     """
-    def __init__(self, wandb_username, project_name='Train', run_name='Run', run_id=None, no_sync=False):
+    # TODO propagate signature change to all usages
+    def __init__(self, config, wandb_username='', no_sync=False):
         """Init experiment tracking with wandb
             With no_sync==True, run won't sync with wandb cloud. 
             Note that resuming won't work for off-cloud runs as it requiers fetching files from the cloud"""
@@ -91,10 +33,12 @@ class WandbRunWrappper(object):
         self.final_filetag = 'fin_model_state'
         self.wandb_username = wandb_username
         
-        self.project = project_name
-        self.run_name = run_name
-        self.run_id = run_id
-        self.no_sync = False
+        self.project = config['experiment'].get('project_name', None)
+        self.run_name = config['experiment'].get('run_name', None)
+        self.run_id = config['experiment'].get('run_id', None)
+        self.no_sync = no_sync
+
+        self.in_config = config
 
         # cannot use wb.config, wb.run, etc. until run initialized & logging started & local path
         self.initialized = False  
@@ -109,8 +53,12 @@ class WandbRunWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id)
+        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, anonymous='allow')
         self.run_id = wb.run.id
+
+        if not self.wandb_username:
+            self.wandb_username = wb.run.entity
+            print(f'{self.__class__.__name__}::WARNING::Running wandb in Anonymous Mode. Your temporary account is: {self.wandb_username}')
 
         self.initialized = True
         self.checkpoint_counter = 0
@@ -122,53 +70,81 @@ class WandbRunWrappper(object):
         self.initialized = False
 
     # -------- run info ------
+    def full_name(self):
+        name = self.project if self.project else ''
+        name += ('-' + self.run_name) if self.run_name else ''
+        if self.run_id:
+            name += ('-' + self.run_id)
+        else:
+            name += self.in_config['NN']['pre-trained'] if 'pre-trained' in self.in_config['NN'] else ''
+        
+        return name
+
     def last_epoch(self):
-        """Id of the last epoch processed"""
+        """Id of the last epoch processed
+            NOTE: part of resuming functionality, only for wandb runs
+        """
         run = self._run_object()
         return run.summary['epoch'] if 'epoch' in run.summary else -1
 
     def data_info(self):
         """Info on the data setup from the run config:
             Split & batch size info """
-        run = self._run_object()
-        split_config = run.config['data_split']
-        data_config = run.config['dataset']
+        config = self._run_config()
+        split_config = config['data_split']
+        data_config = config['dataset']
+
         try:
-            self.load_file('data_split.json', './wandb')
+            self.get_file('data_split.json', './wandb')
             split_config['filename'] = './wandb/data_split.json'
             # NOTE!!!! this is a sub-optimal workaround fix since the proper fix would require updates in class archtecture
             data_config['max_datapoints_per_type'] = None   # avoid slicing for correct loading of split on any machine
-        except ValueError as e:  # if file not found, training will just proceed with generated split
-            print(e)
-            print('Experiment::Warning::Skipping loading split file..')
+        except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
+
+            print(f'{self.__class__.__name__}::Warning::Skipping loading split file from cloud..')
         
         try:
-            self.load_file('panel_classes.json', './wandb')
+            self.get_file('panel_classes.json', './wandb')
             data_config['panel_classification'] = './wandb/panel_classes.json'
-        except ValueError as e:  # if file not found, training will just proceed with generated split
-            print(e)
-            print('Experiment::Warning::Skipping loading panel classes file..')
+        except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with generated split
+            print(f'{self.__class__.__name__}::Warning::Skipping loading panel classes file from cloud..')
 
         try:
-            self.load_file('param_filter.json', './wandb')
+            self.get_file('param_filter.json', './wandb')
             data_config['filter_by_params'] = './wandb/param_filter.json'
-        except ValueError as e:  # if file not found, training will just proceed with given setup
-            print(e)
-            print('Experiment::Warning::Skipping loading parameter filter file..')
+        except (ValueError, RuntimeError) as e:  # if file not found, training will just proceed with given setup
+            print(f'{self.__class__.__name__}::Warning::Skipping loading parameter filter file from cloud..')
+
+        # This part might be missing from the configs loaded from W&B runs
+        if 'unseen_data_folders' not in data_config and 'dataset' in self.in_config and 'unseen_data_folders' in self.in_config['dataset']:
+            data_config['unseen_data_folders'] = self.in_config['dataset']['unseen_data_folders']
         
-        return split_config, run.config['trainer']['batch_size'] if 'trainer' in run.config else run.config['batch_size'], data_config
+        return split_config, config['trainer']['batch_size'] if 'trainer' in config else config['batch_size'], data_config
 
     def last_best_validation_loss(self):
+        """Id of the last epoch processed
+            NOTE: only for experiments running\loaded from wandb
+        """
         run = self._run_object()
         return run.summary['best_valid_loss'] if 'best_valid_loss' in run.summary else None
 
     def NN_config(self):
         """Run configuration params of NeuralNetwork model"""
-        run = self._run_object()
-        return run.config['NN']
+        config = self._run_config()
+        return config['NN']
 
-    def add_statistic(self, tag, info):
+    def add_statistic(self, tag, info, log=''):
         """Add info the run summary (e.g. stats on test set)"""
+        
+        # Log
+        if log:
+            print(f'{self.__class__.__name__}::Saving statistic <{log}>:')
+            print(json.dumps(info, sort_keys=True, indent=2) if isinstance(info, dict) else info)
+
+        if not self.run_id:
+            print(f'{self.__class__.__name__}::Warning::Experiment not connected to the cloud. Statistic {tag} not synced')
+            return 
+
         # different methods for on-going & finished runs
         if self.initialized:
             wb.run.summary[tag] = info
@@ -181,16 +157,19 @@ class WandbRunWrappper(object):
                 run = self._run_object()
                 run.summary[tag] = info
                 run.summary.update()
-
+            
     def add_config(self, tag, info):
         """Add new value to run config. Only for ongoing runs!"""
         if self.initialized:
             wb.config[tag] = info
         else:
-            raise RuntimeError('WandbRunWrappper:Error:Cannot add config to finished run')
+            raise RuntimeError('ExperimentWrappper:Error:Cannot add config to finished run')
 
     def add_artifact(self, path, name, type):
         """Create a new wandb artifact and upload all the contents there"""
+        if not self.run_id:
+            print(f'{self.__class__.__name__}::Warning::Experiment not connected to the cloud. Artifact {name} not synced')
+            return 
 
         path = Path(path)
 
@@ -212,8 +191,67 @@ class WandbRunWrappper(object):
             wb.finish()
 
     def is_finished(self):
+        if not self.run_id:
+            print(f'{self.__class__.__name__}::Warning::Requested status of run not connected to wandb')
+            return True
         run = self._run_object()
         return run.state == 'finished'
+
+    # ----- finished runs -- help with evaluation ----
+    def load_dataset(self, data_root, eval_config={}, unseen=False, batch_size=5, load_all=False):
+        """Shortcut to load dataset
+        
+            NOTE: small default batch size for evaluation even on lightweights machines
+        """
+        
+        # data_config also contains the names of datasets to use
+        split, _, data_config = self.data_info()  # note that run is not initialized -- we use info from finished run
+        if unseen:
+            load_all = True  # load data as a whole without splitting
+            data_config.update(data_folders=data_config['unseen_data_folders'])  # use the unseen folders list
+        split = split if not load_all else None
+
+        # Extra evaluation configuration
+        data_config.update(eval_config)
+
+        # Dataset
+        data_class = getattr(data, data_config['class'])
+        dataset = data_class(data_root, data_config, gt_caching=True, feature_caching=True)
+
+        datawrapper = data.DatasetWrapper(dataset, known_split=split, batch_size=batch_size)
+
+        return dataset, datawrapper
+
+    def load_model(self, data_config=None):
+
+        if not data_config:
+            data_config = self.data_info()[-1]
+
+        model_class = getattr(nets, self.NN_config()['model'])
+        model = model_class(data_config, self.NN_config(), self.NN_config()['loss'])
+        model = nn.DataParallel(model, device_ids=['cuda:0'])   # Assuming all models trained as DataParallel
+
+        # Load model weights
+        state_dict = self.get_best_model(device='cuda:0')['model_state_dict']
+        model.load_state_dict(state_dict)
+        model.module.loss.debug_prints = True
+
+        return model
+
+    def prediction(self, save_to, model, datawrapper, nick='test', sections=['test'], art_name='multi-data'):
+        """Perform inference and save predictions for a given model on a given dataset"""
+        
+        prediction_path = datawrapper.predict(model, save_to=save_to, sections=sections, orig_folder_names=True)
+
+        if nick:
+            self.add_statistic(nick + '_folder', prediction_path.name, log='Prediction save path')
+
+        if art_name:
+            art_name = art_name if len(datawrapper.dataset.data_folders) > 1 else datawrapper.dataset.data_folders[0]
+            self.add_artifact(prediction_path, art_name, 'result')
+
+        return prediction_path
+
 
     # ---- file info -----
     def checkpoint_filename(self, check_id=None):
@@ -240,13 +278,13 @@ class WandbRunWrappper(object):
             Implemented as a function to allow dynamic update of components with less bugs =)
         """
         if not self.run_id:
-            raise RuntimeError('WbRunWrapper:Error:Need to know run id to get path in wandb could')
+            raise RuntimeError('ExperimentWrappper:Error:Need to know run id to get path in wandb could')
         return self.wandb_username + '/' + self.project + '/' + self.run_id
 
-    def local_path(self):
+    def local_wandb_path(self):
         # if self.initialized:
         return Path(wb.run.dir)
-        # raise RuntimeError('WbRunWrapper:Error:No local path exists: run is not initialized')
+        # raise RuntimeError('ExperimentWrappper:Error:No local path exists: run is not initialized')
 
     def local_artifact_path(self):
         """create & maintain path to save files to-be-commited-as-artifacts"""
@@ -256,43 +294,31 @@ class WandbRunWrappper(object):
         return path
 
     # ----- working with files -------
-    def load_checkpoint_file(self, to_path=None, version=None, device=None):
+    def get_checkpoint_file(self, to_path=None, version=None, device=None):
         """Load checkpoint file for given epoch from the cloud"""
         if not self.run_id:
-            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore checkpoint from the could')
+            raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore specific checkpoint from the could')
         try:
-            art_path = self._load_artifact(self.artifactname('checkpoint', version=version))
-            for file in art_path.iterdir():
-                if device is not None:
-                    return torch.load(file, map_location=device)
-                else: 
-                    return torch.load(file)  # to the same device it was saved from
-                # only one file per checkpoint anyway
+            art_path = self._load_artifact(self.artifactname('checkpoint', version=version), to_path=to_path)
+            for file in art_path.iterdir(): # only one file per checkpoint anyway
+                return self._load_model_from_file(file, device)
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
-            print('WbRunWrapper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
+            print('ExperimentWrappper::Error::checkpoint from version \'{}\'is corrupted or lost: {}'.format(version if version else 'latest', e))
             raise e
     
-    def load_final_model(self, to_path=None, device=None):
-        """Load final model parameters file from the cloud if it exists"""
-        if not self.run_id:
-            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
-        try:
-            art_path = self._load_artifact(self.artifactname('checkpoint'), to_path=to_path)  # loading latest
-            for file in art_path.iterdir():
-                print(file)
-                if device is not None:
-                    return torch.load(file, map_location=device)
-                else: 
-                    return torch.load(file)  # to the same device it was saved from
+    def get_best_model(self, to_path=None, device=None):
+        """Load model parameters (model with best performance) file from the cloud or from locally saved model file if it exists
 
-        except (requests.exceptions.HTTPError, wb.apis.CommError):  # file not found
-            raise RuntimeError('WbRunWrapper:Error:No file with final weights found in run {}'.format(self.cloud_path()))
-    
-    def load_best_model(self, to_path=None, device=None):
-        """Load model parameters (model with best performance) file from the cloud if it exists"""
+            NOTE: cloud has a priority as it might contain up-to-date information
+        """
         if not self.run_id:
-            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore final model from the could')
+            if 'pre-trained' in self.in_config['NN']:
+                # local model available
+                print(f'{self.__class__.__name__}::Info::Loading locally saved model')
+                return self._load_model_from_file(self.in_config['NN']['pre-trained'], device)
+            else:
+                raise RuntimeError('ExperimentWrappper:Error:Need to know run_id to restore best model from the could OR path to the locally saved model ')
         try:
             # best checkpoints have 'best' alias
             art_path = self._load_artifact(self.artifactname('checkpoint', custom_alias='best'), to_path=to_path)
@@ -305,11 +331,13 @@ class WandbRunWrappper(object):
                 # only one file per checkpoint anyway
 
         except (requests.exceptions.HTTPError):  # file not found
-            raise RuntimeError('WbRunWrapper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
+            raise RuntimeError('ExperimentWrappper:Error:No file with best weights found in run {}'.format(self.cloud_path()))
     
     def save_checkpoint(self, state, aliases=[], wait_for_upload=False):
         """Save given state dict as torch checkpoint to local run dir
             aliases assign labels to checkpoints for easy retrieval
+
+            NOTE: only for active wandb runs
         """
 
         if not self.initialized:
@@ -330,10 +358,10 @@ class WandbRunWrappper(object):
         if wait_for_upload:
             self._wait_for_upload(self.artifactname('checkpoint', version=self.checkpoint_counter - 1))
 
-    def load_file(self, filename, to_path='.'):
+    def get_file(self, filename, to_path='.'):
         """Download a file from the wandb experiment to given path or to currect directory"""
         if not self.run_id:
-            raise RuntimeError('WbRunWrapper:Error:Need to know run id to restore a file from the could')
+            raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore a file from the could')
         wb.restore(filename, run_path=self.project + '/' + self.run_id, replace=True, root=to_path)
 
     # ------- utils -------
@@ -352,6 +380,14 @@ class WandbRunWrappper(object):
         """ Shortcut for getting reference to wandb api run object. 
             To uniformly access both ongoing & finished runs"""
         return wb.Api().run(self.cloud_path())
+    
+    def _run_config(self):
+        """Shortcut for getting run configuration information"""
+        if self.run_id:
+            run = wb.Api().run(self.cloud_path())
+            return run.config
+        else:
+            return self.in_config
 
     def _wait_for_upload(self, artifact_name, max_attempts=10):
         """Wait for an upload of the given version of an artifact"""
@@ -369,3 +405,10 @@ class WandbRunWrappper(object):
                 print('Trying again')
         if attempt > max_attempts:
             print('Experiment::Warning::artifact {} is still not syncronized'.format(artifact_name))
+
+    def _load_model_from_file(self, file, device=None):
+        print(file)
+        if device is not None:
+            return torch.load(file, map_location=device)
+        else: 
+            return torch.load(file)  # to the same device it was saved from

@@ -1,40 +1,46 @@
-"""Predicting a 2D pattern for the given 3D models of garments -- not necessarily from the garment datasets of this project"""
+"""Predicting a 2D pattern for the given 3D point clouds of garments -- 
+    not necessarily from the garment dataset of this project
+
+    NOTE: the point cloud files are expected to be just the .txt files 
+          with the first three numbers in every line containing three world coordinates for a point.
+"""
 
 import argparse
 from datetime import datetime
-import igl
 import numpy as np
 from pathlib import Path
-import shutil
 import torch
-import torch.nn as nn
 import traceback
+import yaml
 
 # Do avoid a need for changing Evironmental Variables outside of this script
-import os,sys,inspect
+import os,sys
 
-from nn.pattern_converter import NNSewingPattern
 currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir) 
 
 # My modules
-import customconfig, nets, data
-from experiment import WandbRunWrappper
+import customconfig
+import data
+from experiment import ExperimentWrappper
 from pattern.wrappers import VisPattern
-from pattern_converter import NNSewingPattern, InvalidPatternDefError
 
 
-def get_meshes_from_args():
+def get_values_from_args():
     """command line arguments to get a path to geometry file with a garment or a folder with OBJ files"""
     # https://stackoverflow.com/questions/40001892/reading-named-command-arguments
     system_info = customconfig.Properties('./system.json')
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('-sh', '--shape_config', help='YAML configuration file', type=str, default='./models/att/att.yaml')
+    parser.add_argument('-st', '--stitch_config', help='YAML configuration file', type=str, default='./models/att/stitch_model.yaml') 
+
     parser.add_argument(
-        '--file', '-f', help='Path to a garment geometry file', type=str, 
+        '--file', '-f', help='Path to a garment point cloud file (.txt)', type=str, 
         default=None) 
     parser.add_argument(
-        '--directory', '-dir', help='Path to a directory with geometry files to evaluate on', type=str, 
+        '--directory', '-dir', help='Path to a directory with point cloud files (.txt) to evaluate on', type=str, 
         default=None)
     parser.add_argument(
         '--save_tag', '-s', help='Tag the output directory name with this str', type=str, 
@@ -42,6 +48,17 @@ def get_meshes_from_args():
 
     args = parser.parse_args()
     print(args)
+
+    # load expriment configs
+    args = parser.parse_args()
+    with open(args.shape_config, 'r') as f:
+        shape_config = yaml.safe_load(f)
+    
+    if args.stitch_config:
+        with open(args.stitch_config, 'r') as f:
+            stitch_config = yaml.safe_load(f)
+    else:
+        stitch_config = None
 
     # turn arguments into the list of obj files
     paths_list = []
@@ -60,7 +77,7 @@ def get_meshes_from_args():
     saving_path = Path(system_info['output']) / (args.save_tag + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
     saving_path.mkdir(parents=True)
 
-    return paths_list, saving_path
+    return shape_config, stitch_config, paths_list, saving_path
 
 
 
@@ -69,19 +86,11 @@ if __name__ == "__main__":
     
     system_info = customconfig.Properties('./system.json')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    sample_paths, save_to = get_meshes_from_args()
+    shape_config, stitch_config, sample_paths, save_to = get_values_from_args()
 
     # --------------- Experiment to evaluate on ---------
-    shape_experiment = WandbRunWrappper(
-        system_info['wandb_username'],
-        project_name='Garments-Reconstruction', 
-        run_name='RNN-no-stitch-5000-filt-cond', 
-        run_id='3857jk4g')  # finished experiment
-    stitch_experiment = WandbRunWrappper(
-        system_info['wandb_username'],
-        project_name='Garments-Reconstruction', 
-        run_name='Filtered-stitches-on-RNN', 
-        run_id='3ncgkjnh')  # finished experiment
+    shape_experiment = ExperimentWrappper(shape_config, system_info['wandb_username'])
+    stitch_experiment = ExperimentWrappper(stitch_config, system_info['wandb_username'])
     if not shape_experiment.is_finished():
         print('Warning::Evaluating unfinished experiment')
 
@@ -104,47 +113,38 @@ if __name__ == "__main__":
             print('Warning::Input point cloud has {} points while {} are expected. Needed #points was sampled'.format(
                 points.shape[0], data_config['mesh_samples']))
             points = points[selection]
-            # raise ValueError('Input point cloud has {} points while {} are expected'.format(points.shape[0], data_config['mesh_samples']))
-            print(points.shape)
            
-
         if 'standardize' in data_config:
             points = (points - data_config['standardize']['f_shift']) / data_config['standardize']['f_scale']
         points_list.append(torch.tensor(points).float())
 
     # ----- Model (Pattern Shape) architecture -----
-    model_class = getattr(nets, shape_experiment.NN_config()['model'])
-    model = model_class(data_config, shape_experiment.NN_config(), shape_experiment.NN_config()['loss'])
-    if 'device_ids' in shape_experiment.NN_config():  # model from multi-gpu training case
-        model = nn.DataParallel(model, device_ids=['cuda:0'])
-    model.load_state_dict(shape_experiment.load_best_model()['model_state_dict'])
-    model = model.to(device=device)
-    model.eval()
+    shape_model = shape_experiment.load_model()
+    shape_model.eval()
 
     # -------- Predict Shape ---------
     with torch.no_grad():
         points_batch = torch.stack(points_list).to(device)
-        predictions = model(points_batch)
+        predictions = shape_model(points_batch)
 
     # ---- save shapes ----
     saving_path = save_to / 'shape'
     saving_path.mkdir(parents=True, exist_ok=True)
-
     names = [VisPattern.name_from_path(elem) for elem in sample_paths]
-    data.save_garments_prediction(predictions, saving_path, data_config, names)
 
+    print(predictions.keys())  # DEBUG
+
+    data.save_garments_prediction(
+        predictions, saving_path, data_config, names,
+        stitches_from_stitch_tags='stitch' in shape_experiment.NN_config()['loss']['loss_components'])
+
+    print(f'Pattern shape saved to {saving_path}')
 
     # ========== Stitch prediction =========
 
     # ----- Model (Stitch Prediction) ------
     _, _, stitch_data_config = stitch_experiment.data_info()  # need to get data stats
-    model_class = getattr(nets, stitch_experiment.NN_config()['model'])
-    stitch_model = model_class(stitch_data_config, stitch_experiment.NN_config(), stitch_experiment.NN_config()['loss'])
-    if 'device_ids' in stitch_experiment.NN_config():  # model from multi-gpu training case
-        stitch_model = nn.DataParallel(stitch_model, device_ids=['cuda:0'])
-
-    stitch_model.load_state_dict(stitch_experiment.load_best_model()['model_state_dict'])
-    # stitch_model = stitch_model.to(device=device)
+    stitch_model = stitch_experiment.load_model()
     stitch_model.eval()
 
     # ----- predict & save stitches ------
@@ -166,7 +166,7 @@ if __name__ == "__main__":
                     continue
                 prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
-        pattern = NNSewingPattern(view_ids=False)
+        pattern = data.NNSewingPattern(view_ids=False)
         pattern.name = name
         try:
             pattern.pattern_from_tensors(
@@ -175,8 +175,10 @@ if __name__ == "__main__":
             pattern.stitches_from_pair_classifier(stitch_model, stitch_data_config['standardize'])
             pattern.serialize(save_to / 'stitched', to_subfolder=True)
 
-        except (RuntimeError, InvalidPatternDefError, TypeError) as e:
+        except (RuntimeError, data.InvalidPatternDefError, TypeError) as e:
             print(traceback.format_exc())
             print(e)
             print('Saving predictions::Skipping pattern {}'.format(name))
             pass
+
+    print(f'Sewing Patterns with stitches saved to {saving_path}')

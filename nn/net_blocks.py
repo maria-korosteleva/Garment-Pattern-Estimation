@@ -1,7 +1,6 @@
 """Basic building blocks for custom neural network architectures"""
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch_geometric.nn as geometric
 
 
@@ -154,9 +153,7 @@ class EdgeConvFeatures(nn.Module):
             
         # Output linear layer
         # NOTE Skip connection is only for initial position
-        # TODO remove that at all -- but with considerations for backward compatibility
         out_features = self.config['EConv_feature'] + 3 if self.config['skip_connections'] else self.config['EConv_feature']
-        # out_features = sum(features_by_layer) if self.config['skip_connections'] else self.config['EConv_feature']
 
         self.lin = nn.Linear(out_features, out_size)
 
@@ -172,17 +169,11 @@ class EdgeConvFeatures(nn.Module):
         # Vertex features + track global features from each layer (if skip connections are used)
         # In EdgeConv features from different layers are concatenated per node and then aggregated 
         # but since the pooling is element-wise on feature vectors, we can swap the operations to save memory
-        aggr_features = []
         out = pos_flat  
         for conv_id in range(0, self.config['conv_depth']):
             out = self.conv_layers[conv_id](out, batch)
             if self.config['graph_pooling']:
                 out, batch = self.gpool_layers[conv_id](out, batch)
-
-            # NOTE Skip connection is only for initial position
-            # TODO remove
-            # if self.config['skip_connections']:
-            #    aggr_features.append(self.global_pool(out, batch, batch_size))
         
         if self.config['skip_connections']:
             # concat positions and final features
@@ -190,9 +181,6 @@ class EdgeConvFeatures(nn.Module):
         
         if global_pool:
             # 'out' now holds per-point features
-            # NOTE Skip connection are now only for initial position
-            # TODO remove
-            # pooled_feature = torch.cat(aggr_features, -1) if self.config['skip_connections'] else self.global_pool(out, batch, batch_size)
             pooled_feature = self.global_pool(out, batch, batch_size)
 
             # post-processing
@@ -256,8 +244,6 @@ class EdgeConvPoolingFeatures(nn.Module):
         self.lin = nn.Linear(self.config['n_features3'], out_size)
 
     def forward(self, positions):
-        # batch_size = positions.size(0)
-        # n_vertices = positions.size(1)
         # flatten the batch for torch-geometric batch format
         pos_flat = positions.view(-1, positions.size(-1))
         batch = torch.cat([
@@ -266,13 +252,10 @@ class EdgeConvPoolingFeatures(nn.Module):
 
         # Vertex features
         out = self.conv1(pos_flat, batch)
-        # print(out.shape)
         out, batch = self.pool1(out, batch)
-        # print(out.shape)
 
         out = self.conv2(out, batch)
         out, batch = self.pool2(out, batch)
-        # print(out.shape)
 
         out = self.conv3(out, batch)
 

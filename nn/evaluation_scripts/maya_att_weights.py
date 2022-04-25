@@ -1,6 +1,6 @@
 """
     Visualize requested point cloud with attention weights per point 
-    * To be run within Maya environment
+    * To be run within Maya environment (just copy&paste this code to Maya Script Editor)
 """
 
 import os
@@ -14,7 +14,8 @@ name = 'tee_1SFRP38K7F'
 att_weight_id = -1
 
 # code
-base_path = 'C:/Users/Asus/Desktop/Garments_outs'  # local path to all logs
+base_path = 'C:/Users/Asus/Desktop/Garments_outs'  # local path to all logs. Not loading from system.json because it might not be available
+                                                   # withing Maya environememt
 pred_path = os.path.join(base_path, pred_path)
 
 # load weights

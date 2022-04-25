@@ -1,12 +1,9 @@
 import torch
-from torch._C import import_ir_module
 import torch.nn as nn
 
 from entmax import SparsemaxLoss  # https://github.com/deep-spin/entmax
 
 # My modules
-from data import Garment3DPatternFullDataset as PatternDataset
-from pattern_converter import InvalidPatternDefError
 from metrics.losses import *
 from metrics.metrics import *
 
@@ -325,26 +322,11 @@ class ComposedPatternLoss():
 
         if 'segmentation' in self.l_components:
 
-            # DEBUG
-            # print(preds['att_weights'].shape, ground_truth['segmentation'].shape)
             pred_flat = preds['att_weights'].view(-1, preds['att_weights'].shape[-1])
             gt_flat = ground_truth['segmentation'].view(-1)
-            # print(pred_flat.shape, gt_flat.shape)
-
-            # DEBUG
-            # with torch.no_grad():
-            #     print(torch.sum(pred_flat, dim=1).shape)
-            #     print(torch.mean(torch.sum(pred_flat, dim=1)))
-
-            # print(pred_flat)
-            # print('xxxx')
-            # print(gt_flat, gt_flat.max(), gt_flat.min())
-            # print('-----------')
 
             # NOTE!!! SparseMax produces exact zeros
             segm_loss = self.segmentation(pred_flat, gt_flat)
-
-            # print(segm_loss)
 
             full_loss += self.config['segm_loss_weight'] * segm_loss
             loss_dict.update(segm_loss=segm_loss)
