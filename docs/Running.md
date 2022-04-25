@@ -36,6 +36,8 @@ Evaluate NeuralTailor pattern shape prediction model on seen garment types only:
 python nn/evaluation_scripts/on_test_set.py -sh models/att/att.yaml
 ```
 
+> NOTE: when evaluating only the pattern shape model without stitches, the stitches are transferred from the corresponding GT sewing patterns (if available) for convenience of loading and draping. 
+
 Evaluate full NeuralTailor framework on unseen garment types and save sewing pattern predictions:
 
 ```
