@@ -24,8 +24,7 @@ If you are using our system in your research, consider citing our paper.
 > Bibtex will be added here upon official paper publication
 
 ## ToDo
-* Anonimous mode
-* File\dirs structure
+* Fix training resume functionality 
 
 ## Contact
 For bug reports, feature suggestion, and code-related questions, please [open an issue](https://github.com/maria-korosteleva/Garment-Pattern-Estimation/issues). 
