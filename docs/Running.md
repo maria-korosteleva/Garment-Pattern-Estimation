@@ -50,6 +50,12 @@ Evaluate stitch model on previously saved sewing pattern predictions:
 python nn/evaluation_scripts/on_test_set.py -st models/att/stitch_model.yaml --pred_path /path/to/sewing/pathern/data 
 ```
 
+Evalute baseline model, LSTM + Stitch tags, on seen data types (it will produce both pattern shape and stitch quality stats):
+
+```
+python nn/evaluation_scripts/on_test_set.py -st models/baseline/lstm_stitch_tags.yaml
+```
+
 
 ## Training
 
