@@ -17,7 +17,9 @@ Every evaluation scrips takes in a config file which describes the experiment to
 
 1. Locally saved models. We provide pre-trained NeuralTailor models (patter shape prediction and stitch model prediction) in `./models/` folder. Corresponding configuration files (e.g., `./models/att/att.yaml`) contain full information about hyperparameters, dataset, and paths to the pre-trained model weights. You can similarly create configuration files to work with locally saved models produced by your experiments.
 
-2. Weights&Biases runs (easier for your trained models). When training a framework, all the experiment information is logged to W&B cloud. Evaluation scripts can work with those runs directly without a need to manually download models and fill configurations. To run scripts with W&B runs simply provide the related info of project name, runs name and run id in the `experiment` section of configuration file, and specify `unseen_data_folders` of `dataset` section if evaluating on unseen garment types. What's specified in the rest of the config is irrelevant since it will overriden by the information from the cloud run.
+2. Weights&Biases runs (easier for your trained models). When training a framework, all the experiment information is logged to W&B cloud. Evaluation scripts can work with those runs directly without a need to manually download models and fill configurations. 
+
+    To run scripts with W&B runs simply provide the related info of project name, runs name and run id in the `experiment` section of configuration file, and specify `unseen_data_folders` of `dataset` section if evaluating on unseen garment types. What's specified in the rest of the config is irrelevant since it will overriden by the information from the cloud run. Here is an [example of such evaluation config](../nn/example_configs/eval_wandb.yaml).
 
 ### Tweaking evaluation parameters
 

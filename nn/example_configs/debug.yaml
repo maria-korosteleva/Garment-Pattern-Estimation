@@ -35,7 +35,7 @@ dataset:
   # old_experiment:
   #   project_name: Garments-Reconstruction
   #   run_name: Filtered-att-data-condenced-classes
-  #   run_id: 390wuxbm
+  #   run_id: <run_name>
   #   stats: True   # Use data stats from previous training run in this one
   #   predictions: False  # use predictions of the previously trained model to train this one
 
