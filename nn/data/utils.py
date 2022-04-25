@@ -107,7 +107,7 @@ def sample_points_from_meshes(mesh_paths, data_config):
     return points_list
 
 
-def save_garments_prediction(predictions, save_to, data_config=None, datanames=None):
+def save_garments_prediction(predictions, save_to, data_config=None, datanames=None, stitches_from_stitch_tags=False):
     """ 
         Saving arbitrary sewing pattern predictions that
         
@@ -137,10 +137,13 @@ def save_garments_prediction(predictions, save_to, data_config=None, datanames=N
                 prediction[key] = prediction[key].cpu().numpy() * gt_scales[key] + gt_shifts[key]
 
         # stitch tags to stitch list
-        stitches = Garment3DPatternFullDataset.tags_to_stitches(
-            torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
-            prediction['free_edges_mask']
-        )
+        if stitches_from_stitch_tags:
+            stitches = Garment3DPatternFullDataset.tags_to_stitches(
+                torch.from_numpy(prediction['stitch_tags']) if isinstance(prediction['stitch_tags'], np.ndarray) else prediction['stitch_tags'],
+                prediction['free_edges_mask']
+            )
+        else:
+            stitches = None
 
         pattern = NNSewingPattern(view_ids=False)
         pattern.name = name

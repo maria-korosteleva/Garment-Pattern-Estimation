@@ -131,7 +131,12 @@ if __name__ == "__main__":
     saving_path = save_to / 'shape'
     saving_path.mkdir(parents=True, exist_ok=True)
     names = [VisPattern.name_from_path(elem) for elem in sample_paths]
-    data.save_garments_prediction(predictions, saving_path, data_config, names)
+
+    print(predictions.keys())  # DEBUG
+
+    data.save_garments_prediction(
+        predictions, saving_path, data_config, names,
+        stitches_from_stitch_tags='stitch' in shape_experiment.NN_config()['loss']['loss_components'])
 
     print(f'Pattern shape saved to {saving_path}')
 
