@@ -133,6 +133,7 @@ if __name__ == "__main__":
     names = [VisPattern.name_from_path(elem) for elem in sample_paths]
     data.save_garments_prediction(predictions, saving_path, data_config, names)
 
+    print(f'Pattern shape saved to {saving_path}')
 
     # ========== Stitch prediction =========
 
@@ -174,3 +175,5 @@ if __name__ == "__main__":
             print(e)
             print('Saving predictions::Skipping pattern {}'.format(name))
             pass
+
+    print(f'Sewing Patterns with stitches saved to {saving_path}')
