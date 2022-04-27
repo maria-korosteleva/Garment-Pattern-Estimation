@@ -53,7 +53,10 @@ class ExperimentWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, anonymous='allow')
+        wb.init(
+            name=self.run_name, project=self.project, config=config, 
+            resume='allow', id=self.run_id,    # Resuming functionality
+            anonymous='allow')
         self.run_id = wb.run.id
 
         if not self.wandb_username:
