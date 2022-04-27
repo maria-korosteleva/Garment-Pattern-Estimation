@@ -194,12 +194,14 @@ class Trainer():
         # data split
         split, batch_size, data_config = self.experiment.data_info()
 
+        print(split, batch_size)  # DEBUG
+
         self.datawraper.dataset.update_config(data_config)
         self.datawraper.load_split(split, batch_size)  # NOTE : random number generator reset
 
         # get latest checkoint info
         print('Trainer::Loading checkpoint to resume run..')
-        checkpoint = self.experiment.load_checkpoint_file()  # latest
+        checkpoint = self.experiment.get_checkpoint_file()  # latest
 
         # checkpoint loaded correctly
         model.load_state_dict(checkpoint['model_state_dict'])

@@ -255,7 +255,6 @@ class ExperimentWrappper(object):
 
         return prediction_path
 
-
     # ---- file info -----
     def checkpoint_filename(self, check_id=None):
         """Produce filename for the checkpoint of given epoch"""
@@ -303,7 +302,7 @@ class ExperimentWrappper(object):
             raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore specific checkpoint from the could')
         try:
             art_path = self._load_artifact(self.artifactname('checkpoint', version=version), to_path=to_path)
-            for file in art_path.iterdir(): # only one file per checkpoint anyway
+            for file in art_path.iterdir():  # only one file per checkpoint anyway
                 return self._load_model_from_file(file, device)
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
