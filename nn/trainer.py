@@ -121,6 +121,8 @@ class Trainer():
             if loss_structure_update or best_valid_loss is None or valid_loss < best_valid_loss:  # taking advantage of lazy evaluation
                 best_valid_loss = valid_loss
                 self._save_checkpoint(model, epoch, best=True)  # saving only the good models
+            else:
+                self._save_checkpoint(model, epoch)
 
             # Base logging
             print('Epoch: {}, Validation Loss: {}'.format(epoch, valid_loss))
