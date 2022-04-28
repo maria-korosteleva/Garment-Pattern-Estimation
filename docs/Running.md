@@ -76,6 +76,23 @@ You can use config files saved in `models/` as training configs.
     python nn/train.py -c ./models/att/stitch_model.yaml
     ```
 
+### Resuming training
+
+The training script supports resuming of training runs (if stopped for any reason). Resume will be attempted automatically when running training script if `run_id` is specified in the input config. 
+
+So, to resume a run, one need to simply specify the full info about the wandb run in `experiment` section of training config, for example:
+
+```
+experiment:
+    project_name: Test-Garments-Reconstruction
+    run_name: NeuralTailor-Debug
+    run_id: uzcw54zu
+```
+
+`run_id` is a hash found in W&B URL of the run page, e.g. link for above run looks like `https://wandb.ai/wandb_username/Test-Garments-Reconstruction/runs/uzcw54zu`*
+
+*Link is invalid and only provided as an example
+
 ### Reproducing other experiments reported in the paper
 
 By modifying the configuration files for corresponding models one could reproduce the setups used in our reported experiments. Some examples:
