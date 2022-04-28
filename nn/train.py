@@ -82,7 +82,7 @@ if __name__ == "__main__":
     system_info = customconfig.Properties('./system.json')
     
     experiment = ExperimentWrappper(
-        config, # set run id in cofig to resume unfinished run!
+        config,  # set run id in cofig to resume unfinished run!
         system_info['wandb_username'],
         no_sync=False)   
 

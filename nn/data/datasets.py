@@ -1075,7 +1075,6 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
             pattern.stitches_from_pair_classifier(model, self.config['standardize'])
 
             # save prediction
-            # TODO Move to separate fucntion (for all datasets)
             folder_nick = self.data_folders_nicknames[folder] if not orig_folder_names else folder
 
             try: 
@@ -1163,7 +1162,7 @@ class GarmentStitchPairsDataset(GarmentBaseDataset):
 if __name__ == "__main__":
     from wrapper import DatasetWrapper
 
-    # DEBUG Basic debug of the data classes
+    # Basic debug of the data classes
     system = Properties('./system.json')
     dataset = Garment3DPatternFullDataset(system['datasets_path'], {
         'data_folders': [

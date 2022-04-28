@@ -41,12 +41,12 @@ def _eval_metrics_per_loader(model, loss, loader, device):
     current_metrics = dict.fromkeys(['full_loss'], [])
     counter = 0
     loader_iter = iter(loader)
-    while True:  # DEBUG
+    while True:
         try:
-            batch = next(loader_iter)   #  loader_iter.next()
-        except StopIteration:
+            batch = next(loader_iter)
+        except StopIteration:  # End of loop
             break
-        except InvalidPatternDefError as e:
+        except InvalidPatternDefError as e:  # skip batches with invalid sewing patterns
             print(e)
             continue
 

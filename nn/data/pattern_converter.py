@@ -289,15 +289,11 @@ class NNSewingPattern(VisPattern):
         
     def stitches_as_tags(self, panel_order=None, pad_to_len=None):
         """For every stitch, assign an approximate identifier (tag) of the stitch to the edges that are part of that stitch
-            * tags are calculated as ~3D locations of the stitch when the garment is draed on the body in T-pose
+            * tags are calculated as ~3D locations of the stitch when the garment is draped on the body in T-pose
             * It's calculated as average of the participating edges' endpoint -- Although very approximate, this should be enough
             to separate stitches from each other and from free edges
         Return
             * List of stitch tags for every stitch in the panel
-            TODO Update description
-            * per-edge, per-panel list of 3D tags
-            * If pad_to_len is provided, per-edge lists of tags are padded to this len s.t. all panels have the same number of (padded) edges
-
         """
         # NOTE stitch tags values are independent from the choice of origin & edge order within a panel
         # iterate over stitches
@@ -615,10 +611,9 @@ class NNSewingPattern(VisPattern):
         return order
 
 
-
 # ---------- test -------------
 if __name__ == "__main__":
-    # DEBUG the pattern converter
+    # the pattern converter loading check
     from pathlib import Path
     from datetime import datetime
     import customconfig

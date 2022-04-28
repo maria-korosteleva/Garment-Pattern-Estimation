@@ -355,8 +355,7 @@ class StitchOnEdge3DPairs(BaseModule):
 
 
 if __name__ == "__main__":
-
-    # DEBUG Basic debug of the net classes
+    # Basic debug of the net classes
 
     torch.manual_seed(125)
 

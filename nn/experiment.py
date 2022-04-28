@@ -23,7 +23,6 @@ class ExperimentWrappper(object):
 
         Wrapper currently does NOT wrap one-liners routinely called for active runs like wb.log(), wb.watch()  
     """
-    # TODO propagate signature change to all usages
     def __init__(self, config, wandb_username='', no_sync=False):
         """Init experiment tracking with wandb
             With no_sync==True, run won't sync with wandb cloud. 

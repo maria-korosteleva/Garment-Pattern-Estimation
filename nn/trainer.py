@@ -196,8 +196,6 @@ class Trainer():
         # data split
         split, batch_size, data_config = self.experiment.data_info()
 
-        print(split, batch_size)  # DEBUG
-
         self.datawraper.dataset.update_config(data_config)
         self.datawraper.load_split(split, batch_size)  # NOTE : random number generator reset
 
