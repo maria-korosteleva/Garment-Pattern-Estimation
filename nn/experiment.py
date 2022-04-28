@@ -53,7 +53,10 @@ class ExperimentWrappper(object):
             os.environ['WANDB_MODE'] = 'dryrun'
             print('Experiment:Warning: run is not synced with wandb cloud')
 
-        wb.init(name=self.run_name, project=self.project, config=config, resume=self.run_id, anonymous='allow')
+        wb.init(
+            name=self.run_name, project=self.project, config=config, 
+            resume='allow', id=self.run_id,    # Resuming functionality
+            anonymous='allow')
         self.run_id = wb.run.id
 
         if not self.wandb_username:
@@ -252,7 +255,6 @@ class ExperimentWrappper(object):
 
         return prediction_path
 
-
     # ---- file info -----
     def checkpoint_filename(self, check_id=None):
         """Produce filename for the checkpoint of given epoch"""
@@ -300,7 +302,7 @@ class ExperimentWrappper(object):
             raise RuntimeError('ExperimentWrappper:Error:Need to know run id to restore specific checkpoint from the could')
         try:
             art_path = self._load_artifact(self.artifactname('checkpoint', version=version), to_path=to_path)
-            for file in art_path.iterdir(): # only one file per checkpoint anyway
+            for file in art_path.iterdir():  # only one file per checkpoint anyway
                 return self._load_model_from_file(file, device)
 
         except (RuntimeError, requests.exceptions.HTTPError, wb.apis.CommError) as e:  # raised when file is corrupted or not found
