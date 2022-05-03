@@ -1,10 +1,11 @@
-# NeuralTailor: Reconstructing Sewing Pattern Structures from 3D~Point Clouds of Garments
+# NeuralTailor: Reconstructing Sewing Pattern Structures from 3D Point Clouds of Garments
 
 ![Overview of the Neural Tailor Pipeline](img/header.png)
 
-Official implementation of [NeuralTailor: Reconstructing Sewing Pattern Structures from 3D Point Clouds of Garments](https://arxiv.org/abs/2201.13063). Provides tools to train framework components, our pre-trained models, and scripts to evalute them.
+Official implementation of [NeuralTailor: Reconstructing Sewing Pattern Structures from 3D Point Clouds of Garments](https://arxiv.org/abs/2201.13063). Provides our pre-trained models, scripts to evalute them, and tools to train framework components from scratch.
 
-
+| :zap:        Our NeuralTailor paper was accepted to SIGGRAPH 2022!   |
+|----------------------------------------------------------------------|
 
 ## Dataset
 
@@ -21,10 +22,8 @@ Provided in `./docs` folder
 
 If you are using our system in your research, consider citing our paper.
 
-> Bibtex will be added here upon official paper publication
+> Bibtex will be added here upon official paper publication in July 2022
 
-## ToDo
-* Fix training resume functionality 
 
 ## Contact
 For bug reports, feature suggestion, and code-related questions, please [open an issue](https://github.com/maria-korosteleva/Garment-Pattern-Estimation/issues). 
