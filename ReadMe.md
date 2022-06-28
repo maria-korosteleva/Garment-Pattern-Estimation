@@ -1,3 +1,5 @@
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/neuraltailor-reconstructing-sewing-pattern/on-dataset-of-3d-garments-with-sewing)](https://paperswithcode.com/sota/on-dataset-of-3d-garments-with-sewing?p=neuraltailor-reconstructing-sewing-pattern)
+
 # NeuralTailor: Reconstructing Sewing Pattern Structures from 3D Point Clouds of Garments
 
 ![Overview of the Neural Tailor Pipeline](img/header.png)
