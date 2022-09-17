@@ -24,7 +24,22 @@ Provided in `./docs` folder
 
 If you are using our system in your research, consider citing our paper.
 
-> Bibtex will be added here upon official paper publication in July 2022
+```
+@article{NeuralTailor2022,
+  author = {Korosteleva, Maria and Lee, Sung-Hee},
+  title = {NeuralTailor: Reconstructing Sewing Pattern Structures from 3D Point Clouds of Garments},
+  year = {2022},
+  issue_date = {July 2022},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  volume = {41},
+  number = {4},
+  doi = {10.1145/3528223.3530179},
+  journal = {ACM Trans. Graph.},
+  numpages = {16},
+  keywords = {structured deep learning, sewing patterns, garment reconstruction}
+}
+```
 
 
 ## Contact
