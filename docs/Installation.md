@@ -20,42 +20,42 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && ba
 export PATH="$HOME/miniconda3/bin:$PATH"
 
 # Create enviroment
-conda create -n Garments python=3.8.5
+conda create -n Garments python=3.9
 conda activate Garments
 ```
 
 ## 3. Dependencies
 
-* For libs, `requirements.txt` is given for a refence, but due to the specifics of some packages, using `pip install -r requirements.txt` will likely fail
+* Pytoch (with cudatools if cuda is available on the machine)
 
-* When planning to use [PyTorch] with CUDA enables, it's recommended to install it using `conda` to explicitely install cudatools
+* (PyG)[https://pytorch-geometric.readthedocs.io/en/latest/] for graph layers. Note that installing with pip requires specifying installed versions of pytorch and cuda. The installation may not support all possible combinations.
 
 * [libigl](https://github.com/libigl/libigl-python-bindings) needs installation with conda. You could also check other options on [their GitHub page](https://github.com/libigl/libigl-python-bindings)
-    ```
-    conda install -c conda-forge igl
-    ```
-* [torch-geometric installation](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) might also require additional attention as the versions of dependencies depend on the CUDA version PyTorch is using on your machine
 
-* Simple installation with `pip install <package_name>`: 
-    * `wandb` 
-    * `svglib` 
-    * `svgwrite`
+* The rest of the requirements are provided in `requirements.txt`. They can be used with pip to install in one go: 
+    ```
+    pip install -r requirements.txt
+    ```
 
-Example set of commands:
+Example set of commands for installation on Windows [the version are checked and should work]:
 
 ```
-conda install pytorch=1.9.1 cudatoolkit=10.2 -c pytorch
+conda create -n Garments python=3.9
+conda activate Garments
+
+conda install pytorch==1.12.0 cudatoolkit=11.6 -c pytorch -c conda-forge
+
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.12.0+cu116.html
 
 conda install -c conda-forge igl=2.2.1
 
-git clone https://github.com/subhadarship/kmeans_pytorch && cd kmeans_pytorch && git checkout a65871651e9b38f89fa2bf0b02c0170bf40b52bf && pip install --editable .
-
+conda install pywin32   # requirement for wmi on Windows -- conda installation needed in conda environements
 # The rest are in requirements.txt
 pip install -r requirements.txt
 
 ```
 
-Development was done on _Windows 10_ and Ubuntu. If running on other OS ends up with errors, please, raise an issue!
+Development was done on _Windows 10\11_ and Ubuntu. If running on other OS ends up with errors, please, raise an issue!
 
 **Notes on errors with PIL.Image**
 
@@ -87,7 +87,7 @@ git clone https://github.com/maria-korosteleva/Garment-Pattern-Generator
 
 Add path to custom packages to PYTHONPATH for correct importing of our custom modules. For example, in the terminal:
 ```
-export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Data/packages
+export PYTHONPATH=$PYTHONPATH:/home/user/maria/Garment-Pattern-Generator/packages
 ```
 
 ### Filesystem paths & W&B account settings
