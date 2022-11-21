@@ -13,6 +13,8 @@ import torch
 import traceback
 import yaml
 
+import igl
+
 # Do avoid a need for changing Evironmental Variables outside of this script
 import os,sys
 
@@ -37,10 +39,10 @@ def get_values_from_args():
     parser.add_argument('-st', '--stitch_config', help='YAML configuration file', type=str, default='./models/att/stitch_model.yaml') 
 
     parser.add_argument(
-        '--file', '-f', help='Path to a garment point cloud file (.txt)', type=str, 
+        '--file', '-f', help='Path to a garment point cloud file (.txt or .obj)', type=str, 
         default=None) 
     parser.add_argument(
-        '--directory', '-dir', help='Path to a directory with point cloud files (.txt) to evaluate on', type=str, 
+        '--directory', '-dir', help='Path to a directory with point cloud files (.txt or .obj) to evaluate on', type=str, 
         default=None)
     parser.add_argument(
         '--save_tag', '-s', help='Tag the output directory name with this str', type=str, 
@@ -60,7 +62,7 @@ def get_values_from_args():
     else:
         stitch_config = None
 
-    # turn arguments into the list of obj files
+    # turn arguments into the list of files
     paths_list = []
     if args.file is None and args.directory is None: 
         # default value if no arguments provided
@@ -71,7 +73,7 @@ def get_values_from_args():
         if args.directory is not None:
             directory = Path(args.directory)
             for elem in directory.glob('*'):
-                if elem.is_file() and '.txt' in str(elem):
+                if elem.is_file() and ('.txt' in str(elem) or '.obj' in str(elem)):
                     paths_list.append(elem)
 
     saving_path = Path(system_info['output']) / (args.save_tag + '_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
@@ -80,7 +82,34 @@ def get_values_from_args():
     return shape_config, stitch_config, paths_list, saving_path
 
 
+def sample_points_obj(filename, num_points):
+    """Sample point cloud from .obj file"""
+    # TODO Use the same function as the main code?
+    verts, faces = igl.read_triangle_mesh(str(filename))
 
+    # np.random.seed(601)
+    for _ in range(3):
+        barycentric_samples, face_ids = igl.random_points_on_mesh(num_points, verts, faces)
+
+        points = np.empty(barycentric_samples.shape)
+        for i in range(len(face_ids)):
+            face = faces[face_ids[i]]
+            barycentric_coords = barycentric_samples[i]
+            face_verts = verts[face]
+            points[i] = np.dot(barycentric_coords, face_verts)
+
+    return points
+
+def load_points(filename):
+    """Load point cloud from .txt file with point coordinates"""
+    with open(filename, 'r') as pc_file: 
+        points = []
+        for line in pc_file:
+            coords = [float(x) for x in line.split()]
+            coords = coords[:3]
+            points.append(coords)
+    points = np.array(points)
+    return points
 
 if __name__ == "__main__":
     
@@ -100,13 +129,10 @@ if __name__ == "__main__":
     # ------ prepare input data & construct batch -------
     points_list = []
     for filename in sample_paths:
-        with open(filename, 'r') as pc_file: 
-            points = []
-            for line in pc_file:
-                coords = [float(x) for x in line.split()]
-                coords = coords[:3]
-                points.append(coords)
-        points = np.array(points)
+        if '.obj' in str(filename):
+            points = sample_points_obj(filename, shape_config['dataset']['mesh_samples'])
+        else: 
+            points = load_points(filename)
 
         if abs(points.shape[0] - data_config['mesh_samples']) > 10:  # some tolerance to error
             selection = np.random.permutation(points.shape[0])[:data_config['mesh_samples']]
