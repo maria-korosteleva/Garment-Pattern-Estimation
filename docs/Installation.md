@@ -55,6 +55,23 @@ pip install -r requirements.txt
 
 ```
 
+Example set of commands for installation on Linux [Ubuntu]:
+```
+conda create -n Garments python=3.9
+conda activate Garments
+
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+# for pytorch-cuda, insert cuda version that is listed under nvidia-smi
+# in this case, the cuda version is 12.1
+
+conda install pyg -c pyg
+conda install pytorch-cluster -c pyg
+
+conda install -c conda-forge igl=2.2.1 svgwrite svglib wandb
+
+pip install sparsemax entmax
+```
+
 Development was done on _Windows 10\11_ and Ubuntu. If running on other OS ends up with errors, please, raise an issue!
 
 **Notes on errors with PIL.Image**
