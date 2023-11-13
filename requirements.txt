@@ -7,3 +7,8 @@ svgwrite~=1.4.3
 entmax==1.0
 numba==0.56.4
 wmi~=1.5.1
+sparsemax==0.1.19
+entmax==1.1.0
+svglib==1.5.1
+svgwrite==1.4.3
+pyyaml==6.0.0
