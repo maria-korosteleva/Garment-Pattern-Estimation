@@ -56,6 +56,20 @@ Evalute baseline model, LSTM + Stitch tags, on seen data types (it will produce 
 python nn/evaluation_scripts/on_test_set.py -st models/baseline/lstm_stitch_tags.yaml
 ```
 
+### Output structure when running on test set
+
+> NOTE: clarification added after reviewing the issue #11
+
+When running evaluations on test set, the `on_test_set.py` script creates one output folder per step
+* either one when prediction only panel shapes (nn_<set>_pred_shape_<timestamp>) or only stitches (nn_<set>_pred_stitched_<timestamp>)
+* Or two folders when predicting panel shapes and their stitches 
+
+More details:
+* The shape prediction step created a folder to store predictions of the final panel shapes. Since this script is evaluating the model on existing data with available ground truth, it copies the panel names and stitching information from the ground truth patterns to the output patterns, if possible. This is done purely for convence of visual comparison with ground truth patterns and to enable simulation of this partial prediction
+* The stitching prediction step is running after the shape prediction is fully completed, including the serialization of prediction results. Stitching prediction loads these predicted patterns from the folder created earlier or from the path supplied in parameters, uses them as a model input, and then stores its own prediction in a **new** folder to keep the original input files intact. 
+
+The naming convention choice was unfortunate and creates confusion, we know =(
+
 
 ## Training
 

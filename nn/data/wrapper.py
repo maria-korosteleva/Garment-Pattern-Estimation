@@ -208,10 +208,10 @@ class DatasetWrapper(object):
         self.dataset.standardize(self.training)
 
     # --------- Managing predictions on this data ---------
-    def predict(self, model, save_to, sections=['test'], single_batch=False, orig_folder_names=False):
+    def predict(self, model, save_to, dir_tag='pred', sections=['test'], single_batch=False, orig_folder_names=False):
         """Save model predictions on the given dataset section"""
         # Main path
-        prediction_path = save_to / ('nn_pred_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
+        prediction_path = save_to / (f'nn_{dir_tag}_' + datetime.now().strftime('%y%m%d-%H-%M-%S'))
         prediction_path.mkdir(parents=True, exist_ok=True)
 
         device = model.device_ids[0] if hasattr(model, 'device_ids') else torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

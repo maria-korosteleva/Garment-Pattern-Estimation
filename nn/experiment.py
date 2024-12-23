@@ -240,10 +240,10 @@ class ExperimentWrappper(object):
 
         return model
 
-    def prediction(self, save_to, model, datawrapper, nick='test', sections=['test'], art_name='multi-data'):
+    def prediction(self, save_to, model, datawrapper, dir_tag='pred', nick='test', sections=['test'], art_name='multi-data'):
         """Perform inference and save predictions for a given model on a given dataset"""
         
-        prediction_path = datawrapper.predict(model, save_to=save_to, sections=sections, orig_folder_names=True)
+        prediction_path = datawrapper.predict(model, save_to=save_to, dir_tag=dir_tag, sections=sections, orig_folder_names=True)
 
         if nick:
             self.add_statistic(nick + '_folder', prediction_path.name, log='Prediction save path')
